@@ -146,6 +146,13 @@ func test_pause_resume() -> void:
 	g.resume()
 	Assert.equals(g.status, GameController.Status.PLAYING, "resumed")
 
+func test_start_level_resets_timer() -> void:
+	var g := GameController.new()
+	g.start_level(_level())
+	g.timer.set_elapsed_seconds(42)
+	g.start_level(_level("second"))
+	Assert.equals(g.timer.elapsed_seconds(), 0.0, "new level starts at zero")
+
 func test_power_consumption_persists_to_inventory() -> void:
 	var inventory := {"hold": 2, "undo": 1, "refresh": 1}
 	var g := GameController.new()

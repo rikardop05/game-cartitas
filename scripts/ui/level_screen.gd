@@ -2,6 +2,11 @@ extends Control
 
 const BOARD_CARD := Vector2(64, 64)
 const TRAY_CARD := Vector2(40, 40)
+const WARM_BACKGROUND := Color("#c78454")
+const PANEL_BACKGROUND := Color(0.16, 0.10, 0.08, 0.78)
+const PANEL_BORDER := Color("#f3d28d")
+const TEXT_PRIMARY := Color("#fff1d2")
+const TEXT_MUTED := Color("#f0c98e")
 
 var controller: GameController
 var board_container: Control
@@ -14,6 +19,9 @@ var power_buttons: Dictionary = {}
 var timer_label: Label
 var stars_label: Label
 var level_label: Label
+var zone_header: Label
+var instruction_label: Label
+var _is_landscape := true
 var _ended := false
 
 func _ready() -> void:
@@ -21,6 +29,10 @@ func _ready() -> void:
 	var level: Dictionary = LevelLoader.load_level(level_id)
 	if level.has("error"):
 		_show_error(str(level["error"]))
+		return
+	var validation := LevelValidator.validate(level)
+	if not validation["valid"]:
+		_show_error("%s\n%s" % [Localizer.t("invalid_level"), "\n".join(validation["errors"])])
 		return
 	controller = GameController.new()
 	controller.start_level(level, Game.progress.inventory)
@@ -37,111 +49,194 @@ func _process(_delta: float) -> void:
 	_update_live_stars()
 
 func _on_resized() -> void:
-	if controller != null:
-		render()
+	if controller != null and not _ended:
+		var landscape := _viewport_is_landscape()
+		if landscape != _is_landscape:
+			_build_ui()
+			call_deferred("render")
+		else:
+			render()
 
 func _build_ui() -> void:
+	_is_landscape = _viewport_is_landscape()
+	power_buttons.clear()
+	for child in get_children():
+		remove_child(child)
+		child.queue_free()
+
 	var bg := ColorRect.new()
-	bg.color = Color("#17181d")
+	bg.color = WARM_BACKGROUND
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 8)
+	margin.add_theme_constant_override("margin_left", 10)
 	margin.add_theme_constant_override("margin_top", 8)
-	margin.add_theme_constant_override("margin_right", 8)
+	margin.add_theme_constant_override("margin_right", 10)
 	margin.add_theme_constant_override("margin_bottom", 8)
 	add_child(margin)
 
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 6)
+	vbox.add_theme_constant_override("separation", 8)
 	margin.add_child(vbox)
 
 	vbox.add_child(_build_hud())
+	instruction_label = Label.new()
+	instruction_label.text = Localizer.t("instruction")
+	instruction_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	instruction_label.add_theme_color_override("font_color", TEXT_PRIMARY)
+	instruction_label.add_theme_font_size_override("font_size", 14)
+	vbox.add_child(instruction_label)
 
-	var landscape := get_viewport_rect().size.x > get_viewport_rect().size.y
-	if landscape:
+	if _is_landscape:
 		var body := HBoxContainer.new()
 		body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		body.add_theme_constant_override("separation", 12)
+		body.add_theme_constant_override("separation", 10)
 		vbox.add_child(body)
-		board_container = Control.new()
-		board_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		body.add_child(board_container)
+		body.add_child(_build_main_column())
 		var controls := _build_controls()
-		controls.custom_minimum_size = Vector2(300, 0)
+		controls.custom_minimum_size = Vector2(112, 0)
 		body.add_child(controls)
 	else:
-		board_container = Control.new()
-		board_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		vbox.add_child(board_container)
+		vbox.add_child(_build_main_column())
 		vbox.add_child(_build_controls())
 
-func _build_hud() -> HBoxContainer:
+func _build_hud() -> PanelContainer:
+	var panel := _make_panel(PANEL_BACKGROUND, PANEL_BORDER, 14)
+	panel.custom_minimum_size = Vector2(0, 48)
 	var hud := HBoxContainer.new()
+	hud.add_theme_constant_override("separation", 8)
+	panel.add_child(hud)
+	var back := Button.new()
+	back.text = "<"
+	back.flat = true
+	back.custom_minimum_size = Vector2(32, 32)
+	back.add_theme_font_size_override("font_size", 24)
+	back.add_theme_color_override("font_color", TEXT_PRIMARY)
+	back.pressed.connect(Game.go_to_menu)
+	hud.add_child(back)
 	level_label = Label.new()
-	level_label.text = "Level %s" % controller.level_id
+	level_label.text = "%s %s" % [Localizer.t("level"), controller.level_id]
 	level_label.add_theme_font_size_override("font_size", 18)
+	level_label.add_theme_color_override("font_color", TEXT_PRIMARY)
+	level_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	hud.add_child(level_label)
 	_add_expander(hud)
 	timer_label = Label.new()
 	timer_label.text = "00:00"
 	timer_label.add_theme_font_size_override("font_size", 18)
+	timer_label.add_theme_color_override("font_color", TEXT_PRIMARY)
+	timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	timer_label.custom_minimum_size = Vector2(72, 32)
 	hud.add_child(timer_label)
 	_add_expander(hud)
 	stars_label = UiHelpers.symbol_label("☆☆☆", 18)
+	stars_label.add_theme_color_override("font_color", Color("#ffe36e"))
+	stars_label.custom_minimum_size = Vector2(74, 32)
+	stars_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	hud.add_child(stars_label)
-	return hud
+	return panel
 
-func _build_controls() -> VBoxContainer:
+func _build_main_column() -> VBoxContainer:
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 6)
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	col.add_theme_constant_override("separation", 8)
+
+	var board_panel := _make_panel(Color(0.19, 0.12, 0.09, 0.30), Color(1, 0.88, 0.60, 0.45), 12)
+	board_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	board_container = Control.new()
+	board_container.custom_minimum_size = Vector2(0, 80)
+	board_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	board_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	board_panel.add_child(board_container)
+	col.add_child(board_panel)
 
 	var deck_row := HBoxContainer.new()
 	deck_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	deck_row.add_theme_constant_override("separation", 12)
+	deck_row.add_theme_constant_override("separation", 44)
+	deck_row.custom_minimum_size = Vector2(0, 68)
 	col.add_child(deck_row)
 	deck_a_btn = _make_deck_button("a")
 	deck_b_btn = _make_deck_button("b")
-	deck_row.add_child(deck_a_btn)
-	deck_row.add_child(deck_b_btn)
+	deck_row.add_child(_make_deck_slot("A", deck_a_btn))
+	deck_row.add_child(_make_deck_slot("B", deck_b_btn))
 
-	var zone_header := Label.new()
-	zone_header.text = "%s (%d)" % [Localizer.t("clearing_zone"), controller.clearing_capacity]
-	zone_header.add_theme_font_size_override("font_size", 12)
-	zone_header.modulate = Color(0.7, 0.7, 0.7)
-	col.add_child(zone_header)
-
-	zone_container = HFlowContainer.new()
-	zone_container.alignment = FlowContainer.ALIGNMENT_CENTER
-	zone_container.add_theme_constant_override("h_separation", 3)
-	zone_container.add_theme_constant_override("v_separation", 3)
-	col.add_child(zone_container)
-
+	var bottom := HBoxContainer.new()
+	bottom.add_theme_constant_override("separation", 8)
+	col.add_child(bottom)
+	var reserve_panel := _make_panel(PANEL_BACKGROUND, PANEL_BORDER, 10)
+	reserve_panel.custom_minimum_size = Vector2(112, 64)
+	var reserve_col := VBoxContainer.new()
+	reserve_col.add_theme_constant_override("separation", 2)
+	reserve_panel.add_child(reserve_col)
 	reserve_header = Label.new()
-	reserve_header.text = Localizer.t("reserve")
-	reserve_header.add_theme_font_size_override("font_size", 12)
-	reserve_header.modulate = Color(0.7, 0.7, 0.7)
-	col.add_child(reserve_header)
-
+	reserve_header.add_theme_font_size_override("font_size", 11)
+	reserve_header.add_theme_color_override("font_color", TEXT_MUTED)
+	reserve_col.add_child(reserve_header)
 	reserve_container = HFlowContainer.new()
 	reserve_container.alignment = FlowContainer.ALIGNMENT_CENTER
+	reserve_container.custom_minimum_size = Vector2(0, 40)
 	reserve_container.add_theme_constant_override("h_separation", 3)
-	reserve_container.add_theme_constant_override("v_separation", 3)
-	col.add_child(reserve_container)
+	reserve_col.add_child(reserve_container)
+	bottom.add_child(reserve_panel)
 
-	var power_row := HBoxContainer.new()
-	power_row.custom_minimum_size = Vector2(0, 56)
-	power_row.add_theme_constant_override("separation", 12)
+	var zone_panel := _make_panel(Color(0.95, 0.48, 0.16, 0.34), PANEL_BORDER, 10)
+	zone_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var zone_col := VBoxContainer.new()
+	zone_col.add_theme_constant_override("separation", 2)
+	zone_panel.add_child(zone_col)
+	zone_header = Label.new()
+	zone_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	zone_header.add_theme_font_size_override("font_size", 11)
+	zone_header.add_theme_color_override("font_color", TEXT_PRIMARY)
+	zone_col.add_child(zone_header)
+	zone_container = HFlowContainer.new()
+	zone_container.alignment = FlowContainer.ALIGNMENT_CENTER
+	zone_container.custom_minimum_size = Vector2(0, 40)
+	zone_container.add_theme_constant_override("h_separation", 3)
+	zone_container.add_theme_constant_override("v_separation", 3)
+	zone_col.add_child(zone_container)
+	bottom.add_child(zone_panel)
+	return col
+
+func _build_controls() -> PanelContainer:
+	var panel := _make_panel(PANEL_BACKGROUND, PANEL_BORDER, 14)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 8)
+	panel.add_child(col)
+	var title := Label.new()
+	title.text = Localizer.t("powers")
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 14)
+	title.add_theme_color_override("font_color", TEXT_PRIMARY)
+	col.add_child(title)
+	var power_row: Control = VBoxContainer.new() if _is_landscape else HBoxContainer.new()
+	power_row.add_theme_constant_override("separation", 6)
 	col.add_child(power_row)
 	for p in PowerManager.POWERS:
 		var btn := Button.new()
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.custom_minimum_size = Vector2(0, 54)
+		btn.focus_mode = Control.FOCUS_NONE
 		btn.pressed.connect(_on_power.bind(p))
 		power_buttons[p] = btn
 		power_row.add_child(btn)
-	return col
+	return panel
+
+func _make_deck_slot(label_text: String, button: Button) -> VBoxContainer:
+	var slot := VBoxContainer.new()
+	slot.alignment = BoxContainer.ALIGNMENT_CENTER
+	var title := Label.new()
+	title.text = "%s %s" % [Localizer.t("support_deck"), label_text]
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 10)
+	title.add_theme_color_override("font_color", TEXT_MUTED)
+	slot.add_child(title)
+	slot.add_child(button)
+	return slot
 
 func _make_deck_button(deck_id: String) -> Button:
 	var btn := Button.new()
@@ -173,12 +268,17 @@ func render() -> void:
 		var node := _make_card_button(card, darken, _on_card.bind(card.id), BOARD_CARD)
 		node.position = offset + card.position * scale
 		node.scale = Vector2(scale, scale)
+		node.z_index = card.layer
 		board_container.add_child(node)
 
-	for card in controller.zone.cards:
-		zone_container.add_child(_make_card_display(card.type, TRAY_CARD))
+	zone_header.text = "%s  %d/%d" % [Localizer.t("clearing_zone"), controller.zone.size(), controller.clearing_capacity]
+	for i in controller.clearing_capacity:
+		if i < controller.zone.cards.size():
+			zone_container.add_child(_make_card_display(controller.zone.cards[i].type, TRAY_CARD))
+		else:
+			zone_container.add_child(_make_empty_slot(TRAY_CARD))
 
-	reserve_header.visible = controller.reserve.size() > 0
+	reserve_header.text = "%s  %d" % [Localizer.t("reserve"), controller.reserve.size()]
 	for card in controller.reserve:
 		reserve_container.add_child(_make_card_button(card, false, _on_reserve_return.bind(card.id), TRAY_CARD))
 
@@ -188,7 +288,7 @@ func render() -> void:
 	for p in PowerManager.POWERS:
 		var btn: Button = power_buttons[p]
 		var count: int = controller.powers.get_count(p)
-		btn.text = "%s  ×%d" % [_power_name(p), count]
+		btn.text = "%s\n%d" % [_power_name(p), count]
 		btn.disabled = count <= 0
 
 func _clear(c: Node) -> void:
@@ -202,6 +302,8 @@ func _board_layout() -> Dictionary:
 	var miny := INF
 	var maxy := -INF
 	for c in controller.board.cards:
+		if c.location != Card.Location.BOARD or c.is_removed():
+			continue
 		minx = minf(minx, c.position.x)
 		maxx = maxf(maxx, c.position.x + Card.SIZE.x)
 		miny = minf(miny, c.position.y)
@@ -221,31 +323,53 @@ func _board_layout() -> Dictionary:
 	return {"offset": offset, "scale": scale}
 
 func _make_card_rect(type: String, darken: bool, size: Vector2) -> Control:
-	var root := Control.new()
+	var root := Panel.new()
 	root.custom_minimum_size = size
 	root.size = size
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var rect := ColorRect.new()
-	rect.color = CardTypeRegistry.color(type)
-	rect.position = Vector2.ZERO
-	rect.size = size
-	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(rect)
+	var card_style := StyleBoxFlat.new()
+	card_style.bg_color = CardTypeRegistry.color(type)
+	card_style.border_color = Color("#fff2d5")
+	card_style.set_border_width_all(2)
+	card_style.set_corner_radius_all(5)
+	root.add_theme_stylebox_override("panel", card_style)
+	root.add_child(_make_card_art(type, size))
+	if darken:
+		root.modulate = Color(0.42, 0.42, 0.42)
+	return root
+
+func _make_card_art(type: String, size: Vector2) -> Control:
+	var path := "res://assets/cards/card_%s.png" % type
+	if ResourceLoader.exists(path):
+		var texture := load(path) as Texture2D
+		if texture == null:
+			return _make_card_placeholder(type, size)
+		var art := TextureRect.new()
+		art.texture = texture
+		art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		art.position = Vector2.ZERO
+		art.size = size
+		art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		return art
+	return _make_card_placeholder(type, size)
+
+func _make_card_placeholder(type: String, size: Vector2) -> Label:
 	var label := UiHelpers.symbol_label(CardTypeRegistry.symbol(type), int(size.y * 0.55))
 	label.position = Vector2.ZERO
 	label.size = size
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(label)
-	if darken:
-		root.modulate = Color(0.42, 0.42, 0.42)
-	return root
+	return label
 
 func _make_card_button(card: Card, darken: bool, on_click: Callable, size: Vector2) -> Button:
 	var btn := Button.new()
 	btn.flat = true
 	btn.custom_minimum_size = size
+	btn.size = size
+	btn.disabled = darken
+	btn.focus_mode = Control.FOCUS_NONE
 	btn.add_child(_make_card_rect(card.type, darken, size))
 	btn.pressed.connect(on_click)
 	return btn
@@ -253,16 +377,25 @@ func _make_card_button(card: Card, darken: bool, on_click: Callable, size: Vecto
 func _make_card_display(type: String, size: Vector2) -> Control:
 	return _make_card_rect(type, false, size)
 
+func _make_empty_slot(size: Vector2) -> Control:
+	var slot := Panel.new()
+	slot.custom_minimum_size = size
+	slot.size = size
+	slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.12, 0.08, 0.06, 0.28)
+	style.border_color = Color(1, 0.87, 0.62, 0.46)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(5)
+	slot.add_theme_stylebox_override("panel", style)
+	return slot
+
 func _update_deck_button(btn: Button, deck: DeckManager) -> void:
 	_clear(btn)
+	btn.size = BOARD_CARD
 	if deck.is_empty():
 		btn.disabled = true
-		var rect := ColorRect.new()
-		rect.color = Color(0.22, 0.22, 0.28)
-		rect.position = Vector2.ZERO
-		rect.size = BOARD_CARD
-		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		btn.add_child(rect)
+		btn.add_child(_make_empty_slot(BOARD_CARD))
 		return
 	btn.disabled = false
 	btn.add_child(_make_card_rect(deck.current_type(), false, BOARD_CARD))
@@ -281,6 +414,24 @@ func _update_deck_button(btn: Button, deck: DeckManager) -> void:
 	cnt.add_theme_font_size_override("font_size", 12)
 	cnt.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	btn.add_child(cnt)
+
+func _make_panel(background: Color, border: Color, radius: int) -> PanelContainer:
+	var panel := PanelContainer.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = background
+	style.border_color = border
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(radius)
+	style.content_margin_left = 8
+	style.content_margin_top = 6
+	style.content_margin_right = 8
+	style.content_margin_bottom = 6
+	panel.add_theme_stylebox_override("panel", style)
+	return panel
+
+func _viewport_is_landscape() -> bool:
+	var size := get_viewport_rect().size
+	return size.x >= size.y
 
 func _power_name(p: String) -> String:
 	match p:

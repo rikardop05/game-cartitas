@@ -6,6 +6,7 @@ var _running: bool = false
 var _last_tick: int = 0
 
 func start() -> void:
+	_elapsed_msec = 0
 	_running = true
 	_last_tick = Time.get_ticks_msec()
 

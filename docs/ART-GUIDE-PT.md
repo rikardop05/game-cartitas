@@ -36,7 +36,7 @@ Recomenda-se fornecer um PNG de referência da paleta completa (cartas + UI + fu
 
 | Arquivo (sugerido) | Tamanho | Descrição |
 |--------------------|---------|-----------|
-| `assets/cards/cat.png` … `crystal.png` | 32×32 | 12 faces de carta (um arquivo por tipo) |
+| `assets/cards/card_cat.png` … `card_crystal.png` | 32×32 | 12 faces de carta (um arquivo por tipo) |
 | `assets/cards/back.png` | 32×32 | Verso da carta (para o topo dos Support Decks) |
 | `assets/ui/power_hold.png` | 16×16 | Ícone do poder Hold |
 | `assets/ui/power_undo.png` | 16×16 | Ícone do poder Undo |
@@ -75,6 +75,6 @@ O projeto já configura o filtro padrão como *nearest*; verificar apenas os nov
 Hoje o jogo usa **placeholders** (cor de fundo + emoji por tipo), definidos em `scripts/core/card_type_registry.gd`. Para trocar por arte real:
 
 1. Crie os PNGs nos caminhos da tabela acima.
-2. (Passo de integração) Aponte o carregamento de sprite para os arquivos em `assets/` — a lógica do jogo **não muda**, apenas a camada visual.
+2. O carregamento opcional já procura `assets/cards/card_<tipo>.png`; sem o arquivo, o placeholder continua sendo usado.
 
 Nenhuma regra de jogo depende da arte; a arte é puramente apresentação.

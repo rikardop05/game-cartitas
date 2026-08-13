@@ -36,7 +36,7 @@ Providing a reference PNG of the full palette (cards + UI + background) in `asse
 
 | File (suggested) | Size | Description |
 |------------------|------|-------------|
-| `assets/cards/cat.png` … `crystal.png` | 32×32 | 12 card faces (one file per type) |
+| `assets/cards/card_cat.png` … `card_crystal.png` | 32×32 | 12 card faces (one file per type) |
 | `assets/cards/back.png` | 32×32 | Card back (top of the Support Decks) |
 | `assets/ui/power_hold.png` | 16×16 | Hold power icon |
 | `assets/ui/power_undo.png` | 16×16 | Undo power icon |
@@ -75,6 +75,6 @@ The project already sets nearest as the default filter; check new files only.
 The game currently uses **placeholders** (background color + emoji per type), defined in `scripts/core/card_type_registry.gd`. To switch to real art:
 
 1. Create the PNGs at the paths above.
-2. (Integration step) Point sprite loading to the `assets/` files — game logic **does not change**, only the visual layer.
+2. Optional loading already looks for `assets/cards/card_<type>.png`; without the file, the placeholder remains active.
 
 No game rule depends on art; art is purely presentation.
