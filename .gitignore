@@ -1,0 +1,11 @@
+# Godot 4+ cache
+.godot/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Dev tooling (agent skills)
+.agents/
+skills-lock.json
