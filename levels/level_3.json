@@ -5,9 +5,10 @@
     "types": ["cat", "dog", "bird", "fish", "flower", "moon", "star", "sun", "leaf"],
     "count": 3,
     "layers": 3,
-    "width": 280,
+    "width": 400,
     "height": 260,
     "card_size": 64,
+    "horizontal_spread": 1.25,
     "seed": 3001
   },
   "deck": ["star", "star", "star", "sun", "sun", "sun", "leaf", "leaf", "leaf", "cat", "cat", "cat"],

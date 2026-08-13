@@ -63,6 +63,19 @@ func test_defeat_when_zone_full_without_match() -> void:
 	Assert.is_true(g.check_defeat(), "defeat true")
 	Assert.equals(g.status, GameController.Status.LOST, "status LOST")
 
+func test_full_zone_rejects_eighth_card_even_when_it_matches() -> void:
+	var g := GameController.new()
+	var level := _level()
+	level["clearing_capacity"] = 3
+	g.start_level(level)
+	g.select_card("c1")
+	g.select_card("c4")
+	g.select_card("c2")
+	var r := g.select_card("c3")
+	Assert.is_false(r["ok"], "eighth card rejected when zone is full")
+	Assert.is_true(r["defeat"], "full zone causes defeat")
+	Assert.equals(g.zone.size(), 3, "zone remains at capacity")
+
 func test_blocked_card_not_selectable() -> void:
 	var g := GameController.new()
 	var lvl := _level()

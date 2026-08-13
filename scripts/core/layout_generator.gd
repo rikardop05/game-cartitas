@@ -2,6 +2,7 @@ class_name LayoutGenerator
 extends RefCounted
 
 const CARD := 64.0
+const DISPLAY_CARD := 48.0
 
 static func generate(types: Array, count: int, params: Dictionary) -> Array:
 	var rng := RandomNumberGenerator.new()
@@ -10,6 +11,7 @@ static func generate(types: Array, count: int, params: Dictionary) -> Array:
 	var width := float(params.get("width", 240))
 	var height := float(params.get("height", 200))
 	var card := float(params.get("card_size", CARD))
+	var horizontal_spread := maxf(1.0, float(params.get("horizontal_spread", 1.0)))
 
 	var flat: Array = []
 	for t in types:
@@ -38,10 +40,19 @@ static func generate(types: Array, count: int, params: Dictionary) -> Array:
 		if not by_layer.has(layer):
 			by_layer[layer] = []
 		by_layer[layer].append(Rect2(pos, Vector2(card, card)))
-	_ensure_covered(result, width, height, card, rng)
+	_spread_horizontally(result, width, card, horizontal_spread)
+	_ensure_covered(result, width, height, card, DISPLAY_CARD, rng)
 	return result
 
-static func _ensure_covered(cards: Array, width: float, height: float, card: float, rng: RandomNumberGenerator) -> void:
+static func _spread_horizontally(cards: Array, width: float, card: float, factor: float) -> void:
+	if factor <= 1.0:
+		return
+	var center := width * 0.5
+	for c in cards:
+		var x := float(c["x"])
+		c["x"] = int(round(clampf(center + (x - center) * factor, 0, maxf(0, width - card))))
+
+static func _ensure_covered(cards: Array, width: float, height: float, bounds_card: float, overlap_card: float, rng: RandomNumberGenerator) -> void:
 	var max_layer := 0
 	for c in cards:
 		max_layer = maxi(max_layer, int(c["layer"]))
@@ -49,17 +60,17 @@ static func _ensure_covered(cards: Array, width: float, height: float, card: flo
 		for c in cards:
 			if int(c["layer"]) != layer:
 				continue
-			if _is_covered(c, cards, card):
+			if _is_covered(c, cards, overlap_card):
 				continue
 			var higher := _random_higher(cards, layer, rng)
 			if higher.is_empty():
 				continue
-			var dx := rng.randf_range(-card * 0.5, card * 0.5)
-			var dy := rng.randf_range(-card * 0.5, card * 0.5)
-			if maxf(absf(dx), absf(dy)) < card * 0.15:
-				dx = card * 0.3
-			c["x"] = int(round(clampf(float(higher["x"]) + dx, 0, maxf(0, width - card))))
-			c["y"] = int(round(clampf(float(higher["y"]) + dy, 0, maxf(0, height - card))))
+			var dx := rng.randf_range(-overlap_card * 0.5, overlap_card * 0.5)
+			var dy := rng.randf_range(-overlap_card * 0.5, overlap_card * 0.5)
+			if maxf(absf(dx), absf(dy)) < overlap_card * 0.15:
+				dx = overlap_card * 0.3
+			c["x"] = int(round(clampf(float(higher["x"]) + dx, 0, maxf(0, width - bounds_card))))
+			c["y"] = int(round(clampf(float(higher["y"]) + dy, 0, maxf(0, height - bounds_card))))
 
 static func _is_covered(c: Dictionary, cards: Array, card: float) -> bool:
 	var r := Rect2(Vector2(float(c["x"]), float(c["y"])), Vector2(card, card))

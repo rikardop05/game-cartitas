@@ -26,7 +26,7 @@ A lógica é separada da apresentação: `GameController` (classe pura, sem `Nod
 8. Como jogador, quero que cartas bloqueadas sejam desbloqueadas quando a carta que as cobria é removida, para liberar novas jogadas.
 9. Como jogador, quero que a Clearing Zone tenha capacidade limitada (7 por padrão), para que o espaço seja um recurso a gerenciar.
 10. Como jogador, quero ser avisado (e perder) quando a Clearing Zone está cheia e não consigo formar combinação, para que a derrota seja determinística.
-11. Como jogador, quero que a carta que completa um trio seja processada antes da regra de derrota, para não perder injustamente quando a jogada é válida.
+11. Como jogador, quero que uma Clearing Zone cheia rejeite qualquer nova carta, mantendo a capacidade visível como limite absoluto.
 12. Como jogador, quero usar os dois *Support Decks*, tocando na carta do topo para enviá-la à Clearing Zone, para ter cartas extras quando o tabuleiro travar.
 13. Como jogador, quero ver apenas a carta do topo de cada *Support Deck*, para saber o que virá se eu usá-la.
 14. Como jogador, quero que cada *Support Deck* seja finito, para que seja um recurso limitado.
@@ -67,9 +67,9 @@ A lógica é separada da apresentação: `GameController` (classe pura, sem `Nod
 
 ### Engine e apresentação
 - **Engine:** Godot 4.7.1 estável, **GDScript**.
-- **Plataforma:** mobile (retrato 9:16) como alvo principal; desktop em janela retrato para desenvolvimento/teste. Touch-first, com suporte a mouse.
-- **Resolução:** base lógica 360×640, com upscale inteiro, `texture_filter = nearest`, pixel snap habilitado (padrão de pixel art).
-- **Unidades visuais:** carta 32×32 px; UI em grade de 8px; ícones de poderes 16×16.
+- **Plataforma:** mobile (paisagem 16:9) como layout de referência atual; retrato 9:16 continua disponível. Touch-first, com suporte a mouse.
+- **Resolução:** base lógica principal 640×360, janela de desenvolvimento 1280×720, com modo retrato 360×640, upscale inteiro e `texture_filter = nearest`.
+- **Unidades visuais:** arte-fonte de carta 64×64 px; carta renderizada 48×48 px (Reserve usa duas colunas dinâmicas de 24–48 px); UI em grade de 8px; ícones de poderes 16×16.
 
 ### Arquitetura e costuras
 - **`GameController`** (classe pura, `RefCounted`, sem `Node`): orquestra o fluxo da partida, mantém o `GameState` como fonte de verdade e recebe as ações. É a **costura de teste** única.
@@ -82,7 +82,7 @@ A lógica é separada da apresentação: `GameController` (classe pura, sem `Nod
 - **Card State:** `HIDDEN`, `AVAILABLE`, `SELECTED`, `MATCHED` (transitório), `REMOVED`.
 - **Card Type:** identidade que define a correspondência — duas cartas correspondem se e somente se compartilham o mesmo *Card Type*.
 - **Card na Reserve:** permanece `SELECTED` com `location = RESERVE` (enum enxuto, sem novo estado).
-- **Blocking:** uma carta é `Blocked` se qualquer carta ativa de camada superior sobrepõe seu retângulo (AABB) em qualquer quantidade. Disponibilidade recalculada após cada remoção.
+- **Blocking:** uma carta é `Blocked` se qualquer carta ativa de camada superior sobrepõe seu retângulo visual (AABB de 48×48) em qualquer quantidade. Cartas do mesmo layer não se bloqueiam. A regra é local à área da carta, não global à mesa. Disponibilidade recalculada após cada remoção.
 - **Action:** `SELECT_CARD`, `SELECT_DECK_CARD`, `USE_HOLD`, `USE_UNDO`, `USE_REFRESH`, com estado anterior, para histórico/Undo/análise.
 
 ### Regras core
@@ -90,7 +90,7 @@ A lógica é separada da apresentação: `GameController` (classe pura, sem `Nod
 - **Combinação:** após cada inserção, se houver ≥3 cartas do mesmo tipo na zona, remove exatamente as 3 primeiras (`MATCHED` → `REMOVED`), automaticamente. A quarta carta do mesmo tipo permanece para combinação futura.
 - **Clearing Zone:** capacidade configurável por *Level* (padrão **7**). A ordem de inserção é preservada (para apresentação e Undo).
 - **Vitória:** tabuleiro, os dois *Support Decks*, a *Clearing Zone* e a *Reserve* vazios (estado interno como fonte de verdade).
-- **Derrota:** Clearing Zone cheia e a próxima carta não completa um trio. Função `checkDefeat()` extensível.
+- **Derrota:** Clearing Zone cheia rejeita qualquer nova carta e encerra o Level. Função `checkDefeat()` extensível.
 
 ### Powers
 - **Hold** (antes chamado "Remove"): move as últimas até 4 cartas da Clearing Zone para a *Reserve*, liberando espaço. Devolver da Reserve para a zona é ação livre (toque) e ocupa espaço normal da zona. Se a zona estiver vazia, o uso é rejeitado sem consumir o poder.
@@ -121,8 +121,8 @@ A lógica é separada da apresentação: `GameController` (classe pura, sem `Nod
 - **Casos obrigatórios (do documento original, §46):**
   - Combinação: 3 iguais → removidas; 2 iguais → permanecem.
   - Bloqueio: carta coberta → indisponível; carta superior removida → inferior disponível.
-  - Clearing Zone: capacidade respeitada; trio libera espaço.
-  - Derrota: zona cheia sem combinação → derrota; carta que completa trio não gera derrota.
+  - Clearing Zone: capacidade respeitada; zona cheia rejeita a oitava carta.
+  - Derrota: zona cheia → derrota, inclusive quando a nova carta formaria um trio.
   - Vitória: última carta removida (com decks, zona e reserva vazios) → vitória.
   - Undo: seleção → estado A; undo → estado anterior.
   - Hold: move até 4 para a Reserve; zona vazia rejeita sem consumir; devolver à zona funciona.

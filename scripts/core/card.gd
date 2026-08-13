@@ -6,6 +6,7 @@ enum Source { BOARD, DECK_A, DECK_B }
 enum Location { BOARD, CLEARING_ZONE, RESERVE }
 
 const SIZE := Vector2(64, 64)
+const DISPLAY_SIZE := Vector2(48, 48)
 
 var id: String = ""
 var type: String = ""
@@ -23,6 +24,9 @@ func _init(p_id: String = "", p_type: String = "", p_position: Vector2 = Vector2
 
 func get_rect() -> Rect2:
 	return Rect2(position, SIZE)
+
+func get_display_rect() -> Rect2:
+	return Rect2(position, DISPLAY_SIZE)
 
 func is_removed() -> bool:
 	return state == State.REMOVED

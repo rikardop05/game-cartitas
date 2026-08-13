@@ -25,15 +25,22 @@ func test_unblock_after_removal() -> void:
 	bm.recalculate_availability()
 	Assert.equals(bm.get_card("a").state, Card.State.AVAILABLE, "a unblocked after c removed")
 
-func test_same_layer_does_not_block() -> void:
+func test_same_layer_separated_cards_do_not_block() -> void:
 	var a := Card.new("a", "cat", Vector2(0, 0), 0)
-	var b := Card.new("b", "dog", Vector2(10, 0), 0)
+	var b := Card.new("b", "dog", Vector2(50, 0), 0)
 	var cards: Array[Card] = [a, b]
 	for x in cards:
 		x.location = Card.Location.BOARD
 	var bm := BoardManager.new(cards)
 	bm.recalculate_availability()
 	Assert.equals(a.state, Card.State.AVAILABLE, "same layer does not block")
+
+func test_cards_outside_display_bounds_do_not_block() -> void:
+	var lower := Card.new("lower", "cat", Vector2(0, 0), 0)
+	var higher := Card.new("higher", "dog", Vector2(50, 0), 1)
+	var bm := BoardManager.new([lower, higher])
+	bm.recalculate_availability()
+	Assert.equals(lower.state, Card.State.AVAILABLE, "higher card outside visible bounds does not block")
 
 func test_remaining_count() -> void:
 	var bm := _make()

@@ -1,7 +1,8 @@
 extends Control
 
-const BOARD_CARD := Vector2(64, 64)
-const TRAY_CARD := Vector2(40, 40)
+const CARD_DISPLAY_SIZE := Card.DISPLAY_SIZE
+const RESERVE_COLUMNS := 2
+const RESERVE_PANEL_SIZE := Vector2(80, 60)
 const WARM_BACKGROUND := Color("#c78454")
 const PANEL_BACKGROUND := Color(0.16, 0.10, 0.08, 0.78)
 const PANEL_BORDER := Color("#f3d28d")
@@ -12,7 +13,7 @@ var controller: GameController
 var board_container: Control
 var zone_container: HFlowContainer
 var reserve_header: Label
-var reserve_container: HFlowContainer
+var reserve_container: Control
 var deck_a_btn: Button
 var deck_b_btn: Button
 var power_buttons: Dictionary = {}
@@ -79,7 +80,7 @@ func _build_ui() -> void:
 	add_child(margin)
 
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 8)
+	vbox.add_theme_constant_override("separation", 5)
 	margin.add_child(vbox)
 
 	vbox.add_child(_build_hud())
@@ -87,7 +88,7 @@ func _build_ui() -> void:
 	instruction_label.text = Localizer.t("instruction")
 	instruction_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	instruction_label.add_theme_color_override("font_color", TEXT_PRIMARY)
-	instruction_label.add_theme_font_size_override("font_size", 14)
+	instruction_label.add_theme_font_size_override("font_size", 10)
 	vbox.add_child(instruction_label)
 
 	if _is_landscape:
@@ -97,44 +98,44 @@ func _build_ui() -> void:
 		vbox.add_child(body)
 		body.add_child(_build_main_column())
 		var controls := _build_controls()
-		controls.custom_minimum_size = Vector2(112, 0)
+		controls.custom_minimum_size = Vector2(80, 0)
 		body.add_child(controls)
 	else:
 		vbox.add_child(_build_main_column())
 		vbox.add_child(_build_controls())
 
 func _build_hud() -> PanelContainer:
-	var panel := _make_panel(PANEL_BACKGROUND, PANEL_BORDER, 14)
-	panel.custom_minimum_size = Vector2(0, 48)
+	var panel := _make_unframed_panel()
+	panel.custom_minimum_size = Vector2(0, 34)
 	var hud := HBoxContainer.new()
-	hud.add_theme_constant_override("separation", 8)
+	hud.add_theme_constant_override("separation", 5)
 	panel.add_child(hud)
 	var back := Button.new()
 	back.text = "<"
 	back.flat = true
-	back.custom_minimum_size = Vector2(32, 32)
-	back.add_theme_font_size_override("font_size", 24)
+	back.custom_minimum_size = Vector2(24, 24)
+	back.add_theme_font_size_override("font_size", 18)
 	back.add_theme_color_override("font_color", TEXT_PRIMARY)
 	back.pressed.connect(Game.go_to_menu)
 	hud.add_child(back)
 	level_label = Label.new()
 	level_label.text = "%s %s" % [Localizer.t("level"), controller.level_id]
-	level_label.add_theme_font_size_override("font_size", 18)
+	level_label.add_theme_font_size_override("font_size", 14)
 	level_label.add_theme_color_override("font_color", TEXT_PRIMARY)
 	level_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	hud.add_child(level_label)
 	_add_expander(hud)
 	timer_label = Label.new()
 	timer_label.text = "00:00"
-	timer_label.add_theme_font_size_override("font_size", 18)
+	timer_label.add_theme_font_size_override("font_size", 14)
 	timer_label.add_theme_color_override("font_color", TEXT_PRIMARY)
 	timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	timer_label.custom_minimum_size = Vector2(72, 32)
+	timer_label.custom_minimum_size = Vector2(52, 24)
 	hud.add_child(timer_label)
 	_add_expander(hud)
-	stars_label = UiHelpers.symbol_label("☆☆☆", 18)
+	stars_label = UiHelpers.symbol_label("☆☆☆", 14)
 	stars_label.add_theme_color_override("font_color", Color("#ffe36e"))
-	stars_label.custom_minimum_size = Vector2(74, 32)
+	stars_label.custom_minimum_size = Vector2(58, 24)
 	stars_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	hud.add_child(stars_label)
 	return panel
@@ -143,7 +144,7 @@ func _build_main_column() -> VBoxContainer:
 	var col := VBoxContainer.new()
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	col.add_theme_constant_override("separation", 8)
+	col.add_theme_constant_override("separation", 5)
 
 	var board_panel := _make_panel(Color(0.19, 0.12, 0.09, 0.30), Color(1, 0.88, 0.60, 0.45), 12)
 	board_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -157,7 +158,7 @@ func _build_main_column() -> VBoxContainer:
 	var deck_row := HBoxContainer.new()
 	deck_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	deck_row.add_theme_constant_override("separation", 44)
-	deck_row.custom_minimum_size = Vector2(0, 68)
+	deck_row.custom_minimum_size = Vector2(0, 62)
 	col.add_child(deck_row)
 	deck_a_btn = _make_deck_button("a")
 	deck_b_btn = _make_deck_button("b")
@@ -165,37 +166,36 @@ func _build_main_column() -> VBoxContainer:
 	deck_row.add_child(_make_deck_slot("B", deck_b_btn))
 
 	var bottom := HBoxContainer.new()
-	bottom.add_theme_constant_override("separation", 8)
+	bottom.add_theme_constant_override("separation", 5)
 	col.add_child(bottom)
 	var reserve_panel := _make_panel(PANEL_BACKGROUND, PANEL_BORDER, 10)
-	reserve_panel.custom_minimum_size = Vector2(112, 64)
+	reserve_panel.custom_minimum_size = RESERVE_PANEL_SIZE
 	var reserve_col := VBoxContainer.new()
 	reserve_col.add_theme_constant_override("separation", 2)
 	reserve_panel.add_child(reserve_col)
 	reserve_header = Label.new()
-	reserve_header.add_theme_font_size_override("font_size", 11)
+	reserve_header.add_theme_font_size_override("font_size", 8)
 	reserve_header.add_theme_color_override("font_color", TEXT_MUTED)
 	reserve_col.add_child(reserve_header)
-	reserve_container = HFlowContainer.new()
-	reserve_container.alignment = FlowContainer.ALIGNMENT_CENTER
-	reserve_container.custom_minimum_size = Vector2(0, 40)
-	reserve_container.add_theme_constant_override("h_separation", 3)
+	reserve_container = Control.new()
+	reserve_container.custom_minimum_size = Vector2(0, CARD_DISPLAY_SIZE.y)
+	reserve_container.clip_contents = true
 	reserve_col.add_child(reserve_container)
 	bottom.add_child(reserve_panel)
 
-	var zone_panel := _make_panel(Color(0.95, 0.48, 0.16, 0.34), PANEL_BORDER, 10)
+	var zone_panel := _make_unframed_panel()
 	zone_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var zone_col := VBoxContainer.new()
-	zone_col.add_theme_constant_override("separation", 2)
+	zone_col.add_theme_constant_override("separation", 1)
 	zone_panel.add_child(zone_col)
 	zone_header = Label.new()
 	zone_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	zone_header.add_theme_font_size_override("font_size", 11)
+	zone_header.add_theme_font_size_override("font_size", 8)
 	zone_header.add_theme_color_override("font_color", TEXT_PRIMARY)
 	zone_col.add_child(zone_header)
 	zone_container = HFlowContainer.new()
 	zone_container.alignment = FlowContainer.ALIGNMENT_CENTER
-	zone_container.custom_minimum_size = Vector2(0, 40)
+	zone_container.custom_minimum_size = CARD_DISPLAY_SIZE
 	zone_container.add_theme_constant_override("h_separation", 3)
 	zone_container.add_theme_constant_override("v_separation", 3)
 	zone_col.add_child(zone_container)
@@ -203,23 +203,24 @@ func _build_main_column() -> VBoxContainer:
 	return col
 
 func _build_controls() -> PanelContainer:
-	var panel := _make_panel(PANEL_BACKGROUND, PANEL_BORDER, 14)
+	var panel := _make_unframed_panel()
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 8)
+	col.add_theme_constant_override("separation", 5)
 	panel.add_child(col)
 	var title := Label.new()
 	title.text = Localizer.t("powers")
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 14)
+	title.add_theme_font_size_override("font_size", 10)
 	title.add_theme_color_override("font_color", TEXT_PRIMARY)
 	col.add_child(title)
 	var power_row: Control = VBoxContainer.new() if _is_landscape else HBoxContainer.new()
-	power_row.add_theme_constant_override("separation", 6)
+	power_row.add_theme_constant_override("separation", 4)
 	col.add_child(power_row)
 	for p in PowerManager.POWERS:
 		var btn := Button.new()
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		btn.custom_minimum_size = Vector2(0, 54)
+		btn.custom_minimum_size = Vector2(0, 38)
+		btn.add_theme_font_size_override("font_size", 12)
 		btn.focus_mode = Control.FOCUS_NONE
 		btn.pressed.connect(_on_power.bind(p))
 		power_buttons[p] = btn
@@ -241,7 +242,7 @@ func _make_deck_slot(label_text: String, button: Button) -> VBoxContainer:
 func _make_deck_button(deck_id: String) -> Button:
 	var btn := Button.new()
 	btn.flat = true
-	btn.custom_minimum_size = BOARD_CARD
+	btn.custom_minimum_size = CARD_DISPLAY_SIZE
 	btn.pressed.connect(_on_deck.bind(deck_id))
 	return btn
 
@@ -257,30 +258,50 @@ func render() -> void:
 
 	var layout := _board_layout()
 	var offset: Vector2 = layout["offset"]
-	var scale: float = layout["scale"]
+	var scale_x: float = layout["scale_x"]
+	var scale_y: float = layout["scale_y"]
 
 	var board_cards: Array = controller.board.cards.duplicate()
 	board_cards.sort_custom(func(a, b): return a.layer < b.layer)
 	for card in board_cards:
 		if card.is_removed() or card.location != Card.Location.BOARD:
 			continue
-		var darken: bool = card.state != Card.State.AVAILABLE
-		var node := _make_card_button(card, darken, _on_card.bind(card.id), BOARD_CARD)
-		node.position = offset + card.position * scale
-		node.scale = Vector2(scale, scale)
+		var visually_blocked := _is_visually_blocked(card, board_cards, offset, scale_x, scale_y)
+		var darken: bool = card.state != Card.State.AVAILABLE or visually_blocked
+		var node := _make_card_button(card, darken, _on_card.bind(card.id), CARD_DISPLAY_SIZE)
+		node.position = Vector2(
+			offset.x + card.position.x * scale_x,
+			offset.y + card.position.y * scale_y
+		)
 		node.z_index = card.layer
 		board_container.add_child(node)
 
 	zone_header.text = "%s  %d/%d" % [Localizer.t("clearing_zone"), controller.zone.size(), controller.clearing_capacity]
 	for i in controller.clearing_capacity:
 		if i < controller.zone.cards.size():
-			zone_container.add_child(_make_card_display(controller.zone.cards[i].type, TRAY_CARD))
+			zone_container.add_child(_make_card_display(controller.zone.cards[i].type, CARD_DISPLAY_SIZE))
 		else:
-			zone_container.add_child(_make_empty_slot(TRAY_CARD))
+			zone_container.add_child(_make_empty_slot(CARD_DISPLAY_SIZE))
 
 	reserve_header.text = "%s  %d" % [Localizer.t("reserve"), controller.reserve.size()]
-	for card in controller.reserve:
-		reserve_container.add_child(_make_card_button(card, false, _on_reserve_return.bind(card.id), TRAY_CARD))
+	var reserve_size := _reserve_card_size()
+	var reserve_step := _reserve_card_step(reserve_size)
+	var reserve_column_width := reserve_container.size.x / float(RESERVE_COLUMNS)
+	for i in controller.reserve.size():
+		var card: Card = controller.reserve[i]
+		var node: Control
+		if i == controller.reserve.size() - 1:
+			node = _make_card_button(card, false, _on_reserve_return.bind(card.id), reserve_size)
+		else:
+			node = _make_card_rect(card.type, false, reserve_size)
+		var column := i % RESERVE_COLUMNS
+		var row := floori(float(i) / float(RESERVE_COLUMNS))
+		node.position = Vector2(
+			column * reserve_column_width + (reserve_column_width - reserve_size.x) / 2.0,
+			row * reserve_step
+		)
+		node.z_index = i
+		reserve_container.add_child(node)
 
 	_update_deck_button(deck_a_btn, controller.deck_a)
 	_update_deck_button(deck_b_btn, controller.deck_b)
@@ -296,31 +317,76 @@ func _clear(c: Node) -> void:
 		c.remove_child(child)
 		child.queue_free()
 
+func _reserve_card_size() -> Vector2:
+	var count := controller.reserve.size()
+	if count <= 0:
+		return CARD_DISPLAY_SIZE
+	var available_height := maxf(CARD_DISPLAY_SIZE.y, reserve_container.size.y)
+	var tab := 6.0
+	var rows := ceili(float(count) / float(RESERVE_COLUMNS))
+	var side := minf(CARD_DISPLAY_SIZE.y, maxf(24.0, available_height - tab * maxi(0, rows - 1)))
+	var available_width := maxf(24.0, reserve_container.size.x / float(RESERVE_COLUMNS) - 2.0)
+	side = minf(side, available_width)
+	return Vector2(side, side)
+
+func _reserve_card_step(card_size: Vector2) -> float:
+	var count := controller.reserve.size()
+	if count <= 1:
+		return 0.0
+	var available_height := maxf(card_size.y, reserve_container.size.y)
+	var rows := ceili(float(count) / float(RESERVE_COLUMNS))
+	if rows <= 1:
+		return 0.0
+	return minf(6.0, maxf(2.0, (available_height - card_size.y) / float(rows - 1)))
+
 func _board_layout() -> Dictionary:
+	# Keep the original board frame so removing cards does not collapse the layout.
 	var minx := INF
 	var maxx := -INF
 	var miny := INF
 	var maxy := -INF
 	for c in controller.board.cards:
-		if c.location != Card.Location.BOARD or c.is_removed():
+		if c.source != Card.Source.BOARD:
 			continue
 		minx = minf(minx, c.position.x)
-		maxx = maxf(maxx, c.position.x + Card.SIZE.x)
+		maxx = maxf(maxx, c.position.x)
 		miny = minf(miny, c.position.y)
-		maxy = maxf(maxy, c.position.y + Card.SIZE.y)
+		maxy = maxf(maxy, c.position.y)
 	if minx == INF:
-		return {"offset": Vector2.ZERO, "scale": 1.0}
-	var bw := maxx - minx
-	var bh := maxy - miny
+		return {"offset": Vector2.ZERO, "scale_x": 1.0, "scale_y": 1.0}
+	var span_x := maxx - minx
+	var span_y := maxy - miny
 	var avail := board_container.size
-	if bw <= 0 or bh <= 0 or avail.x <= 0 or avail.y <= 0:
-		return {"offset": Vector2.ZERO, "scale": 1.0}
-	var scale := minf(1.0, minf(avail.x / bw, avail.y / bh))
+	if avail.x <= 0 or avail.y <= 0:
+		return {"offset": Vector2.ZERO, "scale_x": 1.0, "scale_y": 1.0}
+	var scale_x := 1.0
+	var scale_y := 1.0
+	if span_x > 0:
+		scale_x = minf(scale_x, maxf(0.0, (avail.x - CARD_DISPLAY_SIZE.x) / span_x))
+	if span_y > 0:
+		scale_y = minf(scale_y, maxf(0.0, (avail.y - CARD_DISPLAY_SIZE.y) / span_y))
 	var offset := Vector2(
-		(avail.x - bw * scale) / 2.0 - minx * scale,
-		(avail.y - bh * scale) / 2.0 - miny * scale
+		(avail.x - (span_x * scale_x + CARD_DISPLAY_SIZE.x)) / 2.0 - minx * scale_x,
+		(avail.y - (span_y * scale_y + CARD_DISPLAY_SIZE.y)) / 2.0 - miny * scale_y
 	)
-	return {"offset": offset, "scale": scale}
+	return {"offset": offset, "scale_x": scale_x, "scale_y": scale_y}
+
+func _is_visually_blocked(card: Card, board_cards: Array, offset: Vector2, scale_x: float, scale_y: float) -> bool:
+	var card_rect := _visual_card_rect(card, offset, scale_x, scale_y)
+	for other in board_cards:
+		if other == card or other.location != Card.Location.BOARD or other.is_removed():
+			continue
+		if other.layer <= card.layer:
+			continue
+		if card_rect.intersects(_visual_card_rect(other, offset, scale_x, scale_y)):
+			return true
+	return false
+
+func _visual_card_rect(card: Card, offset: Vector2, scale_x: float, scale_y: float) -> Rect2:
+	return Rect2(
+		Vector2(offset.x + card.position.x * scale_x, offset.y + card.position.y * scale_y),
+		CARD_DISPLAY_SIZE
+	)
 
 func _make_card_rect(type: String, darken: bool, size: Vector2) -> Control:
 	var root := Panel.new()
@@ -392,17 +458,17 @@ func _make_empty_slot(size: Vector2) -> Control:
 
 func _update_deck_button(btn: Button, deck: DeckManager) -> void:
 	_clear(btn)
-	btn.size = BOARD_CARD
+	btn.size = CARD_DISPLAY_SIZE
 	if deck.is_empty():
 		btn.disabled = true
-		btn.add_child(_make_empty_slot(BOARD_CARD))
+		btn.add_child(_make_empty_slot(CARD_DISPLAY_SIZE))
 		return
 	btn.disabled = false
-	btn.add_child(_make_card_rect(deck.current_type(), false, BOARD_CARD))
+	btn.add_child(_make_card_rect(deck.current_type(), false, CARD_DISPLAY_SIZE))
 	var badge := ColorRect.new()
 	badge.color = Color(0, 0, 0, 0.55)
-	badge.position = Vector2(BOARD_CARD.x - 24, 2)
-	badge.size = Vector2(22, 18)
+	badge.position = Vector2(CARD_DISPLAY_SIZE.x - 20, 2)
+	badge.size = Vector2(18, 16)
 	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	btn.add_child(badge)
 	var cnt := Label.new()
@@ -415,6 +481,19 @@ func _update_deck_button(btn: Button, deck: DeckManager) -> void:
 	cnt.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	btn.add_child(cnt)
 
+func _make_unframed_panel() -> PanelContainer:
+	var panel := PanelContainer.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0, 0, 0, 0)
+	style.border_color = Color(0, 0, 0, 0)
+	style.set_border_width_all(0)
+	style.content_margin_left = 6
+	style.content_margin_top = 4
+	style.content_margin_right = 6
+	style.content_margin_bottom = 4
+	panel.add_theme_stylebox_override("panel", style)
+	return panel
+
 func _make_panel(background: Color, border: Color, radius: int) -> PanelContainer:
 	var panel := PanelContainer.new()
 	var style := StyleBoxFlat.new()
@@ -422,10 +501,10 @@ func _make_panel(background: Color, border: Color, radius: int) -> PanelContaine
 	style.border_color = border
 	style.set_border_width_all(2)
 	style.set_corner_radius_all(radius)
-	style.content_margin_left = 8
-	style.content_margin_top = 6
-	style.content_margin_right = 8
-	style.content_margin_bottom = 6
+	style.content_margin_left = 6
+	style.content_margin_top = 4
+	style.content_margin_right = 6
+	style.content_margin_bottom = 4
 	panel.add_theme_stylebox_override("panel", style)
 	return panel
 
@@ -493,12 +572,15 @@ func _show_end(win: bool) -> void:
 	var shade := ColorRect.new()
 	shade.color = Color(0, 0, 0, 0.75)
 	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shade.z_index = 1000
+	shade.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(shade)
 
 	var vbox := VBoxContainer.new()
 	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	vbox.add_theme_constant_override("separation", 14)
+	vbox.z_index = 1001
 	add_child(vbox)
 
 	var title := Label.new()

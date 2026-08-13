@@ -4,10 +4,14 @@ Guide for the pixel artist to add card, effects, and UI sprites to the Godot pro
 
 ## 1. Overview
 
-- 2D **pixel art** game, base logical resolution **360×640** (9:16 portrait), integer upscale, *nearest* filtering (no smoothing).
+- 2D **pixel art** game, primary logical resolution **640×360** (16:9 landscape), with a **1280×720** development window, integer upscale, *nearest* filtering (no smoothing).
+- Portrait mode remains available at **360×640**, but it is not the current reference layout.
 - File format: **PNG**.
-- Sizes:
-  - **Card (face and back): 32×32 px**
+- The sizes below are source-art sizes. The rendered size can change with the available layout area.
+- Current size units:
+  - **Card (face and back): 64×64 px**
+  - **Cards on the board, Support Decks and Clearing Zone: 48×48 px rendered**
+  - **Reserve cards: 24–48×24–48 px**, reduced and stacked in two columns according to the count
   - **Power and star icons: 16×16 px**
   - Base UI grid: **8 px** (use multiples of 8 for alignment).
 
@@ -36,16 +40,18 @@ Providing a reference PNG of the full palette (cards + UI + background) in `asse
 
 | File (suggested) | Size | Description |
 |------------------|------|-------------|
-| `assets/cards/card_cat.png` … `card_crystal.png` | 32×32 | 12 card faces (one file per type) |
-| `assets/cards/back.png` | 32×32 | Card back (top of the Support Decks) |
+| `assets/cards/card_cat.png` … `card_crystal.png` | 64×64 | 12 card faces (one file per type) |
+| `assets/cards/back.png` | 64×64 | Back reserved for future use; Support Decks currently show the top face |
 | `assets/ui/power_hold.png` | 16×16 | Hold power icon |
 | `assets/ui/power_undo.png` | 16×16 | Undo power icon |
 | `assets/ui/power_refresh.png` | 16×16 | Refresh power icon |
 | `assets/ui/star_filled.png` | 16×16 | Filled star |
 | `assets/ui/star_empty.png` | 16×16 | Empty star |
-| `assets/ui/background.png` | 360×640 | Screen background |
+| `assets/ui/background.png` | 640×360 | Landscape screen background; portrait variant should be 360×640 |
 
 **Naming convention:** `card_<type>.png` (e.g. `card_cat.png`), all lowercase. The 12 types are: `cat, dog, bird, fish, flower, moon, star, sun, leaf, heart, gem, crystal`.
+
+> Do not use the reference screenshot (1920×1020) as the production size. It is a presentation image; create art against the 640×360 logical resolution.
 
 ## 4. Card visual states
 
@@ -76,5 +82,6 @@ The game currently uses **placeholders** (background color + emoji per type), de
 
 1. Create the PNGs at the paths above.
 2. Optional loading already looks for `assets/cards/card_<type>.png`; without the file, the placeholder remains active.
+3. Power, star, back and background art are references for the next visual integration; the current UI still uses text, emoji and a color background for these elements.
 
 No game rule depends on art; art is purely presentation.

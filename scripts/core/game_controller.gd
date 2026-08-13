@@ -234,15 +234,16 @@ func get_legal_actions() -> Array:
 	var actions: Array = []
 	if status != Status.PLAYING:
 		return actions
-	for c in board.cards:
-		if c.state == Card.State.AVAILABLE and c.location == Card.Location.BOARD and not c.is_removed():
-			actions.append({"action": "select_card", "card_id": c.id})
-	if not deck_a.is_empty():
-		actions.append({"action": "use_deck", "deck": "a"})
-	if not deck_b.is_empty():
-		actions.append({"action": "use_deck", "deck": "b"})
-	for r in reserve:
-		actions.append({"action": "return_from_reserve", "card_id": r.id})
+	if not zone.is_full():
+		for c in board.cards:
+			if c.state == Card.State.AVAILABLE and c.location == Card.Location.BOARD and not c.is_removed():
+				actions.append({"action": "select_card", "card_id": c.id})
+		if not deck_a.is_empty():
+			actions.append({"action": "use_deck", "deck": "a"})
+		if not deck_b.is_empty():
+			actions.append({"action": "use_deck", "deck": "b"})
+		for r in reserve:
+			actions.append({"action": "return_from_reserve", "card_id": r.id})
 	if powers.has("hold") and zone.size() > 0:
 		actions.append({"action": "use_hold"})
 	if powers.has("undo") and zone.size() > 0:
@@ -251,8 +252,8 @@ func get_legal_actions() -> Array:
 		actions.append({"action": "use_refresh"})
 	return actions
 
-func _would_overflow(card_type: String) -> bool:
-	return zone.is_full() and zone.count_of_type(card_type) < 2
+func _would_overflow(_card_type: String) -> bool:
+	return zone.is_full()
 
 func _resolve_and_check(card_type: String) -> Dictionary:
 	var matched: Array[Card] = zone.resolve_matches(card_type)

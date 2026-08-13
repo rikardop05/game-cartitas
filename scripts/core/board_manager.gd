@@ -30,7 +30,7 @@ func is_blocked(card: Card) -> bool:
 			continue
 		if other.layer <= card.layer:
 			continue
-		if card.get_rect().intersects(other.get_rect()):
+		if card.get_display_rect().intersects(other.get_display_rect()):
 			return true
 	return false
 
