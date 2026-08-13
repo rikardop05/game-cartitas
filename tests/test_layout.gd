@@ -34,3 +34,25 @@ func test_load_level_generates_cards() -> void:
 	Assert.is_true(level["cards"].size() >= 12, "cards generated")
 	var v := LevelValidator.validate(level)
 	Assert.is_true(v["valid"], "generated level valid: %s" % str(v["errors"]))
+
+func test_no_exposed_lower_layer_cards() -> void:
+	for id in ["1", "2", "3"]:
+		var level := LevelLoader.load_level(id)
+		var g := GameController.new()
+		g.start_level(level, {"hold": 5, "undo": 5, "refresh": 5})
+		var max_layer := 0
+		for c in g.board.cards:
+			max_layer = maxi(max_layer, c.layer)
+		for c in g.board.cards:
+			if c.layer < max_layer:
+				Assert.equals(c.state, Card.State.HIDDEN, "level %s: lower-layer card %s must be blocked" % [id, c.id])
+
+func test_decks_are_mixed() -> void:
+	var level := LevelLoader.load_level("1")
+	var types := {}
+	for t in level["deck_a"]:
+		types[t] = true
+	for t in level["deck_b"]:
+		types[t] = true
+	Assert.is_true(types.size() >= 2, "level 1 decks use more than one type")
+	Assert.equals(level["deck_a"].size() + level["deck_b"].size(), 6, "level 1 deck size 6")

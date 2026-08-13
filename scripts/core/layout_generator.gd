@@ -38,7 +38,46 @@ static func generate(types: Array, count: int, params: Dictionary) -> Array:
 		if not by_layer.has(layer):
 			by_layer[layer] = []
 		by_layer[layer].append(Rect2(pos, Vector2(card, card)))
+	_ensure_covered(result, width, height, card, rng)
 	return result
+
+static func _ensure_covered(cards: Array, width: float, height: float, card: float, rng: RandomNumberGenerator) -> void:
+	var max_layer := 0
+	for c in cards:
+		max_layer = maxi(max_layer, int(c["layer"]))
+	for layer in range(max_layer - 1, -1, -1):
+		for c in cards:
+			if int(c["layer"]) != layer:
+				continue
+			if _is_covered(c, cards, card):
+				continue
+			var higher := _random_higher(cards, layer, rng)
+			if higher.is_empty():
+				continue
+			var dx := rng.randf_range(-card * 0.5, card * 0.5)
+			var dy := rng.randf_range(-card * 0.5, card * 0.5)
+			if maxf(absf(dx), absf(dy)) < card * 0.15:
+				dx = card * 0.3
+			c["x"] = int(round(clampf(float(higher["x"]) + dx, 0, maxf(0, width - card))))
+			c["y"] = int(round(clampf(float(higher["y"]) + dy, 0, maxf(0, height - card))))
+
+static func _is_covered(c: Dictionary, cards: Array, card: float) -> bool:
+	var r := Rect2(Vector2(float(c["x"]), float(c["y"])), Vector2(card, card))
+	for o in cards:
+		if o == c or int(o["layer"]) <= int(c["layer"]):
+			continue
+		if r.intersects(Rect2(Vector2(float(o["x"]), float(o["y"])), Vector2(card, card))):
+			return true
+	return false
+
+static func _random_higher(cards: Array, layer: int, rng: RandomNumberGenerator) -> Dictionary:
+	var higher: Array = []
+	for o in cards:
+		if int(o["layer"]) > layer:
+			higher.append(o)
+	if higher.is_empty():
+		return {}
+	return higher[rng.randi_range(0, higher.size() - 1)]
 
 static func _shuffle(arr: Array, rng: RandomNumberGenerator) -> void:
 	for i in range(arr.size() - 1, 0, -1):

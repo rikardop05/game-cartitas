@@ -16,11 +16,14 @@ static func load_level(level_id) -> Dictionary:
 	var data = JSON.parse_string(text)
 	if data == null:
 		return {"error": "invalid JSON in %s" % path}
-	return process_layout(data)
+	return resolve(data)
 
-static func process_layout(level: Dictionary) -> Dictionary:
+static func resolve(level: Dictionary) -> Dictionary:
+	var deck_pool := _deck_pool(level)
 	if not level.has("layout"):
-		return level
+		var out := level.duplicate(true)
+		_assign_shuffled_decks(out, deck_pool)
+		return out
 	var layout: Dictionary = level["layout"]
 	var types: Array = []
 	for t in layout.get("types", []):
@@ -30,18 +33,47 @@ static func process_layout(level: Dictionary) -> Dictionary:
 	var base_seed := int(layout.get("seed", 1))
 	for attempt in 60:
 		params["seed"] = base_seed + attempt
-		var candidate := _with_cards(level, LayoutGenerator.generate(types, count, params))
+		var candidate := level.duplicate(true)
+		candidate.erase("layout")
+		candidate["cards"] = LayoutGenerator.generate(types, count, params)
+		_assign_shuffled_decks(candidate, deck_pool)
 		if SolvabilityChecker.is_solvable(candidate):
 			return candidate
 	params["seed"] = base_seed
 	params["layers"] = 1
-	return _with_cards(level, LayoutGenerator.generate(types, count, params))
+	var candidate := level.duplicate(true)
+	candidate.erase("layout")
+	candidate["cards"] = LayoutGenerator.generate(types, count, params)
+	_assign_shuffled_decks(candidate, deck_pool)
+	return candidate
 
-static func _with_cards(level: Dictionary, cards: Array) -> Dictionary:
-	var out := level.duplicate(true)
-	out.erase("layout")
-	out["cards"] = cards
-	return out
+static func _deck_pool(level: Dictionary) -> Array:
+	var pool: Array = []
+	if level.has("deck"):
+		for t in level["deck"]:
+			pool.append(str(t))
+	else:
+		for t in level.get("deck_a", []):
+			pool.append(str(t))
+		for t in level.get("deck_b", []):
+			pool.append(str(t))
+	return pool
+
+static func _assign_shuffled_decks(level: Dictionary, pool: Array) -> void:
+	var p := pool.duplicate()
+	_shuffle(p)
+	var half := (p.size() + 1) / 2
+	level["deck_a"] = p.slice(0, half)
+	level["deck_b"] = p.slice(half)
+
+static func _shuffle(arr: Array) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	for i in range(arr.size() - 1, 0, -1):
+		var j := rng.randi_range(0, i)
+		var tmp = arr[i]
+		arr[i] = arr[j]
+		arr[j] = tmp
 
 static func load_all_level_ids() -> Array:
 	var dir := DirAccess.open("res://levels")

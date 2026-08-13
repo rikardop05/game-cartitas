@@ -10,8 +10,7 @@
     "card_size": 64,
     "seed": 1001
   },
-  "deck_a": ["cat", "cat", "cat"],
-  "deck_b": ["dog", "dog", "dog"],
+  "deck": ["cat", "cat", "cat", "dog", "dog", "dog"],
   "time_thresholds": { "three_stars": 60, "two_stars": 120 },
   "rewards": [{ "type": "hold", "quantity": 1 }]
 }

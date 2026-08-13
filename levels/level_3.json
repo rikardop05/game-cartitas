@@ -10,8 +10,7 @@
     "card_size": 64,
     "seed": 3001
   },
-  "deck_a": ["star", "star", "star", "sun", "sun", "sun"],
-  "deck_b": ["leaf", "leaf", "leaf", "cat", "cat", "cat"],
+  "deck": ["star", "star", "star", "sun", "sun", "sun", "leaf", "leaf", "leaf", "cat", "cat", "cat"],
   "time_thresholds": { "three_stars": 180, "two_stars": 360 },
   "rewards": [{ "type": "refresh", "quantity": 1 }]
 }
