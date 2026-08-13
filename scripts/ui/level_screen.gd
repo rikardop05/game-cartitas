@@ -23,6 +23,7 @@ var level_label: Label
 var zone_header: Label
 var instruction_label: Label
 var _is_landscape := true
+var _animating_card := false
 var _ended := false
 
 func _ready() -> void:
@@ -523,28 +524,48 @@ func _power_name(p: String) -> String:
 	return p
 
 func _on_card(card_id: String) -> void:
-	if controller.status != GameController.Status.PLAYING:
+	if controller.status != GameController.Status.PLAYING or _animating_card:
 		return
-	controller.select_card(card_id)
+	var card := controller.board.get_card(card_id)
+	if card == null:
+		return
+	var source_rect := _board_card_rect(card)
+	var target_index := controller.zone.size()
+	var result := controller.select_card(card_id)
 	render()
+	if result["ok"]:
+		await _animate_card_to_zone(card.type, source_rect, target_index, result["matched_ids"].has(card_id))
 	_check_end()
 
 func _on_deck(deck_id: String) -> void:
-	if controller.status != GameController.Status.PLAYING:
+	if controller.status != GameController.Status.PLAYING or _animating_card:
 		return
-	controller.use_deck(deck_id)
+	var deck: DeckManager = controller.deck_a if deck_id == "a" else controller.deck_b
+	var card_type := deck.current_type()
+	var source_rect := (deck_a_btn if deck_id == "a" else deck_b_btn).get_global_rect()
+	var target_index := controller.zone.size()
+	var result := controller.use_deck(deck_id)
 	render()
+	if result["ok"]:
+		await _animate_card_to_zone(card_type, source_rect, target_index, result["matched_ids"].size() > 0)
 	_check_end()
 
 func _on_reserve_return(card_id: String) -> void:
-	if controller.status != GameController.Status.PLAYING:
+	if controller.status != GameController.Status.PLAYING or _animating_card:
 		return
-	controller.return_from_reserve(card_id)
+	var source_rect := _reserve_card_rect(card_id)
+	var card := _reserve_card(card_id)
+	if card == null:
+		return
+	var target_index := controller.zone.size()
+	var result := controller.return_from_reserve(card_id)
 	render()
+	if result["ok"]:
+		await _animate_card_to_zone(card.type, source_rect, target_index, result["matched_ids"].has(card_id))
 	_check_end()
 
 func _on_power(power: String) -> void:
-	if controller.status != GameController.Status.PLAYING:
+	if controller.status != GameController.Status.PLAYING or _animating_card:
 		return
 	match power:
 		"hold":
@@ -555,6 +576,90 @@ func _on_power(power: String) -> void:
 			controller.use_refresh()
 	render()
 	_check_end()
+
+func _board_card_rect(card: Card) -> Rect2:
+	var layout := _board_layout()
+	var offset: Vector2 = layout["offset"]
+	return Rect2(
+		board_container.global_position + Vector2(
+			offset.x + card.position.x * float(layout["scale_x"]),
+			offset.y + card.position.y * float(layout["scale_y"])
+		),
+		CARD_DISPLAY_SIZE
+	)
+
+func _reserve_card(card_id: String) -> Card:
+	for card in controller.reserve:
+		if card.id == card_id:
+			return card
+	return null
+
+func _reserve_card_rect(card_id: String) -> Rect2:
+	var card := _reserve_card(card_id)
+	if card == null or reserve_container.get_child_count() == 0:
+		return Rect2(reserve_container.global_position, CARD_DISPLAY_SIZE)
+	var index := controller.reserve.find(card)
+	if index < 0 or index >= reserve_container.get_child_count():
+		return Rect2(reserve_container.global_position, CARD_DISPLAY_SIZE)
+	return reserve_container.get_child(index).get_global_rect()
+
+func _animate_card_to_zone(card_type: String, source_rect: Rect2, target_index: int, matched: bool) -> void:
+	_animating_card = true
+	await get_tree().process_frame
+	var target_rect := _zone_target_rect(target_index)
+	var ghost := _make_card_rect(card_type, false, CARD_DISPLAY_SIZE)
+	ghost.global_position = source_rect.position
+	ghost.pivot_offset = CARD_DISPLAY_SIZE / 2.0
+	ghost.rotation = deg_to_rad(4.0)
+	ghost.scale = Vector2(1.08, 1.08)
+	ghost.z_index = 2000
+	add_child(ghost)
+
+	var target: CanvasItem = null
+	if not matched and target_index < zone_container.get_child_count():
+		target = zone_container.get_child(target_index)
+		target.modulate = Color(1, 1, 1, 0)
+
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.set_trans(Tween.TRANS_CUBIC)
+	tween.set_ease(Tween.EASE_IN_OUT)
+	tween.tween_property(ghost, "global_position", target_rect.position, 0.3)
+	tween.tween_property(ghost, "scale", Vector2.ONE, 0.3)
+	tween.tween_property(ghost, "rotation", 0.0, 0.3)
+	await tween.finished
+	if target != null:
+		var reveal := create_tween()
+		reveal.tween_property(target, "modulate", Color.WHITE, 0.1)
+		await reveal.finished
+	await _play_card_impact(target_rect.get_center())
+	ghost.queue_free()
+	_animating_card = false
+
+func _zone_target_rect(target_index: int) -> Rect2:
+	if zone_container.get_child_count() > 0:
+		var index := mini(target_index, zone_container.get_child_count() - 1)
+		return zone_container.get_child(index).get_global_rect()
+	var fallback := Rect2(zone_container.global_position, CARD_DISPLAY_SIZE)
+	fallback.position += Vector2(0, zone_container.size.y / 2.0 - CARD_DISPLAY_SIZE.y / 2.0)
+	return fallback
+
+func _play_card_impact(center: Vector2) -> void:
+	var impact := UiHelpers.symbol_label("✦", 24)
+	impact.position = center - Vector2(12, 12)
+	impact.size = Vector2(24, 24)
+	impact.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	impact.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	impact.modulate = Color(1, 0.88, 0.35, 0.95)
+	impact.pivot_offset = Vector2(12, 12)
+	impact.z_index = 2001
+	add_child(impact)
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(impact, "scale", Vector2(1.6, 1.6), 0.16)
+	tween.tween_property(impact, "modulate", Color(1, 0.88, 0.35, 0), 0.16)
+	await tween.finished
+	impact.queue_free()
 
 func _check_end() -> void:
 	if controller.status == GameController.Status.WON:
