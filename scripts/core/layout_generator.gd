@@ -1,7 +1,7 @@
 class_name LayoutGenerator
 extends RefCounted
 
-const CARD := 32.0
+const CARD := 64.0
 
 static func generate(types: Array, count: int, params: Dictionary) -> Array:
 	var rng := RandomNumberGenerator.new()

@@ -5,8 +5,9 @@
     "types": ["cat", "dog", "bird"],
     "count": 3,
     "layers": 2,
-    "width": 240,
+    "width": 200,
     "height": 200,
+    "card_size": 64,
     "seed": 1001
   },
   "deck_a": ["cat", "cat", "cat"],

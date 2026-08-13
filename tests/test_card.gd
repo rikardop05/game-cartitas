@@ -8,7 +8,7 @@ func test_initial_state_is_hidden() -> void:
 
 func test_rect_uses_size_and_position() -> void:
 	var c := Card.new("c1", "cat", Vector2(10, 20), 1)
-	Assert.equals(c.get_rect(), Rect2(10, 20, 32, 32), "rect from position")
+	Assert.equals(c.get_rect(), Rect2(10, 20, 64, 64), "rect from position")
 
 func test_is_removed_and_active() -> void:
 	var c := Card.new("c1", "cat")

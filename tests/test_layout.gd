@@ -1,35 +1,27 @@
 extends RefCounted
 
-func test_generated_levels_are_solvable() -> void:
-	var levels := [
-		{"types": ["cat", "dog", "bird"], "count": 3, "layers": 2, "width": 240, "height": 200, "seed": 7},
-		{"types": ["cat", "dog", "bird", "fish", "flower", "moon"], "count": 3, "layers": 3, "width": 300, "height": 240, "seed": 11},
-		{"types": ["cat", "dog", "bird", "fish", "flower", "moon", "star", "sun", "leaf"], "count": 3, "layers": 3, "width": 320, "height": 260, "seed": 13},
-	]
-	for params in levels:
-		var cards := LayoutGenerator.generate(params["types"], params["count"], params)
-		var level := {
-			"id": "gen",
-			"clearing_capacity": 7,
-			"cards": cards,
-			"deck_a": [],
-			"deck_b": [],
-			"time_thresholds": {"three_stars": 999, "two_stars": 999},
-			"rewards": [],
-		}
-		Assert.is_true(SolvabilityChecker.is_solvable(level), "generated layout solvable (seed %s)" % params["seed"])
+func test_loaded_levels_solvable_and_multilayer() -> void:
+	for id in ["1", "2", "3"]:
+		var level: Dictionary = LevelLoader.load_level(id)
+		Assert.is_false(level.has("error"), "level %s loads" % id)
+		Assert.is_true(SolvabilityChecker.is_solvable(level), "level %s solvable" % id)
+		var layers := {}
+		for c in level["cards"]:
+			layers[c["layer"]] = true
+		Assert.is_true(layers.size() >= 2, "level %s uses multiple layers" % id)
 
 func test_generated_cards_are_within_bounds_and_layered() -> void:
-	var cards := LayoutGenerator.generate(["cat", "dog", "bird"], 3, {"layers": 2, "width": 240, "height": 200, "seed": 3})
+	var card_size := 64
+	var cards := LayoutGenerator.generate(["cat", "dog", "bird"], 3, {"layers": 2, "width": 240, "height": 200, "card_size": card_size, "seed": 3})
 	var layers := {}
 	for c in cards:
-		Assert.is_true(c["x"] >= 0 and c["x"] + 32 <= 240, "x in bounds")
-		Assert.is_true(c["y"] >= 0 and c["y"] + 32 <= 200, "y in bounds")
+		Assert.is_true(c["x"] >= 0 and c["x"] + card_size <= 240, "x in bounds")
+		Assert.is_true(c["y"] >= 0 and c["y"] + card_size <= 200, "y in bounds")
 		layers[c["layer"]] = true
 	Assert.is_true(layers.size() >= 2, "uses multiple layers")
 
 func test_generated_ids_are_unique() -> void:
-	var cards := LayoutGenerator.generate(["cat", "dog", "bird"], 3, {"layers": 2, "width": 240, "height": 200, "seed": 5})
+	var cards := LayoutGenerator.generate(["cat", "dog", "bird"], 3, {"layers": 2, "width": 240, "height": 200, "card_size": 64, "seed": 5})
 	var ids := {}
 	for c in cards:
 		Assert.is_false(ids.has(c["id"]), "unique id")

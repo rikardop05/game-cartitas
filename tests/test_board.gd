@@ -2,7 +2,7 @@ extends RefCounted
 
 func _make() -> BoardManager:
 	var a := Card.new("a", "cat", Vector2(0, 0), 0)
-	var b := Card.new("b", "dog", Vector2(40, 0), 0)
+	var b := Card.new("b", "dog", Vector2(80, 0), 0)
 	var c := Card.new("c", "bird", Vector2(0, 0), 1)
 	var cards: Array[Card] = [a, b, c]
 	for x in cards:

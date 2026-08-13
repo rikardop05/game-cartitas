@@ -5,7 +5,7 @@ enum State { HIDDEN, AVAILABLE, SELECTED, MATCHED, REMOVED }
 enum Source { BOARD, DECK_A, DECK_B }
 enum Location { BOARD, CLEARING_ZONE, RESERVE }
 
-const SIZE := Vector2(32, 32)
+const SIZE := Vector2(64, 64)
 
 var id: String = ""
 var type: String = ""
