@@ -51,6 +51,12 @@ func _build() -> void:
 	lang_btn.pressed.connect(_on_toggle_language)
 	vbox.add_child(lang_btn)
 
+	var orient_btn := Button.new()
+	orient_btn.text = _orientation_label()
+	orient_btn.custom_minimum_size = Vector2(220, 40)
+	orient_btn.pressed.connect(_on_toggle_orientation)
+	vbox.add_child(orient_btn)
+
 func _make_level_button(id: String) -> Button:
 	var btn := Button.new()
 	btn.custom_minimum_size = Vector2(220, 48)
@@ -78,4 +84,13 @@ func _on_reset() -> void:
 func _on_toggle_language() -> void:
 	var next := "en" if Localizer.current == "pt" else "pt"
 	Game.set_locale(next)
+	_build()
+
+func _orientation_label() -> String:
+	var cur := "landscape" if str(Game.settings.get("orientation", "portrait")) == "landscape" else "portrait"
+	return "%s: %s" % [Localizer.t("orientation_label"), Localizer.t(cur)]
+
+func _on_toggle_orientation() -> void:
+	var landscape := str(Game.settings.get("orientation", "portrait")) != "landscape"
+	Game.set_orientation(landscape)
 	_build()

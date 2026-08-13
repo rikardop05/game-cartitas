@@ -9,6 +9,7 @@ const SUITES := [
 	preload("res://tests/test_progress.gd"),
 	preload("res://tests/test_level.gd"),
 	preload("res://tests/test_integration.gd"),
+	preload("res://tests/test_layout.gd"),
 ]
 
 func _init() -> void:

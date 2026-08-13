@@ -12,6 +12,24 @@ func _ready() -> void:
 			progress.from_dict(data["progress"])
 		settings = data.get("settings", {"locale": "pt"})
 		Localizer.current = str(settings.get("locale", "pt"))
+	apply_orientation()
+
+func apply_orientation() -> void:
+	var landscape: bool = str(settings.get("orientation", "portrait")) == "landscape"
+	var root := get_tree().root
+	if landscape:
+		root.content_scale_size = Vector2i(640, 360)
+		get_window().size = Vector2i(1280, 720)
+		ProjectSettings.set_setting("display/window/handheld/orientation", 4)
+	else:
+		root.content_scale_size = Vector2i(360, 640)
+		get_window().size = Vector2i(720, 1280)
+		ProjectSettings.set_setting("display/window/handheld/orientation", 5)
+
+func set_orientation(landscape: bool) -> void:
+	settings["orientation"] = "landscape" if landscape else "portrait"
+	save_progress()
+	apply_orientation()
 
 func save_progress() -> void:
 	SaveManager.save({"progress": progress.to_dict(), "settings": settings})

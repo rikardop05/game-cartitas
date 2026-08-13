@@ -5,25 +5,7 @@ func test_level_1_playthrough_wins_and_records_progress() -> void:
 	var g := GameController.new()
 	var inventory := {"hold": 3, "undo": 3, "refresh": 3}
 	g.start_level(level, inventory)
-	var guard := 0
-	while g.status == GameController.Status.PLAYING and guard < 200:
-		guard += 1
-		var acted := false
-		for a in g.get_legal_actions():
-			match a["action"]:
-				"select_card":
-					g.select_card(a["card_id"])
-					acted = true
-				"use_deck":
-					g.use_deck(a["deck"])
-					acted = true
-				"return_from_reserve":
-					g.return_from_reserve(a["card_id"])
-					acted = true
-			if acted:
-				break
-		if not acted:
-			break
+	SolvabilityChecker.play_until_end(g, 500)
 	Assert.is_true(g.check_victory(), "level 1 solvable to victory")
 	Assert.equals(g.status, GameController.Status.WON, "status WON")
 	Assert.is_true(g.stars >= 1 and g.stars <= 3, "stars in range")

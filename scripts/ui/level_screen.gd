@@ -37,10 +37,20 @@ func _build_ui() -> void:
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 
+	var margin := MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left", 8)
+	margin.add_theme_constant_override("margin_top", 8)
+	margin.add_theme_constant_override("margin_right", 8)
+	margin.add_theme_constant_override("margin_bottom", 8)
+	add_child(margin)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 6)
+	margin.add_child(vbox)
+
 	var hud := HBoxContainer.new()
-	hud.position = Vector2(10, 6)
-	hud.size = Vector2(340, 30)
-	add_child(hud)
+	vbox.add_child(hud)
 	level_label = Label.new()
 	level_label.text = "Level %s" % controller.level_id
 	level_label.add_theme_font_size_override("font_size", 18)
@@ -55,19 +65,18 @@ func _build_ui() -> void:
 	hud.add_child(stars_label)
 
 	board_container = Control.new()
-	board_container.position = Vector2(10, 44)
-	board_container.size = Vector2(340, 300)
-	add_child(board_container)
+	board_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_child(board_container)
 
 	var deck_row := HBoxContainer.new()
-	deck_row.position = Vector2(10, 352)
-	deck_row.size = Vector2(340, 56)
 	deck_row.add_theme_constant_override("separation", 12)
-	add_child(deck_row)
+	vbox.add_child(deck_row)
 	deck_a_btn = Button.new()
 	deck_b_btn = Button.new()
 	deck_a_btn.add_theme_font_override("font", UiHelpers.symbol_font())
 	deck_b_btn.add_theme_font_override("font", UiHelpers.symbol_font())
+	deck_a_btn.custom_minimum_size = Vector2(0, 56)
+	deck_b_btn.custom_minimum_size = Vector2(0, 56)
 	deck_a_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	deck_b_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	deck_a_btn.pressed.connect(_on_deck.bind("a"))
@@ -77,37 +86,32 @@ func _build_ui() -> void:
 
 	var zone_header := Label.new()
 	zone_header.text = "%s (%d)" % [Localizer.t("clearing_zone"), controller.clearing_capacity]
-	zone_header.position = Vector2(10, 414)
 	zone_header.add_theme_font_size_override("font_size", 12)
 	zone_header.modulate = Color(0.7, 0.7, 0.7)
-	add_child(zone_header)
+	vbox.add_child(zone_header)
 
 	zone_container = HBoxContainer.new()
-	zone_container.position = Vector2(10, 434)
-	zone_container.size = Vector2(340, 40)
+	zone_container.custom_minimum_size = Vector2(0, 40)
 	zone_container.alignment = BoxContainer.ALIGNMENT_CENTER
 	zone_container.add_theme_constant_override("separation", 4)
-	add_child(zone_container)
+	vbox.add_child(zone_container)
 
 	reserve_header = Label.new()
 	reserve_header.text = Localizer.t("reserve")
-	reserve_header.position = Vector2(10, 478)
 	reserve_header.add_theme_font_size_override("font_size", 12)
 	reserve_header.modulate = Color(0.7, 0.7, 0.7)
-	add_child(reserve_header)
+	vbox.add_child(reserve_header)
 
 	reserve_container = HBoxContainer.new()
-	reserve_container.position = Vector2(10, 498)
-	reserve_container.size = Vector2(340, 40)
+	reserve_container.custom_minimum_size = Vector2(0, 40)
 	reserve_container.alignment = BoxContainer.ALIGNMENT_CENTER
 	reserve_container.add_theme_constant_override("separation", 4)
-	add_child(reserve_container)
+	vbox.add_child(reserve_container)
 
 	var power_row := HBoxContainer.new()
-	power_row.position = Vector2(10, 556)
-	power_row.size = Vector2(340, 64)
+	power_row.custom_minimum_size = Vector2(0, 60)
 	power_row.add_theme_constant_override("separation", 12)
-	add_child(power_row)
+	vbox.add_child(power_row)
 	for p in PowerManager.POWERS:
 		var btn := Button.new()
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL

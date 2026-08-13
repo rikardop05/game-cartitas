@@ -18,6 +18,9 @@ const STRINGS := {
 	"retry": {"en": "Try again", "pt": "Tentar de novo"},
 	"menu": {"en": "Menu", "pt": "Menu"},
 	"language": {"en": "Language: English", "pt": "Idioma: Português"},
+	"orientation_label": {"en": "Orientation", "pt": "Orientação"},
+	"portrait": {"en": "Portrait", "pt": "Retrato"},
+	"landscape": {"en": "Landscape", "pt": "Paisagem"},
 }
 
 static func t(key: String) -> String:

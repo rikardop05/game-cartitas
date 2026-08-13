@@ -1,17 +1,14 @@
 {
   "id": "1",
   "clearing_capacity": 7,
-  "cards": [
-    { "id": "c1", "type": "cat", "x": 0, "y": 0, "layer": 0 },
-    { "id": "c2", "type": "cat", "x": 40, "y": 0, "layer": 0 },
-    { "id": "c3", "type": "cat", "x": 80, "y": 0, "layer": 0 },
-    { "id": "c4", "type": "dog", "x": 0, "y": 40, "layer": 0 },
-    { "id": "c5", "type": "dog", "x": 40, "y": 40, "layer": 0 },
-    { "id": "c6", "type": "dog", "x": 80, "y": 40, "layer": 0 },
-    { "id": "c7", "type": "bird", "x": 0, "y": 80, "layer": 0 },
-    { "id": "c8", "type": "bird", "x": 40, "y": 80, "layer": 0 },
-    { "id": "c9", "type": "bird", "x": 80, "y": 80, "layer": 0 }
-  ],
+  "layout": {
+    "types": ["cat", "dog", "bird"],
+    "count": 3,
+    "layers": 2,
+    "width": 240,
+    "height": 200,
+    "seed": 1001
+  },
   "deck_a": ["cat", "cat", "cat"],
   "deck_b": ["dog", "dog", "dog"],
   "time_thresholds": { "three_stars": 60, "two_stars": 120 },
