@@ -1,7 +1,7 @@
 extends RefCounted
 
-const PORTRAIT_AVAIL := Vector2(256.0, 195.0)
-const LANDSCAPE_AVAIL := Vector2(540.0, 114.0)
+const PORTRAIT_AVAIL := LevelConfig.PORTRAIT_BOARD_ENVELOPE
+const LANDSCAPE_AVAIL := LevelConfig.LANDSCAPE_BOARD_ENVELOPE
 const MIN_EFFECTIVE_PITCH := 20.0
 const MAX_SLOT_COLS := 7
 const MAX_SLOT_ROWS := 6
@@ -74,12 +74,9 @@ func test_envelope_metrics_per_orientation() -> void:
 			l["slot_cols"], l["slot_rows"], l["effective_pitch"], "OK" if l["ok"] else "REJECT",
 		])
 		Assert.is_true(p["ok"], "level %d fits portrait envelope" % id)
+		Assert.is_true(l["ok"], "level %d fits landscape envelope" % id)
 		if not l["ok"]:
 			print("  landscape reject reasons: %s" % ", ".join(l["reasons"]))
-	Assert.is_true(_envelope(DifficultyProfile.for_level(DifficultyProfile.max_level()), LANDSCAPE_AVAIL)["effective_pitch"] < MIN_EFFECTIVE_PITCH,
-		"last level landscape pitch drops below the minimum (double-compression guard)")
-	Assert.is_true(_envelope(DifficultyProfile.for_level(1), LANDSCAPE_AVAIL)["ok"],
-		"L1 landscape stays inside the envelope")
 
 func test_envelope_rejects_out_of_envelope_with_diagnostics() -> void:
 	var base := DifficultyProfile.for_level(1)
@@ -110,10 +107,6 @@ func test_envelope_rejects_out_of_envelope_with_diagnostics() -> void:
 	var t := _envelope(tall, PORTRAIT_AVAIL)
 	Assert.is_false(t["ok"], "39 board cards rejected")
 	Assert.is_true(_reasons_mention(t["reasons"], "board cards"), "diagnostic names board cards")
-	# landscape pitch rejection (L10 slots in landscape)
-	var l10 := _envelope(DifficultyProfile.for_level(DifficultyProfile.max_level()), LANDSCAPE_AVAIL)
-	Assert.is_false(l10["ok"], "L10 rejected in landscape")
-	Assert.is_true(_reasons_mention(l10["reasons"], "pitch"), "diagnostic names effective pitch")
 
 func _reasons_mention(reasons: Array[String], needle: String) -> bool:
 	for r in reasons:

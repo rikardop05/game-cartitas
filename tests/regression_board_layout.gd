@@ -18,6 +18,7 @@ const VIEWS := [
 	{"name": "desktop-2560x1440", "orient": "landscape", "window": Vector2i(2560, 1440)},
 ]
 const SAME_LAYER_EPS := 1.0
+const EPSILON := 0.01
 const DEGENERATE_PITCH := 8.0
 const MIN_CARD_SCALE := 0.85
 
@@ -50,8 +51,8 @@ func _min_gap(points: Array) -> float:
 				min_gap = d
 	return min_gap
 
-func _cross_layer_overlaps(final_by_id: Dictionary, controller) -> int:
-	var size := 48.0
+func _cross_layer_overlaps(final_by_id: Dictionary, controller, rendered_size: float) -> int:
+	var size := rendered_size
 	var overlaps := 0
 	var ids: Array = final_by_id.keys()
 	for i in ids.size():
@@ -96,7 +97,7 @@ func _report(level_id: String, view: Dictionary, scene, controller, container: C
 		layer_final[layer].append(pos)
 		final_by_id[cards[i].id] = pos
 		var r := Rect2(pos, node.size)
-		if r.position.x < 0.0 or r.position.y < 0.0 or r.end.x > container.size.x + 1.0 or r.end.y > container.size.y + 1.0:
+		if r.position.x < -EPSILON or r.position.y < -EPSILON or r.end.x > container.size.x + EPSILON or r.end.y > container.size.y + EPSILON:
 			out_of_container += 1
 	if node_size.y > 0.0:
 		rendered_scale = node_size.y / 48.0
@@ -132,21 +133,20 @@ func _report(level_id: String, view: Dictionary, scene, controller, container: C
 				same_layer_col += 1
 			seen[key] = true
 	_check(same_layer_col == 0, "L%s %s: %d same-layer coincidences after re-snap" % [level_id, view["name"], same_layer_col])
-	var cross := _cross_layer_overlaps(final_by_id, controller)
+	var cross := _cross_layer_overlaps(final_by_id, controller, node_size.y)
 	_check(cross >= 1, "L%s %s: no intentional cross-layer overlap found" % [level_id, view["name"]])
 	_check(rendered_scale >= MIN_CARD_SCALE - 0.01,
 		"L%s %s: rendered card scale %.2f below MIN_CARD_SCALE %.2f" % [level_id, view["name"], rendered_scale, MIN_CARD_SCALE])
+	_check(out_of_container == 0,
+		"L%s %s: %d card(s) outside the board container (clip must be zero)" % [level_id, view["name"], out_of_container])
 	if scale_limited:
 		var warn: Label = scene.get("_layout_warning")
 		_check(warn != null and warn.visible,
 			"L%s %s: scale_limited but no visible layout warning (diagnostic)" % [level_id, view["name"]])
-		var clip_note := " (clipped by MIN_CARD_SCALE clamp)" if out_of_container > 0 else ""
-		print("L%s %s avail=%s rendered_scale=%.2f min_gap=%.1f cross=%d slots=%dx%d clip=%d scale_limited=YES%s" % [
-			level_id, view["name"], str(container.size), rendered_scale, min_eff, cross, slot_cols, slot_rows, out_of_container, clip_note,
+		print("L%s %s avail=%s rendered_scale=%.2f min_gap=%.1f cross=%d slots=%dx%d clip=%d scale_limited=YES" % [
+			level_id, view["name"], str(container.size), rendered_scale, min_eff, cross, slot_cols, slot_rows, out_of_container,
 		])
 	else:
-		_check(out_of_container == 0,
-			"L%s %s: %d card(s) outside the board container without a scale clamp" % [level_id, view["name"], out_of_container])
 		print("L%s %s avail=%s rendered_scale=%.2f min_gap=%.1f cross=%d slots=%dx%d clip=%d scale_limited=NO" % [
 			level_id, view["name"], str(container.size), rendered_scale, min_eff, cross, slot_cols, slot_rows, out_of_container,
 		])
