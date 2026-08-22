@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Godot 4.7 (headless Linux)
+        run: |
+          curl -fsSL -o godot.zip https://github.com/godotengine/godot-builds/releases/download/4.7-stable/Godot_v4.7-stable_linux.x86_64.zip
+          unzip -q godot.zip
+          mv Godot_v4.7-stable_linux.x86_64 godot
+          chmod +x godot
+
+      - name: Run unit tests (tests/run_tests.gd)
+        run: ./godot --headless --script res://tests/run_tests.gd --quit
+
+      - name: Smoke level (tests/smoke_level.gd)
+        run: ./godot --headless --script res://tests/smoke_level.gd
+
+      - name: Smoke main menu (tests/smoke_main_menu.gd)
+        run: ./godot --headless --script res://tests/smoke_main_menu.gd
+
+      - name: Board layout regression (tests/regression_board_layout.gd)
+        run: ./godot --headless --script res://tests/regression_board_layout.gd
+
+      - name: Generation load-time probe (tests/probe_generation.gd)
+        run: ./godot --headless --script res://tests/probe_generation.gd

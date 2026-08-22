@@ -1,0 +1,8 @@
+{
+  "id": "9",
+  "difficulty": 9,
+  "clearing_capacity": 7,
+  "deck": ["flower", "flower", "flower", "moon", "moon", "moon", "star", "star", "star", "crystal", "crystal", "crystal", "leaf", "leaf", "leaf"],
+  "time_thresholds": { "three_stars": 300, "two_stars": 600 },
+  "rewards": [{ "type": "refresh", "quantity": 1 }]
+}

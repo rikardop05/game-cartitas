@@ -36,7 +36,7 @@ _Avoid_: deck (alone)
 A limited-use special ability: `Hold`, `Undo`, `Refresh`.
 
 **Hold**:
-A power that moves the last few cards of the Clearing Zone into the Reserve, freeing space.
+A power that moves the 3 oldest cards (the leftmost) of the Clearing Zone into the Reserve, freeing space.
 _Avoid_: Remove (misleading — cards are not removed from the game)
 
 **Reserve**:

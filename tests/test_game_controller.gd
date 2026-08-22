@@ -130,6 +130,37 @@ func test_hold_rejected_when_zone_empty() -> void:
 	Assert.is_false(r["ok"], "hold rejected on empty zone")
 	Assert.equals(g.powers.get_count("hold"), 1, "power not consumed")
 
+func test_hold_moves_oldest_three() -> void:
+	var g := GameController.new()
+	var lvl := {
+		"id": "hold5",
+		"clearing_capacity": 7,
+		"cards": [
+			{"id": "a", "type": "A", "x": 0, "y": 0, "layer": 0},
+			{"id": "b", "type": "B", "x": 40, "y": 0, "layer": 0},
+			{"id": "c", "type": "C", "x": 80, "y": 0, "layer": 0},
+			{"id": "d", "type": "D", "x": 120, "y": 0, "layer": 0},
+			{"id": "e", "type": "E", "x": 160, "y": 0, "layer": 0},
+		],
+		"deck_a": [],
+		"deck_b": [],
+		"time_thresholds": {"three_stars": 60, "two_stars": 120},
+		"rewards": [],
+	}
+	g.start_level(lvl, {"hold": 2, "undo": 1, "refresh": 1})
+	for id in ["a", "b", "c", "d", "e"]:
+		g.select_card(id)
+	Assert.equals(g.zone.size(), 5, "five in zone")
+	var r := g.use_hold()
+	Assert.is_true(r["ok"], "hold ok")
+	Assert.equals(g.zone.size(), 2, "two remain")
+	Assert.equals(g.zone.cards[0].id, "d", "oldest remaining is d")
+	Assert.equals(g.zone.cards[1].id, "e", "then e")
+	Assert.equals(g.reserve.size(), 3, "three in reserve")
+	Assert.equals(g.reserve[0].id, "a", "reserve keeps oldest first")
+	Assert.equals(g.reserve[1].id, "b", "then b")
+	Assert.equals(g.reserve[2].id, "c", "then c")
+
 func test_refresh_shuffles_deck_deterministically() -> void:
 	var lvl := _level()
 	lvl["deck_a"] = ["a", "b", "c", "d", "e"]
@@ -173,3 +204,41 @@ func test_power_consumption_persists_to_inventory() -> void:
 	g.select_card("c1")
 	g.use_hold()
 	Assert.equals(inventory["hold"], 1, "inventory dict reflects consumption")
+
+func test_timeout_loses_when_limit_exceeded() -> void:
+	var g := GameController.new()
+	var lvl := _level()
+	lvl["time_limit"] = 10
+	g.start_level(lvl)
+	g.timer.set_elapsed_seconds(11)
+	g.check_timeout()
+	Assert.equals(g.status, GameController.Status.LOST, "timeout loses")
+	Assert.is_false(g.timer.is_running(), "timer stopped on timeout")
+
+func test_no_timeout_before_limit() -> void:
+	var g := GameController.new()
+	var lvl := _level()
+	lvl["time_limit"] = 10
+	g.start_level(lvl)
+	g.timer.set_elapsed_seconds(5)
+	g.check_timeout()
+	Assert.equals(g.status, GameController.Status.PLAYING, "still playing before limit")
+
+func test_level_without_time_limit_never_loses_by_time() -> void:
+	var g := GameController.new()
+	g.start_level(_level())
+	g.timer.set_elapsed_seconds(9999)
+	g.check_timeout()
+	Assert.equals(g.status, GameController.Status.PLAYING, "no time limit means no timeout")
+
+func test_victory_before_limit_keeps_won() -> void:
+	var g := GameController.new()
+	var lvl := _level()
+	lvl["time_limit"] = 100
+	g.start_level(lvl)
+	for id in ["c1", "c2", "c3", "c4", "c5", "c6"]:
+		g.select_card(id)
+	Assert.equals(g.status, GameController.Status.WON, "won before limit")
+	g.timer.set_elapsed_seconds(30)
+	g.check_timeout()
+	Assert.equals(g.status, GameController.Status.WON, "timeout does not override win")

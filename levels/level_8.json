@@ -1,0 +1,8 @@
+{
+  "id": "8",
+  "difficulty": 8,
+  "clearing_capacity": 7,
+  "deck": ["cat", "cat", "cat", "dog", "dog", "dog", "star", "star", "star", "sun", "sun", "sun"],
+  "time_thresholds": { "three_stars": 270, "two_stars": 540 },
+  "rewards": [{ "type": "undo", "quantity": 1 }]
+}

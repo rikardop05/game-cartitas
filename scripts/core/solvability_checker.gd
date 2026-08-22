@@ -3,6 +3,7 @@ extends RefCounted
 
 static func is_solvable(level: Dictionary) -> bool:
 	var g := GameController.new()
+	g.set_seed(12345)
 	g.start_level(level, {"hold": 5, "undo": 5, "refresh": 5})
 	play_until_end(g, 800)
 	return g.status == GameController.Status.WON
@@ -62,7 +63,7 @@ static func _completes_trio(g: GameController, a: Dictionary) -> bool:
 		return false
 	return g.zone.count_of_type(t) == 2
 
-static func _power_action(g: GameController, actions: Array, power: String) -> Dictionary:
+static func _power_action(_g: GameController, actions: Array, power: String) -> Dictionary:
 	for a in actions:
 		if a["action"] == "use_%s" % power:
 			return a

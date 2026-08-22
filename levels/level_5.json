@@ -1,0 +1,8 @@
+{
+  "id": "5",
+  "difficulty": 5,
+  "clearing_capacity": 7,
+  "deck": ["heart", "heart", "heart", "sun", "sun", "sun", "gem", "gem", "gem", "crystal", "crystal", "crystal"],
+  "time_thresholds": { "three_stars": 180, "two_stars": 360 },
+  "rewards": [{ "type": "undo", "quantity": 1 }]
+}

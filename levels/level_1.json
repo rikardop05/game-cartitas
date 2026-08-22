@@ -1,15 +1,7 @@
 {
   "id": "1",
+  "difficulty": 1,
   "clearing_capacity": 7,
-  "layout": {
-    "types": ["cat", "dog", "bird"],
-    "count": 3,
-    "layers": 2,
-    "width": 200,
-    "height": 200,
-    "card_size": 64,
-    "seed": 1001
-  },
   "deck": ["cat", "cat", "cat", "dog", "dog", "dog"],
   "time_thresholds": { "three_stars": 60, "two_stars": 120 },
   "rewards": [{ "type": "hold", "quantity": 1 }]

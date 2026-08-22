@@ -1,7 +1,7 @@
 extends Node
 
 var progress: ProgressManager
-var settings: Dictionary = {"locale": "pt", "orientation": "landscape"}
+var settings: Dictionary = {"locale": "pt", "orientation": "portrait"}
 var current_level_id: String = ""
 
 func _ready() -> void:
@@ -11,7 +11,7 @@ func _ready() -> void:
 		if data.has("progress"):
 			progress.from_dict(data["progress"])
 		var saved_settings: Dictionary = data.get("settings", {})
-		settings = {"locale": "pt", "orientation": "landscape"}
+		settings = {"locale": "pt", "orientation": "portrait"}
 		settings.merge(saved_settings, true)
 		Localizer.current = str(settings.get("locale", "pt"))
 	apply_orientation()

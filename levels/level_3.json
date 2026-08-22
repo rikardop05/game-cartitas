@@ -1,16 +1,7 @@
 {
   "id": "3",
+  "difficulty": 3,
   "clearing_capacity": 7,
-  "layout": {
-    "types": ["cat", "dog", "bird", "fish", "flower", "moon", "star", "sun", "leaf"],
-    "count": 3,
-    "layers": 3,
-    "width": 400,
-    "height": 260,
-    "card_size": 64,
-    "horizontal_spread": 1.25,
-    "seed": 3001
-  },
   "deck": ["star", "star", "star", "sun", "sun", "sun", "leaf", "leaf", "leaf", "cat", "cat", "cat"],
   "time_thresholds": { "three_stars": 180, "two_stars": 360 },
   "rewards": [{ "type": "refresh", "quantity": 1 }]

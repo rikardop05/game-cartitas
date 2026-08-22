@@ -30,9 +30,9 @@ A lógica é separada da apresentação: `GameController` (classe pura, sem `Nod
 12. Como jogador, quero usar os dois *Support Decks*, tocando na carta do topo para enviá-la à Clearing Zone, para ter cartas extras quando o tabuleiro travar.
 13. Como jogador, quero ver apenas a carta do topo de cada *Support Deck*, para saber o que virá se eu usá-la.
 14. Como jogador, quero que cada *Support Deck* seja finito, para que seja um recurso limitado.
-15. Como jogador, quero usar o poder *Hold* para mover as últimas cartas da Clearing Zone para a *Reserve*, para liberar espaço na zona.
+15. Como jogador, quero usar o poder *Hold* para mover as 3 cartas mais antigas (da esquerda) da Clearing Zone para a *Reserve*, para liberar espaço na zona.
 16. Como jogador, quero devolver cartas da *Reserve* para a Clearing Zone com um toque, para retomá-las e formar trios.
-17. Como jogador, quero que o *Hold* mova no máximo 4 cartas (as últimas adicionadas), para que o poder tenha um efeito definido.
+17. Como jogador, quero que o *Hold* mova exatamente as 3 cartas mais antigas da Clearing Zone, para que o poder tenha um efeito definido.
 18. Como jogador, quero que o *Hold* seja rejeitado (sem consumir o poder) se a Clearing Zone estiver vazia, para não desperdiçar recursos.
 19. Como jogador, quero usar o poder *Undo* para devolver a última carta da Clearing Zone ao seu *Board* ou *Support Deck*, para corrigir um engano.
 20. Como jogador, quero que o *Undo* não desfaça trios já combinados, para manter a regra simples na v1.
@@ -67,7 +67,7 @@ A lógica é separada da apresentação: `GameController` (classe pura, sem `Nod
 
 ### Engine e apresentação
 - **Engine:** Godot 4.7.1 estável, **GDScript**.
-- **Plataforma:** mobile (paisagem 16:9) como layout de referência atual; retrato 9:16 continua disponível. Touch-first, com suporte a mouse.
+- **Plataforma:** mobile-first em retrato (9:16) como layout de referência; paisagem 16:9 continua disponível. Touch-first, com suporte a mouse.
 - **Resolução:** base lógica principal 640×360, janela de desenvolvimento 1280×720, com modo retrato 360×640, upscale inteiro e `texture_filter = nearest`.
 - **Unidades visuais:** arte-fonte de carta 64×64 px; carta renderizada 48×48 px (Reserve usa duas colunas dinâmicas de 24–48 px); UI em grade de 8px; ícones de poderes 16×16.
 
@@ -91,9 +91,10 @@ A lógica é separada da apresentação: `GameController` (classe pura, sem `Nod
 - **Clearing Zone:** capacidade configurável por *Level* (padrão **7**). A ordem de inserção é preservada (para apresentação e Undo).
 - **Vitória:** tabuleiro, os dois *Support Decks*, a *Clearing Zone* e a *Reserve* vazios (estado interno como fonte de verdade).
 - **Derrota:** Clearing Zone cheia rejeita qualquer nova carta e encerra o Level. Função `checkDefeat()` extensível.
+- **Time limit (opcional):** um Level pode declarar `time_limit` (segundos); ausente = sem limite (comportamento padrão). Quando presente, a UI mostra contagem regressiva e, ao exceder o limite durante `PLAYING`, o Level é perdido (`check_timeout()`). As estrelas continuam baseadas no tempo decorrido; JSONs devem garantir `time_limit > two_stars`.
 
 ### Powers
-- **Hold** (antes chamado "Remove"): move as últimas até 4 cartas da Clearing Zone para a *Reserve*, liberando espaço. Devolver da Reserve para a zona é ação livre (toque) e ocupa espaço normal da zona. Se a zona estiver vazia, o uso é rejeitado sem consumir o poder.
+- **Hold** (antes chamado "Remove"): move as 3 cartas mais antigas (as mais à esquerda) da Clearing Zone para a *Reserve*, liberando espaço. Devolver da Reserve para a zona é ação livre (toque) e ocupa espaço normal da zona. Se a zona estiver vazia, o uso é rejeitado sem consumir o poder.
 - **Undo:** devolve a última carta ainda na Clearing Zone à sua origem (`Board` ou `Support Deck`). Não desfaz trios; rejeitado sem carta disponível; não consome poder quando rejeitado.
 - **Refresh:** reembaralha as posições das cartas restantes do `Board` e a ordem interna dos dois `Support Decks`. Não altera cartas removidas, nem Clearing Zone, nem Reserve.
 - **Estoque:** cada poder tem quantidade; usar consome uma unidade do `Inventory` de forma **permanente** (persistida). Sem estoque, o uso é rejeitado.
@@ -106,7 +107,7 @@ A lógica é separada da apresentação: `GameController` (classe pura, sem `Nod
 - **Tipos de carta:** 12 tipos no total. Nível 1 = 3 tipos × 3 cópias = 9 cartas (camada única, sem sobreposição). Níveis seguintes aumentam tipos (até 12) e camadas/sobreposição. Cada tipo sempre em múltiplos de 3.
 - **Estrelas:** `t ≤ threeStarsTime → 3★`, `t ≤ twoStarsTime → 2★`, caso contrário `1★`. Limites por *Level*. Sem score numérico, sem bônus de velocidade. Estrelas armazenadas por *Level* para futuras missões/desbloqueios.
 - **Desbloqueio:** vencer o *Level* N libera N+1. Recompensas (ex.: `+1 Hold`) definidas no JSON do *Level*.
-- **Levels:** arquivos JSON data-driven (tipos, cópias, camadas/posições, decks, capacidade, tempos, recompensas). Valores de fácil edição para testes e balanceamento.
+- **Levels:** arquivos JSON data-driven (tipos, cópias, camadas/posições, decks, capacidade, tempos, `time_limit` opcional, recompensas). Valores de fácil edição para testes e balanceamento. O jogo traz 10 Levels (30★). O layout é gerado a cada tentativa: `layout.randomize_per_attempt` (default `true`) sorteia uma seed base mantendo a garantia de solução via `SolvabilityChecker`; com `randomize_per_attempt: false` e `layout.seed` presente, o layout é determinístico.
 - **Save:** JSON em `user://` via `SaveManager` (níveis concluídos, estrelas por nível, inventário).
 
 ### Localização
@@ -125,12 +126,12 @@ A lógica é separada da apresentação: `GameController` (classe pura, sem `Nod
   - Derrota: zona cheia → derrota, inclusive quando a nova carta formaria um trio.
   - Vitória: última carta removida (com decks, zona e reserva vazios) → vitória.
   - Undo: seleção → estado A; undo → estado anterior.
-  - Hold: move até 4 para a Reserve; zona vazia rejeita sem consumir; devolver à zona funciona.
+  - Hold: move as 3 cartas mais antigas para a Reserve; zona vazia rejeita sem consumir; devolver à zona funciona.
   - Refresh: mesmas cartas, novas posições; ordem dos decks alterada; removidas/zona/reserva intactas.
   - Poderes: uso reduz estoque; uso sem estoque é rejeitado.
-  - Timer: início, parada, tempo final correto.
+  - Timer: início, parada, tempo final correto; com `time_limit`, timeout derrota; sem `time_limit`, nunca perde por tempo.
   - Progressão: nível concluído → recompensa → próximo nível liberado.
-  - Determinismo: embaralhamento aceita `seed` para reproduzir casos.
+  - Determinismo: embaralhamento aceita `seed` para reproduzir casos; `randomize_per_attempt: false` mantém layout fixo.
 
 ## Out of Scope
 
@@ -140,7 +141,7 @@ Para esta spec (v1):
 - Missões/quests, skins, temas, moedas, vidas, itens.
 - Agente de IA de tomada de decisão (apenas a API `getGameState`/`getLegalActions` é prevista).
 - Editor visual de níveis (níveis são JSON).
-- Derrotas por tempo ou por "sem movimentos" além da Clearing Zone cheia.
+- Derrotas por "sem movimentos" além da Clearing Zone cheia (derrota por tempo é opcional via `time_limit`, desligada por padrão).
 - Rollback de trios e de uso de poder no Undo (a arquitetura permite estender depois).
 - Som/música (apenas espaço reservado).
 - Multiplayer/online.

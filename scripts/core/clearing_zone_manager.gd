@@ -49,6 +49,14 @@ func take_last(count: int) -> Array[Card]:
 	cards = cards.slice(0, start)
 	return taken
 
+func take_first(count: int) -> Array[Card]:
+	count = mini(count, cards.size())
+	if count <= 0:
+		return []
+	var taken: Array[Card] = cards.slice(0, count)
+	cards = cards.slice(count)
+	return taken
+
 func remove_last() -> Card:
 	if cards.is_empty():
 		return null

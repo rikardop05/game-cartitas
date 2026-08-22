@@ -1,6 +1,9 @@
 # Godot 4+ cache
 .godot/
 
+# Local Godot engine binaries (not part of the repo)
+/Godot/
+
 # OS
 .DS_Store
 Thumbs.db
@@ -9,3 +12,9 @@ desktop.ini
 # Dev tooling (agent skills)
 .agents/
 skills-lock.json
+
+# Maestri collaboration workspace
+.maestri/
+
+# Local MCP scaffolding
+godot-mcp/

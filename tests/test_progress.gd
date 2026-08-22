@@ -21,6 +21,12 @@ func test_stars_kept_on_replay() -> void:
 	p.record_victory(1, 3, [])
 	Assert.equals(p.get_stars(1), 3, "best stars kept")
 
+func test_total_stars_aggregates() -> void:
+	var p := ProgressManager.new()
+	p.record_victory(1, 3, [])
+	p.record_victory(2, 2, [])
+	Assert.equals(p.total_stars(), 5, "total stars sum across levels")
+
 func test_save_load_round_trip() -> void:
 	var p := ProgressManager.new()
 	p.record_victory(1, 3, [{"type": "undo", "quantity": 2}])

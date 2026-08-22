@@ -1,0 +1,9 @@
+{
+  "id": "10",
+  "difficulty": 10,
+  "clearing_capacity": 7,
+  "deck": ["cat", "cat", "cat", "bird", "bird", "bird", "sun", "sun", "sun", "gem", "gem", "gem", "heart", "heart", "heart"],
+  "time_thresholds": { "three_stars": 360, "two_stars": 720 },
+  "time_limit": 900,
+  "rewards": [{ "type": "hold", "quantity": 2 }]
+}

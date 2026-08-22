@@ -1,15 +1,7 @@
 {
   "id": "2",
+  "difficulty": 2,
   "clearing_capacity": 7,
-  "layout": {
-    "types": ["cat", "dog", "bird", "fish", "flower", "moon"],
-    "count": 3,
-    "layers": 3,
-    "width": 240,
-    "height": 220,
-    "card_size": 64,
-    "seed": 2001
-  },
   "deck": ["cat", "cat", "cat", "dog", "dog", "dog", "bird", "bird", "bird", "fish", "fish", "fish"],
   "time_thresholds": { "three_stars": 120, "two_stars": 240 },
   "rewards": [{ "type": "undo", "quantity": 1 }]

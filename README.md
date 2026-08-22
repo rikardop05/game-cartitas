@@ -29,10 +29,12 @@ Pronto! O jogo abre no menu. Escolha um level e jogue.
 - Cartas **escuras** estão bloqueadas por outras cartas em cima.
 - Use os dois **decks** (em baixo do tabuleiro) quando não houver jogada.
 - Poderes:
-  - **Hold** — guarda as últimas cartas na **Reserve**, liberando espaço.
+  - **Hold** — guarda as 3 cartas mais antigas (da esquerda) na **Reserve**, liberando espaço.
   - **Undo** — devolve a última carta ao tabuleiro/deck.
   - **Refresh** — reembaralha o tabuleiro e os decks.
 - Vença limpando **todas** as cartas antes de encher a Clearing Zone.
+- São **10 Levels** (30★ no total). Cada tentativa gera um layout novo (ainda assim garantidamente solucionável).
+- Alguns Levels têm **tempo limite** opcional (contagem regressiva); sem `time_limit`, o cronômetro só conta para cima e as estrelas degradam conforme o tempo.
 
 ## Como rodar os testes (opcional)
 

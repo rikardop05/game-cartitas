@@ -1,0 +1,9 @@
+{
+  "id": "11",
+  "difficulty": 11,
+  "clearing_capacity": 7,
+  "deck": ["gem", "gem", "gem", "crystal", "crystal", "crystal", "leaf", "leaf", "leaf", "heart", "heart", "heart", "moon", "moon", "moon"],
+  "time_thresholds": { "three_stars": 420, "two_stars": 840 },
+  "time_limit": 1080,
+  "rewards": [{ "type": "hold", "quantity": 2 }]
+}

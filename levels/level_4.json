@@ -1,0 +1,8 @@
+{
+  "id": "4",
+  "difficulty": 4,
+  "clearing_capacity": 7,
+  "deck": ["gem", "gem", "gem", "crystal", "crystal", "crystal", "cat", "cat", "cat", "dog", "dog", "dog"],
+  "time_thresholds": { "three_stars": 150, "two_stars": 300 },
+  "rewards": [{ "type": "hold", "quantity": 1 }]
+}
