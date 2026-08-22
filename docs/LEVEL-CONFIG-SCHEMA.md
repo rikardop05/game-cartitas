@@ -58,24 +58,25 @@ the envelope, proving the extension path.
 > Configs stay inside these guardrails; structural expansion requires an explicit
 > `BoardEnvelopeProfile`, never a per-level conditional.
 
-Canonical mode is **portrait** (360x640, board ~256x195 measured 260x195).
-Landscape with the current HUD leaves only ~540x114 for the board.
+Canonical mode is **portrait** (360x640, board ~332x264 after the responsive
+layout). Landscape has a dedicated responsive UI (640x360) leaving a ~546x240
+board area.
 
 - `MAX_SLOT_COLUMNS = 7`, `MAX_SLOT_ROWS = 6` — slot grid size.
 - `MAX_LAYERS = 4`
 - `MAX_BOARD_CARDS = 36`
 - `MIN_CARD_SIZE_PX = 24` — minimum rendered card size in an envelope.
-- `PORTRAIT_BOARD_ENVELOPE = (256, 195)`, `LANDSCAPE_BOARD_ENVELOPE = (540, 114)`
+- `PORTRAIT_BOARD_ENVELOPE = (332, 264)`, `LANDSCAPE_BOARD_ENVELOPE = (546, 240)`
 - Per-axis overlap: H ∈ [0.35, 0.60], V ∈ [0.35, 0.55]; same-layer anchor
   distance ≥ 0.35 × card.
 - `free_ratio` target inside its declared `free_ratio_min/max`.
 
 `validate()` **rejects** configs that exceed the slot/layer/card guardrails,
 violate the overlap ranges, or that do not fit the canonical portrait
-envelope. Configs that do not fit the current landscape HUD are **marked**
+envelope. Configs that do not fit the landscape board envelope are **marked**
 (`fits_landscape = false`) and surfaced as a visible layout warning in the
-level screen — they are not silently hidden. L1–L2 fit landscape; L3–L11 are
-marked landscape-unfit until a dedicated landscape UI exists.
+level screen — they are not silently hidden. All shipped levels (1–11) fit
+both envelopes.
 
 ## Central visual metrics
 

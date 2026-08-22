@@ -23,15 +23,14 @@ const OVERLAP_V_MIN := 0.35
 const OVERLAP_V_MAX := 0.55
 const MIN_SAME_LAYER_DIST_RATIO := 0.35
 
-# Board envelope guardrails (canonical portrait mode). Portrait is the
-# reference layout: 360x640 logical viewport with a ~256x195 board area after
-# HUD/decks/zone (measured: 260x195). Landscape with the current HUD leaves
-# only ~540x114 for the board, so configs that cannot keep the minimum
-# rendered card size are MARKED (fits_landscape=false), not rejected, until a
-# dedicated landscape UI exists. Guardrails live here and are enforced by
+# Board envelope guardrails. Portrait is the reference layout: 360x640 logical
+# viewport with a ~332x264 board area (measured after the responsive layout).
+# Landscape has a dedicated UI (640x360) leaving a ~546x240 board area. Configs
+# that cannot keep the minimum rendered card size are MARKED
+# (fits_landscape=false), not rejected. Guardrails live here and are enforced by
 # validate(): 7x6 slots, 4 layers, 36 board cards, min rendered card size.
-const PORTRAIT_BOARD_ENVELOPE := Vector2(256, 195)
-const LANDSCAPE_BOARD_ENVELOPE := Vector2(540, 114)
+const PORTRAIT_BOARD_ENVELOPE := Vector2(332, 264)
+const LANDSCAPE_BOARD_ENVELOPE := Vector2(546, 240)
 const MIN_CARD_SIZE_PX := 24.0
 const MAX_SLOT_COLUMNS := 7
 const MAX_SLOT_ROWS := 6

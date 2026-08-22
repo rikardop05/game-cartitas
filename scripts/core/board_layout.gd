@@ -36,8 +36,8 @@ static func compute(positions: Array, container: Vector2, card_size: float, min_
 		scale_limited = true
 	scale = clampf(scale, 0.01, 2.5)
 	var offset := Vector2(
-		(container.x - total_x * scale) / 2.0,
-		(container.y - total_y * scale) / 2.0
+		maxf(0.0, (container.x - total_x * scale) / 2.0),
+		maxf(0.0, (container.y - total_y * scale) / 2.0)
 	)
 	return {
 		"scale": scale,
