@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Cartitas Infinity — Guia de Entrega de Arte</title>
+<style>
+  @page { size: A4; margin: 0; }
+  :root {
+    --ink: #2b1a12;
+    --muted: #7a5a46;
+    --paper: #fffaf1;
+    --warm: #c78454;
+    --panel: #3a2418;
+    --gold: #f3d28d;
+    --star: #ffe36e;
+    --frame: #fff2d5;
+    --ok: #3f8f5a;
+    --bad: #c24b3c;
+    --line: #ead9bf;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #fff; color: var(--ink);
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; font-size: 10.5pt; line-height: 1.45;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .page { width: 210mm; height: 297mm; padding: 16mm 16mm 14mm; position: relative; overflow: hidden;
+    page-break-after: always; background: var(--paper); }
+  .page:last-child { page-break-after: auto; }
+  .folio { position: absolute; bottom: 8mm; left: 16mm; right: 16mm; display: flex; justify-content: space-between;
+    font-size: 8pt; color: var(--muted); border-top: 1px solid var(--line); padding-top: 2mm; }
+  h1 { font-size: 30pt; line-height: 1.05; margin: 0 0 4mm; letter-spacing: -0.5px; }
+  h2 { font-size: 18pt; margin: 0 0 1mm; letter-spacing: -0.3px; }
+  h3 { font-size: 11.5pt; margin: 5mm 0 1.5mm; }
+  .kicker { text-transform: uppercase; letter-spacing: 1.5px; font-size: 8pt; font-weight: 700; color: var(--warm); margin-bottom: 1mm; }
+  .lead { color: var(--muted); margin: 0 0 6mm; font-size: 11pt; }
+  p { margin: 0 0 2.5mm; }
+  code, .mono { font-family: "Cascadia Mono", Consolas, "Courier New", monospace; font-size: 9pt; }
+  code { background: #f4e7d2; padding: 0 1.2mm; border-radius: 1mm; }
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0 4mm; font-size: 9.5pt; }
+  th { text-align: left; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted);
+    border-bottom: 2px solid var(--ink); padding: 1.5mm 2mm; }
+  td { border-bottom: 1px solid var(--line); padding: 1.6mm 2mm; vertical-align: middle; }
+  .step { display: inline-flex; align-items: center; justify-content: center; width: 7mm; height: 7mm; border-radius: 50%;
+    background: var(--warm); color: #fff; font-weight: 700; font-size: 10pt; margin-right: 2mm; flex: none; }
+  .callout { border: 1px solid #ecd3ad; background: #fbeedb; padding: 3mm 4mm; border-radius: 2mm; margin: 3mm 0; }
+  .callout.bad { border-color: #efbdb4; background: #fbe4df; }
+  .callout.ok { border-color: #b9dcc4; background: #e3f2e7; }
+  .callout b:first-child { display: block; margin-bottom: 0.8mm; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 2.5mm; padding: 3.5mm 4mm; }
+  .big { font-size: 22pt; font-weight: 800; line-height: 1; letter-spacing: -0.5px; }
+  .small { font-size: 8.5pt; color: var(--muted); }
+  .pill { display: inline-block; font-size: 7.5pt; font-weight: 700; padding: 0.4mm 2mm; border-radius: 10mm; text-transform: uppercase; letter-spacing: 0.6px; }
+  .pill.req { background: var(--ink); color: #fff; }
+  .pill.opt { background: #e8dccb; color: #5e4433; }
+  .px { image-rendering: pixelated; shape-rendering: crispEdges; }
+  ul { margin: 0 0 2mm; padding-left: 5mm; }
+  li { margin-bottom: 1mm; }
+  .check li { list-style: none; position: relative; padding-left: 2mm; }
+  .check li::before { content: ""; position: absolute; left: -5mm; top: 0.8mm; width: 3.4mm; height: 3.4mm; border: 1.5px solid var(--ink); border-radius: 0.8mm; }
+  .no li { list-style: none; position: relative; }
+  .no li::before { content: "✕"; position: absolute; left: -5mm; color: var(--bad); font-weight: 800; }
+
+  /* cover */
+  .cover { background: var(--panel); color: #fff1d2; }
+  .cover .lead { color: #f0c98e; }
+  .cover h1 { color: #fff1d2; font-size: 38pt; }
+  .cover .kicker { color: var(--star); }
+  .cover .folio { color: #d2ab88; border-color: #5a3a28; }
+  .cover .card { background: #4a2e1f; border-color: #6a4630; color: #fff1d2; }
+  .cover .card .small, .cover .small { color: #e2b98a; }
+  .deck { display: flex; gap: 3mm; margin: 9mm 0 10mm; flex-wrap: wrap; }
+
+  .tree { font-family: "Cascadia Mono", Consolas, monospace; font-size: 9.2pt; line-height: 1.6; background: #2b1a12; color: #f6e6cc;
+    padding: 4mm 5mm; border-radius: 2.5mm; white-space: pre; }
+  .tree .d { color: var(--star); font-weight: 700; }
+  .tree .c { color: #b89a7e; }
+  .tree .o { color: #9fd3b0; }
+  .sw { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3mm; }
+  .sw .s { border: 1px solid var(--line); border-radius: 2mm; overflow: hidden; background: #fff; }
+  .sw .chip { height: 13mm; display: flex; align-items: center; justify-content: center; font-size: 17pt; }
+  .sw .meta { padding: 1.5mm 2mm; font-size: 8pt; line-height: 1.35; }
+  .sw .meta b { font-size: 9pt; }
+  .warnchip { outline: 2.5px solid var(--bad); outline-offset: -2.5px; }
+</style>
+</head>
+<body>
+
+<!-- ============ 1. CAPA ============ -->
+<section class="page cover">
+  <div class="kicker">Cartitas Infinity · Guia para o(a) pixel artista</div>
+  <h1>Como entregar<br>a arte do jogo</h1>
+  <p class="lead">Tudo o que você precisa saber sobre formato, tamanho, nomes de arquivo e como montar o <b>.zip</b> — em 8 páginas.</p>
+
+  <div class="deck" id="coverDeck"></div>
+
+  <div class="grid3">
+    <div class="card"><div class="small">O que desenhar</div><div class="big">12 cartas</div><div class="small">uma face por tipo (gato, cachorro, …)</div></div>
+    <div class="card"><div class="small">Tamanho de cada carta</div><div class="big">48 × 48</div><div class="small">pixels, desenhado 1:1</div></div>
+    <div class="card"><div class="small">Formato</div><div class="big">PNG-32</div><div class="small">RGBA com transparência</div></div>
+  </div>
+
+  <h2 style="color:#fff1d2;margin-top:10mm;font-size:11.5pt">Neste guia</h2>
+  <table style="color:#fff1d2">
+    <tr><td style="border-color:#5a3a28;width:10mm"><b>1</b></td><td style="border-color:#5a3a28">Ficha técnica — o essencial em uma página</td><td style="border-color:#5a3a28;text-align:right">p. 2</td></tr>
+    <tr><td style="border-color:#5a3a28"><b>2</b></td><td style="border-color:#5a3a28">Por que 48 × 48 e onde a carta aparece</td><td style="border-color:#5a3a28;text-align:right">p. 3</td></tr>
+    <tr><td style="border-color:#5a3a28"><b>3</b></td><td style="border-color:#5a3a28">Anatomia da carta e estado “bloqueada”</td><td style="border-color:#5a3a28;text-align:right">p. 4</td></tr>
+    <tr><td style="border-color:#5a3a28"><b>4</b></td><td style="border-color:#5a3a28">Os 12 tipos, cores e nomes de arquivo</td><td style="border-color:#5a3a28;text-align:right">p. 5</td></tr>
+    <tr><td style="border-color:#5a3a28"><b>5</b></td><td style="border-color:#5a3a28">Extras opcionais (fase 2)</td><td style="border-color:#5a3a28;text-align:right">p. 6</td></tr>
+    <tr><td style="border-color:#5a3a28"><b>6</b></td><td style="border-color:#5a3a28">Montando o .zip</td><td style="border-color:#5a3a28;text-align:right">p. 7</td></tr>
+    <tr><td style="border-color:#5a3a28"><b>7</b></td><td style="border-color:#5a3a28">Checklist antes de enviar</td><td style="border-color:#5a3a28;text-align:right">p. 8</td></tr>
+  </table>
+  <p class="small" style="margin-top:4mm">As cartas desta capa são apenas ilustrações do formato, geradas para este guia — o estilo é seu.</p>
+  <div class="folio"><span>Cartitas Infinity — Guia de Entrega de Arte</span><span>1</span></div>
+</section>
+
+<!-- ============ 2. FICHA TÉCNICA ============ -->
+<section class="page">
+  <div class="kicker">Parte 1</div>
+  <h2>Ficha técnica</h2>
+  <p class="lead">Se ler só uma página, leia esta.</p>
+
+  <table>
+    <tr><th style="width:38%">Item</th><th>Especificação</th></tr>
+    <tr><td><b>Tipo de arquivo</b></td><td><b>PNG</b> (<code>.png</code>, extensão minúscula)</td></tr>
+    <tr><td><b>Modo de cor</b></td><td>RGBA, <b>8 bits por canal</b> (PNG-32). Sem paleta indexada, sem 16 bits.</td></tr>
+    <tr><td><b>Espaço de cor</b></td><td>sRGB. Não precisa embutir perfil de cor.</td></tr>
+    <tr><td><b>Transparência</b></td><td>Alpha só <b>0</b> (invisível) ou <b>255</b> (sólido). Nada de pixel meio transparente.</td></tr>
+    <tr><td><b>Suavização</b></td><td><b>Nenhuma</b>: sem anti-aliasing, sem borrar, sem redimensionar com interpolação.</td></tr>
+    <tr><td><b>Escala</b></td><td><b>1 pixel da arte = 1 pixel do jogo.</b> Não entregue versões ampliadas como arquivo final.</td></tr>
+    <tr><td><b>Carta (face)</b></td><td><b>48 × 48 px</b>, quadrada, uma por tipo</td></tr>
+    <tr><td><b>Quantidade</b></td><td><b>12</b> cartas (obrigatório) + extras opcionais da página 6</td></tr>
+    <tr><td><b>Nome</b></td><td><code>card_&lt;tipo&gt;.png</code> — ex.: <code>card_cat.png</code>. Tudo minúsculo, sem espaço, sem acento.</td></tr>
+    <tr><td><b>Paleta</b></td><td>Limitada e compartilhada, cerca de <b>32 cores</b>. Entregar <code>palette/palette.png</code>.</td></tr>
+    <tr><td><b>Entrelaçamento / DPI</b></td><td>Desligado (non-interlaced). DPI não importa.</td></tr>
+    <tr><td><b>Entrega</b></td><td>Um único <b>.zip</b> com a estrutura da página 7 + arquivos editáveis.</td></tr>
+  </table>
+
+  <h3>Exportando sem estragar o pixel</h3>
+  <div class="grid3">
+    <div class="card"><b>Aseprite</b><p class="small" style="margin:1mm 0 0">File → Export As… → PNG, <b>Resize 100%</b>. Color mode RGB.</p></div>
+    <div class="card"><b>Photoshop</b><p class="small" style="margin:1mm 0 0">Export As → PNG, <b>Tamanho 100%</b>, transparência ligada. Se redimensionar, use <i>Nearest Neighbor</i>.</p></div>
+    <div class="card"><b>Pixelorama / Piskel</b><p class="small" style="margin:1mm 0 0">Exportar PNG com escala <b>1×</b>. Desative qualquer “smooth”.</p></div>
+  </div>
+
+  <div class="callout ok"><b>Dica: confira com zoom</b>Abra o PNG exportado e amplie para 800%. Cada pixel deve ser um quadrado nítido de uma cor só. Se houver tons intermediários nas bordas, a exportação suavizou.</div>
+  <div class="callout"><b>Não precisa saber Godot</b>Quem integra a arte no jogo cuida da importação. Você só entrega os PNGs nos nomes e pastas certos.</div>
+  <div class="folio"><span>Cartitas Infinity — Guia de Entrega de Arte</span><span>2</span></div>
+</section>
+
+<!-- ============ 3. POR QUE 48 ============ -->
+<section class="page">
+  <div class="kicker">Parte 2</div>
+  <h2>Por que 48 × 48?</h2>
+  <p class="lead">Porque é o tamanho em que o jogo realmente mostra a carta.</p>
+
+  <p>O jogo é desenhado numa tela lógica de <b>640 × 360</b> pixels, exibida em <b>1280 × 720</b> — exatamente o dobro. No tabuleiro, a carta ocupa <b>48 × 48</b> pixels lógicos. Se a arte também tiver 48 px, cada pixel seu vira um bloco perfeito de 2 × 2 na tela.</p>
+
+  <div class="grid2" style="margin:4mm 0">
+    <div class="card">
+      <span class="pill" style="background:var(--ok);color:#fff">Certo · 48 px</span>
+      <p class="small" style="margin:1.5mm 0">Arte 48 → tela 96 = <b>2×</b>. Todos os pixels com a mesma largura.</p>
+      <div id="stripeGood"></div>
+    </div>
+    <div class="card">
+      <span class="pill" style="background:var(--bad);color:#fff">Errado · 64 px</span>
+      <p class="small" style="margin:1.5mm 0">Arte 64 → tela 96 = <b>1,5×</b>. Pixels alternam largura 2 e 1: linhas tortas, olhos tremidos.</p>
+      <div id="stripeBad"></div>
+    </div>
+  </div>
+
+  <h3>A mesma carta aparece em vários tamanhos</h3>
+  <p>O jogo reduz a sua carta automaticamente em algumas áreas. Você entrega <b>um único arquivo de 48 × 48</b> — mas desenhe pensando no menor uso:</p>
+  <div id="sizes" style="margin:3mm 0 2mm"></div>
+  <table>
+    <tr><th>Onde</th><th>Tamanho na tela (px lógicos)</th></tr>
+    <tr><td>Tabuleiro (padrão)</td><td><b>48 × 48</b> — o tamanho de referência</td></tr>
+    <tr><td>Tabuleiro ajustado ao espaço</td><td>41 a 120 (quando o nível é maior ou menor que a área)</td></tr>
+    <tr><td>Support Decks (pilhas auxiliares)</td><td>~38 × 38</td></tr>
+    <tr><td>Clearing Zone (área de seleção)</td><td>31 × 31 na horizontal · 48 × 48 na vertical</td></tr>
+    <tr><td>Reserve</td><td>28 a 38, em duas colunas</td></tr>
+  </table>
+  <div class="callout"><b>Regra prática: legível a 30 px</b>Silhueta forte, formas grandes, contraste claro entre símbolo e fundo. Detalhes de 1 px (bigodes finos, brilhos pequenos) somem quando a carta é reduzida — use como tempero, não como informação.</div>
+  <div class="folio"><span>Cartitas Infinity — Guia de Entrega de Arte</span><span>3</span></div>
+</section>
+
+<!-- ============ 4. ANATOMIA ============ -->
+<section class="page">
+  <div class="kicker">Parte 3</div>
+  <h2>Anatomia da carta</h2>
+  <p class="lead">Você desenha a carta inteira: moldura, fundo e símbolo.</p>
+
+  <div style="display:grid;grid-template-columns:96mm 1fr;gap:6mm;align-items:start">
+    <div id="anatomy"></div>
+    <div>
+      <p>O jogo coloca o seu PNG <b>por cima da carta inteira</b>. O que for transparente deixa ver o fundo; o que for sólido cobre tudo. Por isso o arquivo deve trazer a face completa.</p>
+      <h3 style="margin-top:2mm"><span class="step">A</span>Cantos</h3>
+      <p class="small">Arredonde apagando 2 a 4 pixels em cada canto (alpha 0). Os quatro cantos iguais.</p>
+      <h3><span class="step">B</span>Moldura</h3>
+      <p class="small">Sugestão: contorno escuro de 1 px + borda clara de 1–2 px. Igual nas 12 cartas, para formar um conjunto.</p>
+      <h3><span class="step">C</span>Fundo</h3>
+      <p class="small">Cor base do tipo (página 5) — é o que ajuda o jogador a achar pares rapidamente.</p>
+      <h3><span class="step">D</span>Área segura do símbolo</h3>
+      <p class="small">Mantenha o símbolo dentro do quadrado central de ~36 × 36 (6 px de margem). Centralizado.</p>
+    </div>
+  </div>
+
+  <h3>Carta bloqueada: o jogo escurece, você não desenha</h3>
+  <p>Quando há outra carta por cima, o jogo multiplica a sua arte por cinza a <b>62%</b>. Não é preciso desenhar versão escura, selecionada ou animada — tudo isso é feito por código.</p>
+  <div style="display:flex;gap:8mm;align-items:center;margin:3mm 0">
+    <div style="text-align:center"><div id="stateOn"></div><div class="small">Disponível</div></div>
+    <div style="text-align:center"><div id="stateOff"></div><div class="small">Bloqueada (× 0,62)</div></div>
+    <div class="callout" style="flex:1;margin:0"><b>Teste rápido</b>Coloque uma camada preta com 38% de opacidade por cima da carta. O símbolo ainda é reconhecível? Se sim, está ok.</div>
+  </div>
+  <div class="callout"><b>Animações</b>Voar para a Clearing Zone, sumir em trio, embaralhar: tudo feito por código. Só precisamos de arte estática.</div>
+  <div class="folio"><span>Cartitas Infinity — Guia de Entrega de Arte</span><span>4</span></div>
+</section>
+
+<!-- ============ 5. TIPOS ============ -->
+<section class="page">
+  <div class="kicker">Parte 4</div>
+  <h2>Os 12 tipos de carta</h2>
+  <p class="lead">Nome do arquivo, cor base e o emoji que o jogo usa hoje como provisório.</p>
+  <div class="sw" id="swatches"></div>
+
+  <div class="callout bad" style="margin-top:5mm"><b>Atenção: cat × heart</b>As cores de <code>cat</code> (#e07a7a) e <code>heart</code> (#e06a6a) são quase idênticas. Diferencie essas duas pelo símbolo e pela silhueta — não pela cor. (Elas aparecem marcadas em vermelho acima.)</div>
+
+  <h3>Cores da interface que já existem</h3>
+  <p class="small">Para a sua paleta conversar com o resto da tela:</p>
+  <div id="uiColors" style="display:flex;gap:3mm;flex-wrap:wrap"></div>
+
+  <h3>Sobre a paleta</h3>
+  <ul>
+    <li>Use uma paleta única, de ~32 cores, para todas as cartas e extras.</li>
+    <li>As cores base podem ser ajustadas levemente para caber na paleta — mantenha o tom reconhecível.</li>
+    <li>Entregue <code>palette/palette.png</code>: um quadrado de 8 × 8 px por cor, lado a lado.</li>
+  </ul>
+  <div class="folio"><span>Cartitas Infinity — Guia de Entrega de Arte</span><span>5</span></div>
+</section>
+
+<!-- ============ 6. EXTRAS ============ -->
+<section class="page">
+  <div class="kicker">Parte 5</div>
+  <h2>Extras opcionais (fase 2)</h2>
+  <p class="lead">Ainda não aparecem no jogo — hoje essas partes usam texto e emoji. Combine antes de produzir.</p>
+
+  <table>
+    <tr><th style="width:42%">Arquivo</th><th style="width:16%">Tamanho</th><th>O que é</th></tr>
+    <tr><td><code>assets/cards/back.png</code></td><td>48 × 48</td><td>Verso da carta (mesma moldura da face)</td></tr>
+    <tr><td><code>assets/ui/power_hold.png</code></td><td>16 × 16</td><td>Poder <b>Hold</b>: guarda as 3 cartas mais antigas da Clearing Zone na Reserve</td></tr>
+    <tr><td><code>assets/ui/power_undo.png</code></td><td>16 × 16</td><td>Poder <b>Undo</b>: devolve a última carta escolhida</td></tr>
+    <tr><td><code>assets/ui/power_refresh.png</code></td><td>16 × 16</td><td>Poder <b>Refresh</b>: reembaralha o tabuleiro e os Support Decks</td></tr>
+    <tr><td><code>assets/ui/star_filled.png</code></td><td>16 × 16</td><td>Estrela conquistada (nota da fase, 0 a 3)</td></tr>
+    <tr><td><code>assets/ui/star_empty.png</code></td><td>16 × 16</td><td>Estrela não conquistada</td></tr>
+    <tr><td><code>assets/ui/background.png</code></td><td>640 × 360</td><td>Fundo da tela, horizontal</td></tr>
+    <tr><td><code>assets/ui/background_portrait.png</code></td><td>360 × 640</td><td>Fundo da tela, vertical</td></tr>
+  </table>
+
+  <div class="grid2">
+    <div class="card">
+      <b>Ícones 16 × 16</b>
+      <ul class="small" style="margin-top:1.5mm">
+        <li>Fundo transparente; o botão já tem fundo próprio.</li>
+        <li>Contorno escuro de 1 px para destacar sobre o marrom.</li>
+        <li>Mesmo peso visual entre os três poderes.</li>
+        <li>As duas estrelas com o mesmo contorno — muda só o preenchimento (dourado <code>#ffe36e</code>).</li>
+      </ul>
+    </div>
+    <div class="card">
+      <b>Fundos de tela</b>
+      <ul class="small" style="margin-top:1.5mm">
+        <li>Fica atrás de painéis escuros semitransparentes e das cartas.</li>
+        <li>Contraste baixo, sem detalhes no centro.</li>
+        <li>Tom de referência atual: <code>#c78454</code>.</li>
+        <li>Sem texto nem logotipo embutido.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout bad"><b>Não use o print de 1920 × 1020 como tamanho</b>A imagem de apresentação é só referência visual. Os tamanhos de produção são os desta tabela.</div>
+  <div class="folio"><span>Cartitas Infinity — Guia de Entrega de Arte</span><span>6</span></div>
+</section>
+
+<!-- ============ 7. ZIP ============ -->
+<section class="page">
+  <div class="kicker">Parte 6</div>
+  <h2>Montando o .zip</h2>
+  <p class="lead">A estrutura imita as pastas do projeto: descompactou, está no lugar.</p>
+
+  <div class="tree"><span class="d">cartitas_arte_v01_2026-11-10.zip</span>
+├── <span class="d">assets/</span>
+│   ├── <span class="d">cards/</span>
+│   │   ├── card_cat.png        <span class="c">48×48</span>
+│   │   ├── card_dog.png        <span class="c">48×48</span>
+│   │   ├── …                   <span class="c">(12 no total)</span>
+│   │   ├── card_crystal.png    <span class="c">48×48</span>
+│   │   └── back.png            <span class="o">opcional</span>
+│   └── <span class="d">ui/</span>                     <span class="o">opcional (fase 2)</span>
+│       ├── power_hold.png  power_undo.png  power_refresh.png
+│       ├── star_filled.png  star_empty.png
+│       └── background.png  background_portrait.png
+├── <span class="d">palette/</span>
+│   └── palette.png
+├── <span class="d">source/</span>                     <span class="c">arquivos editáveis</span>
+│   └── cartas.aseprite  <span class="c">(ou .psd, .pxo… camadas preservadas)</span>
+├── <span class="d">preview/</span>                    <span class="o">opcional · só para conferência</span>
+│   └── todas_4x.png
+└── LEIAME.txt</div>
+
+  <div class="grid2" style="margin-top:5mm">
+    <div>
+      <h3 style="margin-top:0"><span class="step">1</span>Nome do zip</h3>
+      <p class="small"><code>cartitas_arte_v&lt;NN&gt;_&lt;AAAA-MM-DD&gt;.zip</code><br>Versão com dois dígitos, sobe a cada entrega (v01, v02…).</p>
+      <h3><span class="step">2</span>Raiz do zip</h3>
+      <p class="small">Ao abrir o zip, devem aparecer direto <code>assets/</code>, <code>palette/</code>, <code>source/</code>… — <b>não</b> uma pasta extra por fora.</p>
+      <h3><span class="step">3</span>Entregas parciais</h3>
+      <p class="small">Pode mandar só parte das cartas. O jogo usa o provisório para as que faltarem. Liste no LEIAME o que está incluído.</p>
+      <h3><span class="step">4</span>Preview é só preview</h3>
+      <p class="small">Arquivos ampliados vão <b>apenas</b> em <code>preview/</code>, nunca em <code>assets/</code>.</p>
+    </div>
+    <div>
+      <h3 style="margin-top:0">Modelo de LEIAME.txt</h3>
+      <div class="tree" style="font-size:8.5pt">Cartitas Infinity — entrega de arte
+Versão: v01
+Data: 2026-11-10
+Artista: &lt;seu nome&gt;
+
+Incluído:
+- 12 cartas (assets/cards)
+- palette.png
+
+Mudou desde a versão anterior:
+- (primeira entrega)
+
+Observações:
+- …</div>
+    </div>
+  </div>
+  <div class="folio"><span>Cartitas Infinity — Guia de Entrega de Arte</span><span>7</span></div>
+</section>
+
+<!-- ============ 8. CHECKLIST ============ -->
+<section class="page">
+  <div class="kicker">Parte 7</div>
+  <h2>Checklist antes de enviar</h2>
+  <p class="lead">Marque cada item. Leva cinco minutos e evita uma rodada de correção.</p>
+
+  <div class="grid2">
+    <div>
+      <h3 style="margin-top:0">Arquivos</h3>
+      <ul class="check">
+        <li>Todos os PNG das cartas têm exatamente <b>48 × 48</b></li>
+        <li>Existem os 12 arquivos <code>card_&lt;tipo&gt;.png</code> (ou o LEIAME diz quais faltam)</li>
+        <li>Nomes em minúsculas, sem espaços, iguais à página 5</li>
+        <li>Extensão <code>.png</code> minúscula</li>
+        <li>RGBA 8 bits, sem paleta indexada</li>
+        <li>Ícones opcionais com <b>16 × 16</b>; fundos com 640 × 360 / 360 × 640</li>
+      </ul>
+      <h3>Pixel</h3>
+      <ul class="check">
+        <li>Em zoom de 800%, nenhum pixel borrado ou meio transparente</li>
+        <li>Cantos transparentes iguais nas quatro pontas</li>
+        <li>Moldura igual em todas as cartas</li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="margin-top:0">Leitura</h3>
+      <ul class="check">
+        <li>Reduzida para ~30 px, cada carta ainda é reconhecível</li>
+        <li>Escurecida a 62%, o símbolo continua visível</li>
+        <li><code>cat</code> e <code>heart</code> se distinguem sem depender da cor</li>
+        <li>As 12 lado a lado parecem um conjunto (mesma paleta, mesmo traço)</li>
+      </ul>
+      <h3>Zip</h3>
+      <ul class="check">
+        <li>Raiz do zip com <code>assets/</code> direto, sem pasta extra</li>
+        <li><code>palette/palette.png</code> incluído</li>
+        <li>Arquivos editáveis em <code>source/</code></li>
+        <li><code>LEIAME.txt</code> preenchido</li>
+        <li>Nome <code>cartitas_arte_vNN_AAAA-MM-DD.zip</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Erros mais comuns</h3>
+  <ul class="no">
+    <li>Exportar em 64 × 64, 96 × 96 ou outro tamanho “para garantir”.</li>
+    <li>Redimensionar com interpolação (bilinear/bicúbica) — o pixel vira borrão.</li>
+    <li>Bordas com anti-aliasing ou sombra suave semitransparente.</li>
+    <li>Nome com maiúscula ou espaço: <code>Card_Cat.png</code>, <code>card cat.png</code>.</li>
+    <li>Arquivos ampliados misturados em <code>assets/</code>.</li>
+    <li>Desenhar versões “bloqueada” ou “selecionada” — o jogo faz isso sozinho.</li>
+  </ul>
+
+  <div class="callout ok" style="margin-top:6mm"><b>Dúvidas?</b>Na dúvida, mande uma carta só (por exemplo <code>card_cat.png</code>) antes das 12. Testamos no jogo e devolvemos o retorno antes de você produzir o resto.</div>
+  <div class="folio"><span>Cartitas Infinity — Guia de Entrega de Arte</span><span>8</span></div>
+</section>
+
+<script>
+const TYPES = [
+  ["cat","#e07a7a","🐱","gato"],["dog","#d9a05b","🐶","cachorro"],["bird","#e0c95b","🐦","pássaro"],
+  ["fish","#6bb5e0","🐟","peixe"],["flower","#e08ac9","🌸","flor"],["moon","#c9b8e0","🌙","lua"],
+  ["star","#f0e060","⭐","estrela"],["sun","#f0b060","☀️","sol"],["leaf","#6bc98a","🍀","folha"],
+  ["heart","#e06a6a","❤️","coração"],["gem","#6ac9d9","💎","gema"],["crystal","#9a7ae0","🔮","cristal"],
+];
+const N = 48;
+const OUTLINE = "#4a2c1d", FRAME = "#fff2d5";
+
+function shade(hex, f) {
+  const n = parseInt(hex.slice(1), 16);
+  const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(v => Math.max(0, Math.min(255, Math.round(f >= 1 ? v + (255 - v) * (f - 1) : v * f))));
+  return "#" + c.map(v => v.toString(16).padStart(2, "0")).join("");
+}
+// corner mask: 3 px rounding
+function isCorner(x, y) {
+  const cx = Math.min(x, N - 1 - x), cy = Math.min(y, N - 1 - y);
+  return (cy === 0 && cx < 3) || (cy === 1 && cx < 1) || (cy === 2 && cx < 1);
+}
+function ring(x, y) {
+  // distance from the edge of the opaque shape
+  const cx = Math.min(x, N - 1 - x), cy = Math.min(y, N - 1 - y);
+  let d = Math.min(cx, cy);
+  if (cy === 0 && cx === 3) d = 0;
+  if (cy === 1 && (cx === 1 || cx === 2)) d = 0;
+  if (cy === 2 && cx === 1) d = 0;
+  if (cy === 3 && cx === 0) d = 0;
+  if (cx === 1 && cy === 1) d = 0;
+  return d;
+}
+// symbol: implicit shapes in [-1,1]
+const SHAPES = {
+  heart: (u, v) => { v = -v + 0.15; u *= 1.15; v *= 1.15; return Math.pow(u*u + v*v - 1, 3) - u*u*v*v*v <= 0; },
+  gem: (u, v) => (v < -0.25 ? Math.abs(u) <= 0.9 - (v + 0.25) * -0.0 && v > -0.7 && Math.abs(u) <= 0.55 + (v + 0.7) * 0.8 : Math.abs(u) <= 0.9 * (1 - (v + 0.25) / 1.05)) && v < 0.8,
+  moon: (u, v) => (u*u + v*v <= 0.72) && !((u - 0.38) ** 2 + (v + 0.12) ** 2 <= 0.5),
+  star: (u, v) => { const a = Math.atan2(v, u) + Math.PI / 2, r = Math.hypot(u, v); const k = Math.cos(Math.PI / 5) / Math.cos(((a % (2 * Math.PI / 5)) + 2 * Math.PI / 5) % (2 * Math.PI / 5) - Math.PI / 5); return r <= 0.92 * (0.5 + 0.5 * Math.abs(Math.cos(2.5 * a)) ** 2.2); },
+  sun: (u, v) => { const r = Math.hypot(u, v), a = Math.atan2(v, u); return r <= 0.5 || (r <= 0.9 && Math.cos(8 * a) > 0.55); },
+  fish: (u, v) => ((u + 0.15) ** 2 / 0.42 + v * v / 0.2 <= 1) || (u > 0.45 && u < 0.92 && Math.abs(v) <= (u - 0.45) * 1.2),
+};
+function cardPixels(type, base) {
+  const sym = SHAPES[type] || SHAPES.heart;
+  const dark = shade(base, 0.45), light = shade(base, 1.45), bgLow = shade(base, 0.88);
+  const px = [];
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    if (isCorner(x, y)) { px.push(null); continue; }
+    const d = ring(x, y);
+    let c;
+    if (d === 0) c = OUTLINE;
+    else if (d <= 2) c = FRAME;
+    else if (d === 3) c = shade(base, 0.7);
+    else c = y > 36 ? bgLow : base;
+    const u = (x + 0.5 - N / 2) / 15, v = (y + 0.5 - N / 2) / 15;
+    if (d > 3 && Math.abs(u) <= 1.1 && Math.abs(v) <= 1.1 && sym(u, v)) {
+      const inner = sym(u * 1.18, v * 1.18) && sym(u * 1.18 + 0.0, v * 1.18);
+      c = "#fffaf1";
+      const edge = !(sym((x + 1.5 - N/2)/15, v) && sym((x - 0.5 - N/2)/15, v) && sym(u, (y + 1.5 - N/2)/15) && sym(u, (y - 0.5 - N/2)/15));
+      c = edge ? dark : (u < -0.15 && v < -0.15 && sym(u - 0.25, v - 0.25) ? light : shade(base, 0.82));
+    }
+    px.push(c);
+  }
+  return px;
+}
+function svgFromPixels(px, w, h, size, opts = {}) {
+  let r = "";
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const c = px[y * w + x];
+    if (c) r += `<rect x="${x}" y="${y}" width="1.02" height="1.02" fill="${c}"/>`;
+  }
+  return `<svg class="px" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${size}" height="${size * h / w}" style="${opts.style || ""}">${opts.under || ""}${r}${opts.over || ""}</svg>`;
+}
+const cardSVG = (t, base, size, style) => svgFromPixels(cardPixels(t, base), N, N, size, { style });
+
+// cover deck
+const coverTypes = [["heart","#e06a6a"],["gem","#6ac9d9"],["moon","#c9b8e0"],["star","#f0e060"],["sun","#f0b060"],["fish","#6bb5e0"]];
+document.getElementById("coverDeck").innerHTML = coverTypes.map(([t, c], i) =>
+  cardSVG(t, c, 96, `transform:rotate(${[-6,3,-2,5,-4,2][i]}deg)`)).join("");
+
+// stripes: 8 alternating art pixels, rendered at 2x and 1.5x
+function stripes(widths) {
+  const cols = ["#3a2418", "#f0b060"];
+  let x = 0, r = "";
+  const unit = 9;
+  widths.forEach((w, i) => {
+    r += `<rect x="${x * unit}" y="0" width="${w * unit}" height="${4 * unit}" fill="${cols[i % 2]}"/>`;
+    for (let k = 1; k < w; k++) r += `<line x1="${(x + k) * unit}" y1="0" x2="${(x + k) * unit}" y2="${4*unit}" stroke="#ffffff55" stroke-width="0.6"/>`;
+    x += w;
+  });
+  let ticks = "";
+  for (let i = 0; i <= x; i++) ticks += `<line x1="${i*unit}" y1="${4*unit+2}" x2="${i*unit}" y2="${4*unit+6}" stroke="#7a5a46" stroke-width="0.8"/>`;
+  return `<svg class="px" width="100%" viewBox="-1 -1 ${x * unit + 2} ${4 * unit + 18}">${r}${ticks}<text x="0" y="${4*unit+15}" font-size="8" fill="#7a5a46" font-family="Segoe UI">cada risco = 1 pixel da tela</text></svg>`;
+}
+document.getElementById("stripeGood").innerHTML = stripes([2,2,2,2,2,2,2,2,2,2,2,2]);
+document.getElementById("stripeBad").innerHTML = stripes([2,1,2,1,2,1,2,1,2,1,2,1,2,1,2,1]);
+
+// size comparison
+const sizes = [[48,"Tabuleiro"],[38,"Support Deck"],[31,"Clearing Zone"],[28,"Reserve (mín.)"]];
+document.getElementById("sizes").innerHTML = `<div style="display:flex;gap:7mm;align-items:flex-end">` +
+  sizes.map(([s, l]) => `<div style="text-align:center">${cardSVG("heart", "#e06a6a", s * 2.2)}<div class="small"><b>${s} px</b><br>${l}</div></div>`).join("") + `</div>`;
+
+// anatomy
+(function () {
+  const px = cardPixels("heart", "#e06a6a");
+  const S = 340;
+  let grid = "";
+  for (let i = 0; i <= N; i += 1) {
+    const w = i % 8 === 0 ? 0.12 : 0.04;
+    grid += `<line x1="${i}" y1="0" x2="${i}" y2="${N}" stroke="#2b1a12" stroke-opacity="0.35" stroke-width="${w}"/>`;
+    grid += `<line x1="0" y1="${i}" x2="${N}" y2="${i}" stroke="#2b1a12" stroke-opacity="0.35" stroke-width="${w}"/>`;
+  }
+  const checker = `<pattern id="chk" width="2" height="2" patternUnits="userSpaceOnUse"><rect width="2" height="2" fill="#fff"/><rect width="1" height="1" fill="#ddd"/><rect x="1" y="1" width="1" height="1" fill="#ddd"/></pattern><rect width="${N}" height="${N}" fill="url(#chk)"/>`;
+  const lbl = (x, y, t) => `<circle cx="${x}" cy="${y}" r="2.4" fill="#c78454" stroke="#fff" stroke-width="0.4"/><text x="${x}" y="${y + 1.1}" font-size="3" font-weight="700" fill="#fff" text-anchor="middle" font-family="Segoe UI">${t}</text>`;
+  const over = grid +
+    `<rect x="6" y="6" width="36" height="36" fill="none" stroke="#1f6fd1" stroke-width="0.35" stroke-dasharray="1 0.7"/>` +
+    lbl(4.5, 4.5, "A") + lbl(24, 1.6, "B") + lbl(9, 40, "C") + lbl(39, 9, "D");
+  document.getElementById("anatomy").innerHTML =
+    svgFromPixels(px, N, N, S, { under: checker, over }) +
+    `<div class="small" style="margin-top:1.5mm">Grade: 1 quadradinho = 1 pixel · linhas fortes a cada 8 px · xadrez = transparente · <span style="color:#1f6fd1">tracejado azul = área segura 36 × 36</span></div>`;
+  document.getElementById("stateOn").innerHTML = cardSVG("heart", "#e06a6a", 106);
+  document.getElementById("stateOff").innerHTML = cardSVG("heart", "#e06a6a", 106, "filter:brightness(0.62)");
+})();
+
+// swatches
+document.getElementById("swatches").innerHTML = TYPES.map(([t, c, e, pt]) => `
+  <div class="s${t === "cat" || t === "heart" ? " warnchip" : ""}">
+    <div class="chip" style="background:${c}">${e}</div>
+    <div class="meta"><b>${t}</b> · ${pt}<br><span class="mono">card_${t}.png</span><br><span class="mono">${c}</span></div>
+  </div>`).join("");
+
+const UI = [["#c78454","fundo da tela"],["#3a2418","painéis"],["#f3d28d","borda dos painéis"],["#fff1d2","texto"],["#ffe36e","estrelas"],["#fff2d5","moldura provisória"]];
+document.getElementById("uiColors").innerHTML = UI.map(([c, l]) =>
+  `<div style="display:flex;align-items:center;gap:1.5mm;border:1px solid var(--line);border-radius:2mm;padding:1mm 2mm 1mm 1mm;background:#fff">
+     <span style="width:7mm;height:7mm;border-radius:1mm;background:${c};border:1px solid #0002"></span>
+     <span class="small"><span class="mono">${c}</span><br>${l}</span></div>`).join("");
+</script>
+</body>
+</html>
