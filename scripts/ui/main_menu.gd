@@ -2,9 +2,16 @@ extends Control
 
 enum Screen { MENU, LEVELS, OPTIONS }
 
+# Same warm palette as the level screen, so menu and game read as one product.
+const WARM_BACKGROUND := UiHelpers.WARM_BACKGROUND
+const TEXT_MUTED := UiHelpers.TEXT_MUTED
+const GOLD := UiHelpers.GOLD
+
 var _screen: Screen = Screen.MENU
+var _reset_armed := false
 
 func _ready() -> void:
+	theme = UiHelpers.warm_theme()
 	_build()
 
 func _build() -> void:
@@ -12,7 +19,7 @@ func _build() -> void:
 		remove_child(child)
 		child.queue_free()
 	var bg := ColorRect.new()
-	bg.color = Color("#17181d")
+	bg.color = WARM_BACKGROUND
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
 	match _screen:
@@ -43,7 +50,7 @@ func _build_menu() -> void:
 	subtitle.text = Localizer.t("subtitle")
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.add_theme_font_size_override("font_size", 16)
-	subtitle.modulate = Color(0.7, 0.7, 0.7)
+	subtitle.add_theme_color_override("font_color", TEXT_MUTED)
 	vbox.add_child(subtitle)
 
 	var spacer := Control.new()
@@ -54,12 +61,9 @@ func _build_menu() -> void:
 	vbox.add_child(_make_menu_button(Localizer.t("options"), Localizer.t("options_tip"), _on_options))
 	vbox.add_child(_make_menu_button(Localizer.t("quit"), Localizer.t("quit_tip"), _on_quit))
 
-	var total_stars := Label.new()
-	total_stars.text = "★ %d/%d" % [Game.progress.total_stars(), LevelLoader.load_all_level_ids().size() * 3]
+	var total_stars := UiHelpers.symbol_label(UiHelpers.total_stars_text(), 16)
 	total_stars.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	total_stars.add_theme_font_size_override("font_size", 16)
-	total_stars.add_theme_color_override("font_color", Color("#ffe36e"))
-	total_stars.add_theme_font_override("font", UiHelpers.symbol_font())
+	total_stars.add_theme_color_override("font_color", GOLD)
 	vbox.add_child(total_stars)
 
 func _make_menu_button(text: String, tooltip: String, callback: Callable) -> Button:
@@ -106,12 +110,9 @@ func _build_levels() -> void:
 	scroll.add_child(vbox)
 
 	var ids: Array = LevelLoader.load_all_level_ids()
-	var total_stars := Label.new()
-	total_stars.text = "★ %d/%d" % [Game.progress.total_stars(), ids.size() * 3]
+	var total_stars := UiHelpers.symbol_label(UiHelpers.total_stars_text(), 20)
 	total_stars.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	total_stars.add_theme_font_size_override("font_size", 20)
-	total_stars.add_theme_color_override("font_color", Color("#ffe36e"))
-	total_stars.add_theme_font_override("font", UiHelpers.symbol_font())
+	total_stars.add_theme_color_override("font_color", GOLD)
 	vbox.add_child(total_stars)
 
 	for id in ids:
@@ -165,7 +166,7 @@ func _build_options() -> void:
 	vbox.add_child(orient_btn)
 
 	var reset := Button.new()
-	reset.text = Localizer.t("reset")
+	reset.text = Localizer.t("reset_confirm") if _reset_armed else Localizer.t("reset")
 	reset.custom_minimum_size = Vector2(220, 44)
 	reset.tooltip_text = Localizer.t("reset")
 	reset.pressed.connect(_on_reset)
@@ -190,11 +191,11 @@ func _make_level_button(id: String) -> Button:
 		var star_str := ""
 		for i in 3:
 			star_str += "★" if i < stars else "☆"
-		btn.text = "Level %s   %s" % [id, star_str]
+		btn.text = "%s %s   %s" % [Localizer.t("level"), id, star_str]
 		btn.tooltip_text = "%s %s" % [Localizer.t("level"), id]
 		btn.pressed.connect(_on_level.bind(id))
 	else:
-		btn.text = "Level %s   (%s)" % [id, Localizer.t("locked")]
+		btn.text = "%s %s   (%s)" % [Localizer.t("level"), id, Localizer.t("locked")]
 		btn.disabled = true
 	return btn
 
@@ -211,12 +212,19 @@ func _on_quit() -> void:
 
 func _on_back() -> void:
 	_screen = Screen.MENU
+	_reset_armed = false
 	_build()
 
 func _on_level(level_id: String) -> void:
 	Game.start_level(level_id)
 
+# Erasing progress is irreversible, so the first tap only arms the button.
 func _on_reset() -> void:
+	if not _reset_armed:
+		_reset_armed = true
+		_build()
+		return
+	_reset_armed = false
 	Game.progress = ProgressManager.new()
 	Game.save_progress()
 	_build()

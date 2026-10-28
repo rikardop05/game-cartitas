@@ -22,11 +22,14 @@ func apply_orientation() -> void:
 	if landscape:
 		root.content_scale_size = Vector2i(640, 360)
 		get_window().size = Vector2i(1280, 720)
-		ProjectSettings.set_setting("display/window/handheld/orientation", 4)
 	else:
 		root.content_scale_size = Vector2i(360, 640)
 		get_window().size = Vector2i(720, 1280)
-		ProjectSettings.set_setting("display/window/handheld/orientation", 5)
+	# The handheld ProjectSettings value is only read at startup; on a device
+	# the screen must be rotated through the DisplayServer.
+	if OS.has_feature("mobile"):
+		DisplayServer.screen_set_orientation(
+			DisplayServer.SCREEN_SENSOR_LANDSCAPE if landscape else DisplayServer.SCREEN_SENSOR_PORTRAIT)
 
 func set_orientation(landscape: bool) -> void:
 	settings["orientation"] = "landscape" if landscape else "portrait"
@@ -51,6 +54,7 @@ func restart_level() -> void:
 func go_to_menu() -> void:
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
 
-func complete_level(stars: int, rewards: Array) -> void:
-	progress.record_victory(current_level_id, stars, rewards)
+func complete_level(stars: int, rewards: Array) -> Array:
+	var granted := progress.record_victory(current_level_id, stars, rewards)
 	save_progress()
+	return granted

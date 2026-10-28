@@ -1,44 +1,45 @@
 extends SceneTree
 
-# Deterministic full-scene repro for landscape HUD/container overflow.
-# Read-only: loads Level 6 with its fixed profile seed and verifies the save
-# file is byte-identical before/after the run.
+# Deterministic full-scene repro for HUD/container overflow in both canonical
+# mobile viewports. Read-only: loads Level 6 with its fixed profile seed and
+# verifies the save file is byte-identical before/after the run.
 
 const LEVEL_ID := "6"
-const FIXED_SEED := 6001
-const WINDOW := Vector2i(640, 360)
 const EPSILON := 0.01
-const REQUIRED := [
-	"ScreenMargin",
-	"Body",
-	"MainColumn",
-	"BoardFrame",
-	"LowerStrip",
-	"Support",
-	"Reserve",
-	"ClearingZone",
-	"Powers",
+const COMMON_REQUIRED := ["ScreenMargin", "MainColumn", "BoardFrame", "Support", "Reserve", "ClearingZone", "Powers"]
+const VIEWS := [
+	{"name": "landscape-640x360", "orientation": "landscape", "window": Vector2i(640, 360), "extra": ["Body", "LowerStrip"]},
+	{"name": "portrait-360x640", "orientation": "portrait", "window": Vector2i(360, 640), "extra": []},
 ]
 
 var _failures: Array[String] = []
 var _failure_keys := {}
 var _save_before: Dictionary
+var _view_name := ""
 
 func _init() -> void:
 	call_deferred("_run")
 
 func _run() -> void:
+	LevelLoader.deterministic = true
 	_save_before = _snapshot_save()
 	var game = root.get_node_or_null("Game")
 	if game == null:
 		_fail("infrastructure", "Game autoload missing")
 		_finish()
 		return
+	for view in VIEWS:
+		await _run_view(game, view)
+	_finish()
 
+func _run_view(game, view: Dictionary) -> void:
+	_view_name = str(view["name"])
+	var required: Array = COMMON_REQUIRED + view["extra"]
+	var landscape: bool = view["orientation"] == "landscape"
 	# Do not call Game.set_orientation(): it persists settings to the user save.
-	game.settings["orientation"] = "landscape"
+	game.settings["orientation"] = view["orientation"]
 	game.apply_orientation()
-	root.size = WINDOW
+	root.size = view["window"]
 	for i in 3:
 		await process_frame
 
@@ -47,52 +48,45 @@ func _run() -> void:
 	var scene = await _wait_for_level_scene()
 	if scene == null:
 		_fail("infrastructure", "LevelScreen did not become ready")
-		_finish()
 		return
 
-	var nodes := _required_nodes(scene)
-	if nodes.size() != REQUIRED.size():
-		_finish()
+	var nodes := _required_nodes(scene, required)
+	if nodes.size() != required.size():
 		return
-	var stable_frames := await _wait_for_stable_layout(scene)
+	var stable_frames := await _wait_for_stable_layout(scene, required)
 	if stable_frames < 3:
 		_fail("infrastructure", "HUD layout did not stabilize")
 
 	var viewport_bounds := Rect2(Vector2.ZERO, scene.get_viewport_rect().size)
 	var controller = scene.get("controller")
 	var board := scene.find_child("Board", true, false) as Control
-	_verify_fixed_seed(controller, board)
+	_verify_deterministic_seed(controller, board)
 
-	print("HUD BOUNDS REPRO level=%s seed=%d window=%s viewport=%s stable_frames=%d" % [
-		LEVEL_ID, FIXED_SEED, str(WINDOW), str(viewport_bounds), stable_frames,
+	print("HUD BOUNDS REPRO view=%s level=%s viewport=%s stable_frames=%d" % [
+		_view_name, LEVEL_ID, str(viewport_bounds), stable_frames,
 	])
-	for node_name in REQUIRED:
-		var node: Control = nodes[node_name]
-		var parent_rect := Rect2()
-		if node.get_parent() is Control:
-			parent_rect = (node.get_parent() as Control).get_global_rect()
-		print("HUD MEASURE name=%s path=%s rect=%s parent_rect=%s viewport_bottom=%.2f rect_bottom=%.2f" % [
-			node_name, str(scene.get_path_to(node)), str(node.get_global_rect()), str(parent_rect),
-			viewport_bounds.end.y, node.get_global_rect().end.y,
-		])
 
 	# Exact hierarchy contracts for the main HUD regions.
-	_assert_inside(nodes["Body"], nodes["ScreenMargin"].get_global_rect(), "container:Body-in-ScreenMargin")
-	_assert_inside(nodes["MainColumn"], nodes["Body"].get_global_rect(), "container:MainColumn-in-Body")
-	_assert_inside(nodes["Powers"], nodes["Body"].get_global_rect(), "container:Powers-in-Body")
+	if landscape:
+		_assert_inside(nodes["Body"], nodes["ScreenMargin"].get_global_rect(), "container:Body-in-ScreenMargin")
+		_assert_inside(nodes["MainColumn"], nodes["Body"].get_global_rect(), "container:MainColumn-in-Body")
+		_assert_inside(nodes["Powers"], nodes["Body"].get_global_rect(), "container:Powers-in-Body")
+		_assert_inside(nodes["LowerStrip"], nodes["MainColumn"].get_global_rect(), "container:LowerStrip-in-MainColumn")
+		for child_name in ["Support", "Reserve", "ClearingZone"]:
+			_assert_inside(nodes[child_name], nodes["LowerStrip"].get_global_rect(), "container:%s-in-LowerStrip" % child_name)
+		# LowerStrip and every visible descendant must remain inside Body, even when
+		# a child's theme/content minimum silently grows beyond the nominal 56 px.
+		_audit_subtree_against(nodes["LowerStrip"], nodes["Body"].get_global_rect(), "lower-vs-body", scene, true)
+	else:
+		_assert_inside(nodes["MainColumn"], nodes["ScreenMargin"].get_global_rect(), "container:MainColumn-in-ScreenMargin")
+		for child_name in ["Powers", "Support", "ClearingZone", "Reserve"]:
+			_assert_inside(nodes[child_name], nodes["MainColumn"].get_global_rect(), "container:%s-in-MainColumn" % child_name)
 	_assert_inside(nodes["BoardFrame"], nodes["MainColumn"].get_global_rect(), "container:BoardFrame-in-MainColumn")
-	_assert_inside(nodes["LowerStrip"], nodes["MainColumn"].get_global_rect(), "container:LowerStrip-in-MainColumn")
-	for child_name in ["Support", "Reserve", "ClearingZone"]:
-		_assert_inside(nodes[child_name], nodes["LowerStrip"].get_global_rect(), "container:%s-in-LowerStrip" % child_name)
 
 	# Every visible Control under the HUD must stay inside the viewport. This is
 	# the user-visible bottom-clipping invariant, independent of parent layout.
 	_audit_viewport_descendants(nodes["ScreenMargin"], viewport_bounds, scene)
 	_audit_clip_ancestors(nodes["ScreenMargin"], scene)
-
-	# LowerStrip and every visible descendant must remain inside Body, even when
-	# a child's theme/content minimum silently grows beyond the nominal 56 px.
-	_audit_subtree_against(nodes["LowerStrip"], nodes["Body"].get_global_rect(), "lower-vs-body", scene, true)
 
 	# Relevant visual groups must also contain their own descendants.
 	for owner_name in ["BoardFrame", "Support", "Reserve", "ClearingZone", "Powers"]:
@@ -107,8 +101,6 @@ func _run() -> void:
 	for power_name in PowerManager.POWERS:
 		_assert_action_button(power_buttons.get(power_name) as Button, "power:%s" % power_name, viewport_bounds, nodes["ScreenMargin"], scene)
 
-	_finish()
-
 func _wait_for_level_scene():
 	for i in 60:
 		await process_frame
@@ -117,17 +109,17 @@ func _wait_for_level_scene():
 			continue
 		var controller = scene.get("controller")
 		var screen_margin := scene.find_child("ScreenMargin", true, false) as Control
-		var body := scene.find_child("Body", true, false) as Control
-		if controller != null and screen_margin != null and body != null and body.size.x > 0.0:
+		var column := scene.find_child("MainColumn", true, false) as Control
+		if controller != null and screen_margin != null and column != null and column.size.x > 0.0:
 			return scene
 	return null
 
-func _wait_for_stable_layout(scene) -> int:
+func _wait_for_stable_layout(scene, required: Array) -> int:
 	var previous := ""
 	var consecutive := 0
 	for i in 60:
 		await process_frame
-		var current := _layout_signature(scene)
+		var current := _layout_signature(scene, required)
 		if current == previous and current != "":
 			consecutive += 1
 		else:
@@ -137,9 +129,9 @@ func _wait_for_stable_layout(scene) -> int:
 			return consecutive
 	return consecutive
 
-func _layout_signature(scene) -> String:
+func _layout_signature(scene, required: Array) -> String:
 	var parts: Array[String] = []
-	for node_name in REQUIRED:
+	for node_name in required:
 		var node := scene.find_child(node_name, true, false) as Control
 		if node == null:
 			return ""
@@ -147,9 +139,9 @@ func _layout_signature(scene) -> String:
 		parts.append("%s:%.3f,%.3f,%.3f,%.3f" % [node_name, rect.position.x, rect.position.y, rect.size.x, rect.size.y])
 	return "|".join(parts)
 
-func _required_nodes(scene) -> Dictionary:
+func _required_nodes(scene, required: Array) -> Dictionary:
 	var out := {}
-	for node_name in REQUIRED:
+	for node_name in required:
 		var node := scene.find_child(node_name, true, false) as Control
 		if node == null:
 			_fail("infrastructure", "required Control missing: %s" % node_name)
@@ -157,17 +149,21 @@ func _required_nodes(scene) -> Dictionary:
 			out[node_name] = node
 	return out
 
-func _verify_fixed_seed(controller, board: Control) -> void:
+func _verify_deterministic_seed(controller, board: Control) -> void:
+	# Level 6 opts out of per-attempt randomization, so two loads at the same
+	# board size must agree with each other and with the scene's board.
 	if controller == null or board == null:
 		_fail("infrastructure", "controller or Board missing")
 		return
 	var resolved: Dictionary = LevelLoader.load_level(LEVEL_ID, board.size)
-	if resolved.has("error"):
-		_fail("infrastructure", "fixed-seed load failed: %s" % str(resolved["error"]))
+	var again: Dictionary = LevelLoader.load_level(LEVEL_ID, board.size)
+	if resolved.has("error") or again.has("error"):
+		_fail("infrastructure", "fixed-seed load failed: %s" % str(resolved.get("error", again.get("error"))))
 		return
 	var seed_used := int(resolved.get("generation_metrics", {}).get("seed_used", -1))
-	if seed_used != FIXED_SEED:
-		_fail("infrastructure", "expected seed %d, got %d" % [FIXED_SEED, seed_used])
+	var seed_again := int(again.get("generation_metrics", {}).get("seed_used", -2))
+	if seed_used != seed_again:
+		_fail("infrastructure", "non-deterministic seed: %d vs %d" % [seed_used, seed_again])
 	if not _same_board(resolved["cards"], controller.board.cards):
 		_fail("infrastructure", "scene board differs from fixed-seed LevelLoader output")
 
@@ -317,11 +313,11 @@ func _max_overflow(overflow: Dictionary) -> float:
 	return maxf(maxf(float(overflow["top"]), float(overflow["bottom"])), maxf(float(overflow["left"]), float(overflow["right"])))
 
 func _fail(kind: String, detail: String) -> void:
-	var key := "%s|%s" % [kind, detail]
+	var key := "%s|%s|%s" % [_view_name, kind, detail]
 	if _failure_keys.has(key):
 		return
 	_failure_keys[key] = true
-	_failures.append("kind=%s %s" % [kind, detail])
+	_failures.append("view=%s kind=%s %s" % [_view_name, kind, detail])
 
 func _snapshot_save() -> Dictionary:
 	var path := SaveManager.DEFAULT_PATH

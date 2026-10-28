@@ -15,7 +15,10 @@ const BOARD_Y_COMPRESSION := 1.0
 const PORTRAIT_BOARD_FRAME := Vector2(344.0, 272.0)
 const LANDSCAPE_BOARD_FRAME := Vector2(558.0, 248.0)
 const LANDSCAPE_ZONE_CARD_SIZE := Vector2(31.0, 31.0)
+# 7 slots + 6 gaps of 3 px must fit the 332 px zone row in one line.
+const PORTRAIT_ZONE_CARD_SIZE := Vector2(44.0, 44.0)
 const LANDSCAPE_RESERVE_CARD_SIZE := Vector2(30.0, 30.0)
+const GOLD := Color("#ffe36e")
 
 var controller: GameController
 var board_container: Control
@@ -70,6 +73,16 @@ func _ready() -> void:
 	controller.start_level(level, Game.progress.inventory)
 	render()
 	_play_intro()
+
+func _notification(what: int) -> void:
+	if controller == null:
+		return
+	match what:
+		NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_APPLICATION_PAUSED:
+			controller.pause()
+		NOTIFICATION_APPLICATION_FOCUS_IN, NOTIFICATION_APPLICATION_RESUMED:
+			if not _help_shown:
+				controller.resume()
 
 func _process(_delta: float) -> void:
 	if controller == null:
@@ -254,19 +267,37 @@ func _build_main_column() -> VBoxContainer:
 	board_container.z_index = 1
 	board_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	board_layer.add_child(board_container)
-	instruction_label = Label.new()
-	instruction_label.name = "InstructionOverlay"
-	instruction_label.text = Localizer.t("instruction")
-	instruction_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	instruction_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	instruction_label.add_theme_color_override("font_color", TEXT_PRIMARY)
-	instruction_label.add_theme_font_size_override("font_size", 10)
-	instruction_label.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	instruction_label.offset_top = -18
-	instruction_label.offset_bottom = 0
-	instruction_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	instruction_label.z_index = 0
-	board_layer.add_child(instruction_label)
+	# The instruction sits over the board on a readable backing and fades out
+	# after the first action, so it never competes with the cards mid-game.
+	instruction_label = null
+	if controller == null or controller.action_history.is_empty():
+		var instruction := PanelContainer.new()
+		instruction.name = "InstructionOverlay"
+		var backing := StyleBoxFlat.new()
+		backing.bg_color = Color(0.10, 0.06, 0.04, 0.82)
+		backing.set_corner_radius_all(6)
+		backing.content_margin_left = 6
+		backing.content_margin_right = 6
+		backing.content_margin_top = 1
+		backing.content_margin_bottom = 1
+		instruction.add_theme_stylebox_override("panel", backing)
+		instruction.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+		instruction.offset_left = 4
+		instruction.offset_right = -4
+		instruction.offset_top = -20
+		instruction.offset_bottom = -4
+		instruction.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		instruction.z_index = 50
+		instruction_label = Label.new()
+		instruction_label.text = Localizer.t("instruction")
+		instruction_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		instruction_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		instruction_label.add_theme_color_override("font_color", TEXT_PRIMARY)
+		instruction_label.add_theme_font_size_override("font_size", 9)
+		instruction_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		instruction_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		instruction.add_child(instruction_label)
+		board_layer.add_child(instruction)
 	col.add_child(board_panel)
 
 	if _is_landscape:
@@ -341,7 +372,7 @@ func _build_zone_panel() -> PanelContainer:
 func _build_controls(horizontal: bool) -> PanelContainer:
 	var panel := _make_unframed_panel()
 	panel.name = "Powers"
-	panel.custom_minimum_size = Vector2(344, 52) if horizontal else Vector2(60, 0)
+	panel.custom_minimum_size = Vector2(344, 60) if horizontal else Vector2(60, 0)
 	var content: BoxContainer = HBoxContainer.new() if horizontal else VBoxContainer.new()
 	content.add_theme_constant_override("separation", 4)
 	panel.add_child(content)
@@ -361,7 +392,7 @@ func _build_controls(horizontal: bool) -> PanelContainer:
 	for p in PowerManager.POWERS:
 		var button := _make_power_button(p)
 		if horizontal:
-			button.custom_minimum_size = Vector2(0, 44)
+			button.custom_minimum_size = Vector2(0, 52)
 			button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		power_box.add_child(button)
 	return panel
@@ -526,7 +557,7 @@ func _reserve_card_size() -> Vector2:
 	return Vector2(side, side)
 
 func _zone_card_size() -> Vector2:
-	return LANDSCAPE_ZONE_CARD_SIZE if _is_landscape else CARD_DISPLAY_SIZE
+	return LANDSCAPE_ZONE_CARD_SIZE if _is_landscape else PORTRAIT_ZONE_CARD_SIZE
 
 func _apply_board_panel_height() -> void:
 	if _board_panel == null or board_container == null:
@@ -685,6 +716,9 @@ func _update_deck_button(btn: Button, deck: DeckManager) -> void:
 		_fade_out_deck(btn)
 		return
 	btn.set_meta("faded", false)
+	var fade: Tween = btn.get_meta("fade_tween", null)
+	if fade != null and fade.is_valid():
+		fade.kill()
 	btn.modulate = Color.WHITE
 	btn.scale = Vector2.ONE
 	btn.visible = true
@@ -711,11 +745,11 @@ func _fade_out_deck(btn: Button) -> void:
 		return
 	btn.set_meta("faded", true)
 	var t := create_tween()
+	btn.set_meta("fade_tween", t)
 	t.set_parallel(true)
 	t.tween_property(btn, "modulate:a", 0.0, 0.3)
 	t.tween_property(btn, "scale", Vector2(0.7, 0.7), 0.3)
-	await t.finished
-	btn.visible = false
+	t.chain().tween_callback(func(): btn.visible = false)
 
 func _make_unframed_panel(vertical_margin: float = 4.0) -> PanelContainer:
 	var panel := PanelContainer.new()
@@ -749,13 +783,8 @@ func _viewport_is_landscape() -> bool:
 	return viewport_size.x >= viewport_size.y
 
 func _power_name(p: String) -> String:
-	match p:
-		"hold":
-			return "Hold"
-		"undo":
-			return "Undo"
-		"refresh":
-			return "Refresh"
+	if p in PowerManager.POWERS:
+		return Localizer.t("power_" + p)
 	return p
 
 func _power_icon(p: String) -> String:
@@ -772,6 +801,8 @@ func _on_help() -> void:
 	if _help_shown:
 		return
 	_help_shown = true
+	if controller != null:
+		controller.pause()
 	var overlay := Control.new()
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.z_index = 900
@@ -806,7 +837,12 @@ func _on_help() -> void:
 	var close := Button.new()
 	close.text = Localizer.t("close")
 	close.custom_minimum_size = Vector2(0, 40)
-	close.pressed.connect(func(): overlay.queue_free(); _help_shown = false)
+	close.pressed.connect(func():
+		overlay.queue_free()
+		_help_shown = false
+		if controller != null:
+			controller.resume()
+	)
 	col.add_child(close)
 
 func _on_card(card_id: String) -> void:
@@ -850,9 +886,19 @@ func _on_reserve_return(card_id: String) -> void:
 	await _perform_move(card.type, source_rect, snap, target_index, result)
 	_check_end()
 
+func _dismiss_instruction() -> void:
+	if instruction_label == null or not is_instance_valid(instruction_label):
+		return
+	var overlay := instruction_label.get_parent() as Control
+	instruction_label = null
+	var t := create_tween()
+	t.tween_property(overlay, "modulate:a", 0.0, 0.3)
+	t.tween_callback(overlay.queue_free)
+
 func _perform_move(card_type: String, source_rect: Rect2, snap: Dictionary, target_index: int, result: Dictionary) -> void:
 	if not result["ok"]:
 		return
+	_dismiss_instruction()
 	var matched: Array = result["matched_ids"]
 	# Keep the two existing zone cards on screen until the arriving third card
 	# has landed. Non-matching moves can render immediately.
@@ -887,13 +933,18 @@ func _on_power(power: String) -> void:
 	if controller.status != GameController.Status.PLAYING or _animating_card:
 		return
 	_play_sfx("select")
+	var result: Dictionary = {}
 	match power:
 		"hold":
-			controller.use_hold()
+			result = controller.use_hold()
 		"undo":
-			controller.use_undo()
+			result = controller.use_undo()
 		"refresh":
-			controller.use_refresh()
+			result = controller.use_refresh()
+	if bool(result.get("ok", false)):
+		_dismiss_instruction()
+		# Power stock is permanent: persist it now, not only on the end screen.
+		Game.save_progress()
 	render()
 	_check_end()
 
@@ -928,9 +979,10 @@ func _reserve_card_rect(card_id: String) -> Rect2:
 
 func _animate_card_to_zone(card_type: String, source_rect: Rect2, target_rect: Rect2, matched: bool, target_node: Control) -> void:
 	_animating_card = true
-	var ghost := _make_card_rect(card_type, false, CARD_DISPLAY_SIZE)
+	var ghost_size := source_rect.size if source_rect.size.x > 0.0 else CARD_DISPLAY_SIZE
+	var landing_scale := Vector2.ONE * (target_rect.size.x / ghost_size.x) if target_rect.size.x > 0.0 else Vector2.ONE
+	var ghost := _make_card_rect(card_type, false, ghost_size)
 	ghost.global_position = source_rect.position
-	ghost.pivot_offset = CARD_DISPLAY_SIZE / 2.0
 	ghost.rotation = deg_to_rad(4.0)
 	ghost.scale = Vector2(1.08, 1.08)
 	ghost.z_index = 2000
@@ -944,7 +996,7 @@ func _animate_card_to_zone(card_type: String, source_rect: Rect2, target_rect: R
 	tween.set_trans(Tween.TRANS_CUBIC)
 	tween.set_ease(Tween.EASE_IN_OUT)
 	tween.tween_property(ghost, "global_position", target_rect.position, 0.3)
-	tween.tween_property(ghost, "scale", Vector2.ONE, 0.3)
+	tween.tween_property(ghost, "scale", landing_scale, 0.3)
 	tween.tween_property(ghost, "rotation", 0.0, 0.3)
 	await tween.finished
 	await get_tree().process_frame
@@ -1127,28 +1179,45 @@ func _show_end(win: bool) -> void:
 		return
 	_ended = true
 	_play_sfx("win" if win else "lose")
+	var granted: Array = []
 	if win:
-		Game.complete_level(controller.stars, controller.rewards)
+		granted = Game.complete_level(controller.stars, controller.rewards)
+	else:
+		# Powers spent during a lost attempt are already gone from the inventory.
+		Game.save_progress()
 
 	var shade := ColorRect.new()
-	shade.color = Color(0, 0, 0, 0.78)
+	shade.color = Color(0, 0, 0, 0.72)
 	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
 	shade.z_index = 1000
 	shade.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(shade)
 
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.z_index = 1001
+	add_child(center)
+
+	var panel := _make_panel(PANEL_BACKGROUND.darkened(0.25), PANEL_BORDER, 14)
+	var panel_style := panel.get_theme_stylebox("panel") as StyleBoxFlat
+	panel_style.bg_color.a = 0.96
+	panel_style.content_margin_left = 18
+	panel_style.content_margin_right = 18
+	panel_style.content_margin_top = 12
+	panel_style.content_margin_bottom = 14
+	panel.custom_minimum_size = Vector2(240, 0)
+	panel.theme = UiHelpers.warm_theme()
+	center.add_child(panel)
+
 	var info := VBoxContainer.new()
-	info.set_anchors_preset(Control.PRESET_FULL_RECT)
-	info.offset_bottom = -84
 	info.alignment = BoxContainer.ALIGNMENT_CENTER
-	info.add_theme_constant_override("separation", 8)
-	info.z_index = 1001
-	add_child(info)
+	info.add_theme_constant_override("separation", 6)
+	panel.add_child(info)
 
 	var stage_num := Label.new()
 	stage_num.text = str(controller.level_id)
 	stage_num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	stage_num.add_theme_font_size_override("font_size", 48)
+	stage_num.add_theme_font_size_override("font_size", 40)
 	stage_num.add_theme_color_override("font_color", TEXT_PRIMARY)
 	info.add_child(stage_num)
 
@@ -1156,7 +1225,12 @@ func _show_end(win: bool) -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 18)
 	title.add_theme_color_override("font_color", TEXT_MUTED)
-	title.text = Localizer.t("level_complete") if win else Localizer.t("no_moves")
+	if win:
+		title.text = Localizer.t("level_complete")
+	elif controller.loss_reason == GameController.LossReason.TIMEOUT:
+		title.text = Localizer.t("time_up")
+	else:
+		title.text = Localizer.t("no_moves")
 	info.add_child(title)
 
 	if win:
@@ -1165,7 +1239,12 @@ func _show_end(win: bool) -> void:
 		stars_row.add_theme_constant_override("separation", 6)
 		info.add_child(stars_row)
 		for i in 3:
-			var star := UiHelpers.symbol_label("★" if i < controller.stars else "☆", 40)
+			var earned: bool = i < controller.stars
+			var star := UiHelpers.symbol_label("★" if earned else "☆", 36)
+			star.add_theme_color_override("font_color", GOLD if earned else Color(1, 1, 1, 0.35))
+			star.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			star.custom_minimum_size = Vector2(40, 44)
+			star.pivot_offset = star.custom_minimum_size / 2.0
 			star.modulate = Color(1, 1, 1, 0)
 			star.scale = Vector2(0.3, 0.3)
 			stars_row.add_child(star)
@@ -1177,62 +1256,47 @@ func _show_end(win: bool) -> void:
 		time_line.add_theme_color_override("font_color", TEXT_PRIMARY)
 		info.add_child(time_line)
 
-		if controller.rewards.size() > 0:
+		if granted.size() > 0:
 			var reward_title := Label.new()
 			reward_title.text = Localizer.t("stage_reward")
 			reward_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			reward_title.add_theme_font_size_override("font_size", 14)
+			reward_title.add_theme_font_size_override("font_size", 13)
 			reward_title.add_theme_color_override("font_color", TEXT_MUTED)
 			info.add_child(reward_title)
-			for r in controller.rewards:
+			for r in granted:
 				var rtype := str(r.get("type", ""))
 				var qty := int(r.get("quantity", 0))
-				var line := Label.new()
-				line.text = "%s  +%d" % [_power_name(rtype), qty]
+				var line := UiHelpers.symbol_label("%s %s  +%d" % [_power_icon(rtype), _power_name(rtype), qty], 15)
 				line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-				line.add_theme_font_size_override("font_size", 16)
-				line.add_theme_color_override("font_color", Color("#ffe36e"))
+				line.add_theme_color_override("font_color", GOLD)
 				info.add_child(line)
 
-		var total_stars := Label.new()
-		total_stars.text = "★ %d/%d" % [Game.progress.total_stars(), LevelLoader.load_all_level_ids().size() * 3]
+		var total_stars := UiHelpers.symbol_label(UiHelpers.total_stars_text(), 14)
 		total_stars.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		total_stars.add_theme_font_size_override("font_size", 16)
-		total_stars.add_theme_color_override("font_color", Color("#ffe36e"))
-		total_stars.add_theme_font_override("font", UiHelpers.symbol_font())
+		total_stars.add_theme_color_override("font_color", GOLD)
 		info.add_child(total_stars)
 
+	var gap := Control.new()
+	gap.custom_minimum_size = Vector2(0, 4)
+	info.add_child(gap)
+
 	var buttons := HBoxContainer.new()
-	buttons.anchor_left = 0.0
-	buttons.anchor_right = 1.0
-	buttons.anchor_top = 1.0
-	buttons.anchor_bottom = 1.0
-	buttons.offset_top = -76.0
-	buttons.offset_bottom = -16.0
 	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
-	buttons.add_theme_constant_override("separation", 12)
-	buttons.z_index = 1002
-	add_child(buttons)
+	buttons.add_theme_constant_override("separation", 10)
+	info.add_child(buttons)
 
 	if win and LevelLoader.level_exists(int(controller.level_id) + 1):
-		var next_btn := Button.new()
-		next_btn.text = Localizer.t("next_level")
-		next_btn.custom_minimum_size = Vector2(150, 44)
-		next_btn.pressed.connect(func(): Game.start_level(int(controller.level_id) + 1))
-		buttons.add_child(next_btn)
-
+		buttons.add_child(_make_end_button(Localizer.t("next_level"), func(): Game.start_level(int(controller.level_id) + 1)))
 	if not win:
-		var retry_btn := Button.new()
-		retry_btn.text = Localizer.t("retry")
-		retry_btn.custom_minimum_size = Vector2(150, 44)
-		retry_btn.pressed.connect(func(): Game.restart_level())
-		buttons.add_child(retry_btn)
+		buttons.add_child(_make_end_button(Localizer.t("retry"), func(): Game.restart_level()))
+	buttons.add_child(_make_end_button(Localizer.t("menu"), func(): Game.go_to_menu()))
 
-	var menu_btn := Button.new()
-	menu_btn.text = Localizer.t("menu")
-	menu_btn.custom_minimum_size = Vector2(150, 44)
-	menu_btn.pressed.connect(func(): Game.go_to_menu())
-	buttons.add_child(menu_btn)
+func _make_end_button(text: String, callback: Callable) -> Button:
+	var btn := Button.new()
+	btn.text = text
+	btn.custom_minimum_size = Vector2(108, 40)
+	btn.pressed.connect(callback)
+	return btn
 
 func _reveal_stars(stars_row: HBoxContainer) -> void:
 	await get_tree().process_frame
@@ -1285,7 +1349,10 @@ func _play_intro() -> void:
 
 func _show_error(msg: String) -> void:
 	var label := Label.new()
-	label.text = "Erro: %s" % msg
+	label.text = "%s: %s" % [Localizer.t("error"), msg]
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_color_override("font_color", TEXT_PRIMARY)
+	label.z_index = 100
 	label.set_anchors_preset(Control.PRESET_FULL_RECT)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
