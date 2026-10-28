@@ -1,7 +1,7 @@
 class_name DifficultyProfile
 extends RefCounted
 
-# Parametric progression for the 10 shipped levels. Each row is a full
+# Parametric progression for the shipped levels. Each row is a full
 # LevelConfig for a difficulty. Future levels (11+) are added by appending a
 # row here — no code changes required anywhere else.
 const LEVELS := {

@@ -1,6 +1,11 @@
 class_name LevelLoader
 extends RefCounted
 
+# Each attempt at a difficulty level draws a fresh base seed (a new, still
+# solvable board per retry). Tests and tools set this to reproduce the
+# profile's fixed seed instead.
+static var deterministic := false
+
 static func level_path(level_id) -> String:
 	return "res://levels/level_%s.json" % str(level_id)
 
@@ -61,18 +66,22 @@ static func _resolve_from_difficulty(level: Dictionary, deck_pool: Array, board_
 	if config == null:
 		return {"error": "no difficulty profile for level %d" % difficulty}
 	config.with_deck(deck_pool)
+	if not deterministic and bool(level.get("randomize_per_attempt", true)):
+		var seed_rng := RandomNumberGenerator.new()
+		seed_rng.randomize()
+		config.seed = seed_rng.randi_range(1, 1 << 30)
 	var validation := config.validate()
 	if not validation["valid"]:
 		return {"error": "difficulty config invalid: %s" % "; ".join(validation["errors"])}
 	var base_attempts := maxi(1, int(level.get("max_generation_attempts", config.max_attempts)))
 	var started := Time.get_ticks_msec()
 	var result: Dictionary = {}
-	for round in 4:
-		config.max_attempts = base_attempts * (round + 1)
+	for retry_round in 4:
+		config.max_attempts = base_attempts * (retry_round + 1)
 		result = config.generate(board_size)
 		if result["ok"]:
 			break
-		push_warning("difficulty %d: round %d failed (%d attempts)" % [difficulty, round + 1, config.max_attempts])
+		push_warning("difficulty %d: round %d failed (%d attempts)" % [difficulty, retry_round + 1, config.max_attempts])
 	if not result["ok"]:
 		push_error("difficulty %d: could not generate a solvable board after %d attempts" % [difficulty, config.max_attempts])
 		return {"error": "could not generate a solvable board for difficulty %d after %d attempts" % [difficulty, config.max_attempts]}

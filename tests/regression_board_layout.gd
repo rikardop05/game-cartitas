@@ -2,7 +2,7 @@ extends SceneTree
 
 # Full-pipeline regression: logical slots (LevelConfig) -> LayoutGenerator
 # positions -> level_screen._board_layout()/render() final node positions, for
-# L1-L10 across every viewport (portrait canonical 360x640, landscape 640x360
+# every shipped level across every viewport (portrait canonical 360x640, landscape 640x360
 # and the four mandatory desktop resolutions). Loads the real scene headless.
 # Guards double compression: no same-layer collisions, no unique-position
 # collapse, intentional cross-layer overlap preserved, non-degenerate pitch and
@@ -154,6 +154,7 @@ func _report(level_id: String, view: Dictionary, scene, controller, container: C
 		print(l)
 
 func _run() -> void:
+	LevelLoader.deterministic = true
 	var game = root.get_node("Game")
 	for level_id in LEVELS:
 		for view in VIEWS:

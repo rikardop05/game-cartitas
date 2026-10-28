@@ -115,13 +115,25 @@ func _reasons_mention(reasons: Array[String], needle: String) -> bool:
 	return false
 
 func test_same_seed_reproduces_board_and_decks() -> void:
-	for id in range(1, 11):
+	LevelLoader.deterministic = true
+	for id in LevelLoader.load_all_level_ids():
 		var a := LevelLoader.load_level(id)
 		var b := LevelLoader.load_level(id)
-		Assert.is_false(a.has("error"), "level %d loads" % id)
-		Assert.equals(_cards_sig(a), _cards_sig(b), "level %d same seed -> same board" % id)
-		Assert.equals(str(a["deck_a"]), str(b["deck_a"]), "level %d same seed -> same deck_a" % id)
-		Assert.equals(str(a["deck_b"]), str(b["deck_b"]), "level %d same seed -> same deck_b" % id)
+		Assert.is_false(a.has("error"), "level %s loads" % id)
+		Assert.equals(_cards_sig(a), _cards_sig(b), "level %s same seed -> same board" % id)
+		Assert.equals(str(a["deck_a"]), str(b["deck_a"]), "level %s same seed -> same deck_a" % id)
+		Assert.equals(str(a["deck_b"]), str(b["deck_b"]), "level %s same seed -> same deck_b" % id)
+	LevelLoader.deterministic = false
+
+func test_each_attempt_gets_a_new_solvable_board() -> void:
+	LevelLoader.deterministic = false
+	for id in ["1", "6", "11"]:
+		var a := LevelLoader.load_level(id)
+		var b := LevelLoader.load_level(id)
+		Assert.is_false(a.has("error") or b.has("error"), "level %s loads with a random seed" % id)
+		Assert.not_equals(int(a["generation_metrics"]["seed_used"]), int(b["generation_metrics"]["seed_used"]), "level %s draws a new seed per attempt" % id)
+		Assert.not_equals(_cards_sig(a), _cards_sig(b), "level %s retry shows a different board" % id)
+		Assert.is_true(SolvabilityChecker.is_solvable(a) and SolvabilityChecker.is_solvable(b), "level %s random boards stay solvable" % id)
 
 func _cards_sig(level: Dictionary) -> Array:
 	var sig := []

@@ -7,6 +7,8 @@ extends SceneTree
 const LOAD_BUDGET_MS := 1500
 
 func _init() -> void:
+	# Profile seeds keep the budget measurement reproducible in CI.
+	LevelLoader.deterministic = true
 	var total_generation_ms := 0
 	var total_wall_ms := 0
 	var started_all := Time.get_ticks_msec()
