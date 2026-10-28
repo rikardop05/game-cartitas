@@ -33,19 +33,26 @@ func total_stars() -> int:
 func is_level_unlocked(level_id) -> bool:
 	return int(level_id) <= unlocked_level
 
-func record_victory(level_id, stars: int, rewards: Array) -> void:
+# Rewards are granted on the first victory only, so replays improve stars but
+# cannot farm powers. Returns the rewards actually granted.
+func record_victory(level_id, stars: int, rewards: Array) -> Array:
 	var key := str(level_id)
 	var entry: Dictionary = levels.get(key, {})
+	var first_win := not bool(entry.get("completed", false))
 	entry["completed"] = true
 	entry["stars"] = maxi(int(entry.get("stars", 0)), stars)
 	levels[key] = entry
-	for r in rewards:
-		var rtype := str(r.get("type", ""))
-		var qty := int(r.get("quantity", 0))
-		inventory[rtype] = int(inventory.get(rtype, 0)) + qty
+	var granted: Array = []
+	if first_win:
+		for r in rewards:
+			var rtype := str(r.get("type", ""))
+			var qty := int(r.get("quantity", 0))
+			inventory[rtype] = int(inventory.get(rtype, 0)) + qty
+			granted.append(r)
 	var next := int(level_id) + 1
 	if next > unlocked_level:
 		unlocked_level = next
+	return granted
 
 func to_dict() -> Dictionary:
 	return {
