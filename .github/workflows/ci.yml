@@ -31,3 +31,9 @@ jobs:
 
       - name: Generation load-time probe (tests/probe_generation.gd)
         run: ./godot --headless --script res://tests/probe_generation.gd
+
+      - name: HUD bounds regression, portrait + landscape (tests/repro_hud_bounds.gd)
+        run: ./godot --headless --script res://tests/repro_hud_bounds.gd
+
+      - name: Board capture regression (tests/repro_board_capture.gd)
+        run: ./godot --headless --script res://tests/repro_board_capture.gd

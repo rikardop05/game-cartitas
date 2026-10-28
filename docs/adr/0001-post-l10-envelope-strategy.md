@@ -79,6 +79,11 @@ suas guardrails, seja validado pelo pipeline e reportado em `generation_metrics`
   espaciais.
 - Métricas tornam overlap/free ratio/ocupação observáveis; falhas nunca são silenciadas.
 - Determinismo preservado (seed por perfil, `seed_used`, deck determinístico).
+  *Atualização:* no jogo, cada tentativa sorteia uma seed base nova
+  (`randomize_per_attempt`, default `true`) para dar um tabuleiro novo a cada retry; a
+  seed do perfil continua sendo a referência reproduzível usada por testes e
+  ferramentas via `LevelLoader.deterministic = true`. O deck segue determinístico a
+  partir do `seed_used`.
 
 **Negativas / riscos:**
 - **Teto prático da dificuldade config-only ≈ L9–L10:** L10 vs L11 são quase

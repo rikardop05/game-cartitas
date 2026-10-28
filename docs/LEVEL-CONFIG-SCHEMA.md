@@ -21,6 +21,10 @@ difficulty. Adding a level 11+ is just adding a row to `DifficultyProfile.LEVELS
 - `difficulty` — row index into `DifficultyProfile.LEVELS`; the board is
   generated from the profile. Optional overrides:
   - `max_generation_attempts` (int) — attempt budget (default 60).
+  - `randomize_per_attempt` (bool, default `true`) — draw a fresh base seed on
+    every load so each retry shows a new (still solvable) board. `false` keeps
+    the profile's fixed `seed`. Tests and tools force the fixed seed for every
+    level with `LevelLoader.deterministic = true`.
 - `deck` — card types drawn from during play. Each type count is a multiple
   of 3 so totals stay valid with the board.
 

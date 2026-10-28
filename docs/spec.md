@@ -10,7 +10,7 @@ O sistema precisa ser modular e orientado a dados, para que novos níveis, tipos
 
 ## Solution
 
-Um jogo 2D em pixel art (Godot 4.7.1, GDScript), mobile-first em retrato (9:16) com suporte a desktop para desenvolvimento. Cada *Level* é definido por um arquivo JSON (data-driven). O jogador seleciona *Cards* disponíveis do *Board* (ou dos dois *Support Decks*) para a *Clearing Zone*; três cartas do mesmo *Card Type* são removidas automaticamente. Três *Powers* limitados (*Hold*, *Undo*, *Refresh*) ajudam a gerenciar o espaço e a ordem. A vitória ocorre quando não restam cartas ativas; a derrota ocorre quando a Clearing Zone está cheia sem combinação possível.
+Um jogo 2D em pixel art (Godot 4.7, GDScript), mobile-first em retrato (9:16) com suporte a desktop para desenvolvimento. Cada *Level* é definido por um arquivo JSON (data-driven). O jogador seleciona *Cards* disponíveis do *Board* (ou dos dois *Support Decks*) para a *Clearing Zone*; três cartas do mesmo *Card Type* são removidas automaticamente. Três *Powers* limitados (*Hold*, *Undo*, *Refresh*) ajudam a gerenciar o espaço e a ordem. A vitória ocorre quando não restam cartas ativas; a derrota ocorre quando a Clearing Zone está cheia sem combinação possível.
 
 A lógica é separada da apresentação: `GameController` (classe pura, sem `Node`) contém todo o estado e as regras; a UI apenas representa o estado interno e envia ações.
 
@@ -66,14 +66,14 @@ A lógica é separada da apresentação: `GameController` (classe pura, sem `Nod
 ## Implementation Decisions
 
 ### Engine e apresentação
-- **Engine:** Godot 4.7.1 estável, **GDScript**.
+- **Engine:** Godot 4.7 estável, **GDScript**. O jogo roda na edição padrão; o addon de editor Godot-MCP (`addons/godot_mcp`, C#) exige a edição .NET.
 - **Plataforma:** mobile-first em retrato (9:16) como layout de referência; paisagem 16:9 continua disponível. Touch-first, com suporte a mouse.
 - **Resolução:** base lógica principal 640×360, janela de desenvolvimento 1280×720, com modo retrato 360×640, upscale inteiro e `texture_filter = nearest`.
-- **Unidades visuais:** arte-fonte de carta 64×64 px; carta renderizada 48×48 px (Reserve usa duas colunas dinâmicas de 24–48 px); UI em grade de 8px; ícones de poderes 16×16.
+- **Unidades visuais:** arte-fonte de carta 64×64 px; carta renderizada 48×48 px (Reserve usa duas colunas dinâmicas de 28–38 px); UI em grade de 8px; ícones de poderes 16×16.
 
 ### Arquitetura e costuras
 - **`GameController`** (classe pura, `RefCounted`, sem `Node`): orquestra o fluxo da partida, mantém o `GameState` como fonte de verdade e recebe as ações. É a **costura de teste** única.
-- **Módulos internos** (orquestrados pelo `GameController`): `BoardManager`, `ClearingZoneManager`, `DeckManager`, `PowerManager`, `HistoryManager`, `TimerManager`, `ProgressManager`, `SaveManager`.
+- **Módulos internos** (orquestrados pelo `GameController`): `BoardManager`, `ClearingZoneManager`, `DeckManager`, `PowerManager`, `TimerManager`, `ProgressManager`, `SaveManager`. O histórico de ações fica em `GameController.action_history`.
 - **Máquina de estados:** `status ∈ { READY, PLAYING, PAUSED, WON, LOST }`. Ações normais só em `PLAYING`; em `WON`/`LOST` nada é aceito.
 - **Separação lógica/apresentação:** a UI lê `GameState` e envia ações; regras nunca dependem de elementos visuais (ex.: nunca `if card.visible`, sempre `card.state`).
 
@@ -90,8 +90,9 @@ A lógica é separada da apresentação: `GameController` (classe pura, sem `Nod
 - **Combinação:** após cada inserção, se houver ≥3 cartas do mesmo tipo na zona, remove exatamente as 3 primeiras (`MATCHED` → `REMOVED`), automaticamente. A quarta carta do mesmo tipo permanece para combinação futura.
 - **Clearing Zone:** capacidade configurável por *Level* (padrão **7**). A ordem de inserção é preservada (para apresentação e Undo).
 - **Vitória:** tabuleiro, os dois *Support Decks*, a *Clearing Zone* e a *Reserve* vazios (estado interno como fonte de verdade).
-- **Derrota:** Clearing Zone cheia rejeita qualquer nova carta e encerra o Level. Função `checkDefeat()` extensível.
+- **Derrota:** Clearing Zone cheia rejeita qualquer nova carta e encerra o Level. Além disso, se a zona encher e o jogador não tiver *Hold* nem *Undo* em estoque (nada mais pode liberar um slot), o Level termina na hora, sem esperar um toque condenado. O motivo fica em `loss_reason` (`ZONE_FULL` ou `TIMEOUT`) para a UI. Função `checkDefeat()` extensível.
 - **Time limit (opcional):** um Level pode declarar `time_limit` (segundos); ausente = sem limite (comportamento padrão). Quando presente, a UI mostra contagem regressiva e, ao exceder o limite durante `PLAYING`, o Level é perdido (`check_timeout()`). As estrelas continuam baseadas no tempo decorrido; JSONs devem garantir `time_limit > two_stars`.
+- **Pausa:** o cronômetro pausa (`GameController.pause()`) enquanto a ajuda está aberta e quando o app perde o foco ou vai para segundo plano.
 
 ### Powers
 - **Hold** (antes chamado "Remove"): move as 3 cartas mais antigas (as mais à esquerda) da Clearing Zone para a *Reserve*, liberando espaço. Devolver da Reserve para a zona é ação livre (toque) e ocupa espaço normal da zona. Se a zona estiver vazia, o uso é rejeitado sem consumir o poder.
@@ -104,10 +105,10 @@ A lógica é separada da apresentação: `GameController` (classe pura, sem `Nod
 - Apenas a carta do topo é visível e tocável; usá-la a envia à Clearing Zone e avança o índice. As cartas usam os mesmos *Card Types* do tabuleiro.
 
 ### Progressão e persistência
-- **Tipos de carta:** 12 tipos no total. Nível 1 = 3 tipos × 3 cópias = 9 cartas (camada única, sem sobreposição). Níveis seguintes aumentam tipos (até 12) e camadas/sobreposição. Cada tipo sempre em múltiplos de 3.
-- **Estrelas:** `t ≤ threeStarsTime → 3★`, `t ≤ twoStarsTime → 2★`, caso contrário `1★`. Limites por *Level*. Sem score numérico, sem bônus de velocidade. Estrelas armazenadas por *Level* para futuras missões/desbloqueios.
-- **Desbloqueio:** vencer o *Level* N libera N+1. Recompensas (ex.: `+1 Hold`) definidas no JSON do *Level*.
-- **Levels:** arquivos JSON data-driven (tipos, cópias, camadas/posições, decks, capacidade, tempos, `time_limit` opcional, recompensas). Valores de fácil edição para testes e balanceamento. O jogo traz 10 Levels (30★). O layout é gerado a cada tentativa: `layout.randomize_per_attempt` (default `true`) sorteia uma seed base mantendo a garantia de solução via `SolvabilityChecker`; com `randomize_per_attempt: false` e `layout.seed` presente, o layout é determinístico.
+- **Tipos de carta:** 12 tipos no total. O Level 1 usa poucos tipos e só 2 camadas com sobreposição leve (perfil em `DifficultyProfile`). Níveis seguintes aumentam tipos (até 12) e camadas/sobreposição. Cada tipo sempre em múltiplos de 3.
+- **Estrelas:** `t ≤ threeStarsTime → 3★`, `t ≤ twoStarsTime → 2★`, caso contrário `1★`, com `t` em segundos inteiros (o mesmo valor do relógio MM:SS exibido). Limites por *Level*. Sem score numérico, sem bônus de velocidade. Estrelas armazenadas por *Level* para futuras missões/desbloqueios.
+- **Desbloqueio:** vencer o *Level* N libera N+1. Recompensas (ex.: `+1 Hold`) definidas no JSON do *Level* são concedidas **só na primeira vitória**; replays melhoram as estrelas mas não dão poderes de novo.
+- **Levels:** arquivos JSON data-driven (tipos, cópias, camadas/posições, decks, capacidade, tempos, `time_limit` opcional, recompensas). Valores de fácil edição para testes e balanceamento. O jogo traz 11 Levels (33★). Cada JSON aponta para uma linha de `DifficultyProfile` (`difficulty`). O layout é gerado a cada tentativa: `randomize_per_attempt` (default `true`) sorteia uma seed base mantendo a garantia de solução via `SolvabilityChecker`; com `randomize_per_attempt: false` vale a seed fixa do perfil. Testes usam `LevelLoader.deterministic = true` para reproduzir a seed do perfil em todos os Levels.
 - **Save:** JSON em `user://` via `SaveManager` (níveis concluídos, estrelas por nível, inventário).
 
 ### Localização
@@ -117,13 +118,13 @@ A lógica é separada da apresentação: `GameController` (classe pura, sem `Nod
 
 - **O que testar:** comportamento externo apenas — chamar a API do `GameController` e verificar o `GameState` resultante. Nunca testar detalhes internos nem Nodes de UI.
 - **Costura:** `GameController` (classe pura). Todos os testes rodam headless, sem cena nem janela.
-- **Framework:** GUT (Godot Unit Test) — a confirmar; alternativa GdUnit4.
+- **Framework:** runner próprio (`tests/run_tests.gd` + `tests/assert.gd`), sem dependências; scripts de smoke/regressão de cena rodam com `--script` no CI.
 - **Módulos cobertos:** regras core, poderes, decks, bloqueio, vitória/derrota, timer, progressão.
 - **Casos obrigatórios (do documento original, §46):**
   - Combinação: 3 iguais → removidas; 2 iguais → permanecem.
   - Bloqueio: carta coberta → indisponível; carta superior removida → inferior disponível.
   - Clearing Zone: capacidade respeitada; zona cheia rejeita a oitava carta.
-  - Derrota: zona cheia → derrota, inclusive quando a nova carta formaria um trio.
+  - Derrota: zona cheia → derrota, inclusive quando a nova carta formaria um trio; zona cheia sem Hold/Undo → derrota imediata.
   - Vitória: última carta removida (com decks, zona e reserva vazios) → vitória.
   - Undo: seleção → estado A; undo → estado anterior.
   - Hold: move as 3 cartas mais antigas para a Reserve; zona vazia rejeita sem consumir; devolver à zona funciona.

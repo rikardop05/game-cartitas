@@ -5,7 +5,7 @@ A card-matching puzzle game built in Godot. The player clears a board by selecti
 ## Language
 
 **Level**:
-A playable stage with its own board layout, support decks, initial powers, and time thresholds.
+A playable stage with its own board layout, support decks, time thresholds, and first-win rewards.
 _Avoid_: Stage, Phase, "fase" (in code)
 
 **Board**:
