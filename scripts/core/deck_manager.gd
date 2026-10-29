@@ -27,9 +27,14 @@ func draw_type() -> String:
 	current_index += 1
 	return t
 
-func return_type() -> void:
+# Puts a drawn card back on top. The slot below the index belongs to the most
+# recent draw, which may already be matched, so the returned type overwrites it
+# instead of resurrecting whatever was drawn last.
+func return_type(card_type: String = "") -> void:
 	if current_index > 0:
 		current_index -= 1
+		if card_type != "":
+			card_types[current_index] = card_type
 
 func shuffle_remaining(rng: RandomNumberGenerator) -> void:
 	var n := card_types.size()

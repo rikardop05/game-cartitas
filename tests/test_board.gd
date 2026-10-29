@@ -94,3 +94,78 @@ func test_multi_layer_depth_chain() -> void:
 	mid.location = Card.Location.CLEARING_ZONE
 	bm.recalculate_availability()
 	Assert.equals(base.state, Card.State.AVAILABLE, "base unblocked after mid removed")
+
+func test_board_manager_uses_shared_spatial_rule() -> void:
+	var lower := Card.new("lower", "cat", Vector2(0, 0), 0)
+	var higher := Card.new("higher", "dog", Vector2(40, 0), 1)
+	var bm := BoardManager.new([lower, higher])
+	var covered := lower.get_display_rect()
+	var covering := higher.get_display_rect()
+	Assert.equals(BoardSpatialRules.blocks(covered, covering), bm.is_blocked(lower),
+		"BoardManager.is_blocked agrees with BoardSpatialRules.blocks (above 0.10)")
+	Assert.is_true(bm.is_blocked(lower), "coverage above 0.10 blocks at runtime")
+	var low_just := Card.new("low_just", "cat", Vector2(0, 0), 0)
+	var hi_just := Card.new("hi_just", "dog", Vector2(44, 0), 1)
+	var bm2 := BoardManager.new([low_just, hi_just])
+	Assert.equals(BoardSpatialRules.blocks(low_just.get_display_rect(), hi_just.get_display_rect()),
+		bm2.is_blocked(low_just), "sub-threshold agreement below 0.10")
+	Assert.is_false(bm2.is_blocked(low_just), "coverage just below 0.10 does NOT block at runtime")
+	Assert.is_false(BoardSpatialRules.at_or_above_threshold(0.09999995), "coverage 0.09999995 is NOT at threshold")
+	Assert.is_true(BoardSpatialRules.at_or_above_threshold(0.1), "coverage 0.10 IS at threshold")
+
+func test_coverage_below_threshold_does_not_block() -> void:
+	var lower := Card.new("lower", "cat", Vector2(0, 0), 0)
+	var higher := Card.new("higher", "dog", Vector2(44, 0), 1)
+	var bm := BoardManager.new([lower, higher])
+	bm.recalculate_availability()
+	Assert.equals(lower.state, Card.State.AVAILABLE, "coverage 0.083 < 0.10 does not block")
+	Assert.equals(higher.state, Card.State.AVAILABLE, "covering card available")
+
+func test_coverage_at_threshold_blocks() -> void:
+	var lower := Card.new("lower", "cat", Vector2(0, 0), 0)
+	var higher := Card.new("higher", "dog", Vector2(43.0, 0), 1)
+	var bm := BoardManager.new([lower, higher])
+	bm.recalculate_availability()
+	Assert.equals(lower.state, Card.State.HIDDEN, "coverage 0.104 >= 0.10 blocks")
+	Assert.equals(higher.state, Card.State.AVAILABLE, "covering card available")
+
+func test_coverage_above_threshold_blocks() -> void:
+	var lower := Card.new("lower", "cat", Vector2(0, 0), 0)
+	var higher := Card.new("higher", "dog", Vector2(40, 0), 1)
+	var bm := BoardManager.new([lower, higher])
+	bm.recalculate_availability()
+	Assert.equals(lower.state, Card.State.HIDDEN, "coverage 0.167 > 0.10 blocks")
+
+func test_removing_single_threshold_blocker_unblocks() -> void:
+	var lower := Card.new("lower", "cat", Vector2(0, 0), 0)
+	var higher := Card.new("higher", "dog", Vector2(40, 0), 1)
+	var bm := BoardManager.new([lower, higher])
+	bm.recalculate_availability()
+	Assert.equals(lower.state, Card.State.HIDDEN, "covered before removal")
+	higher.state = Card.State.REMOVED
+	higher.location = Card.Location.CLEARING_ZONE
+	bm.recalculate_availability()
+	Assert.equals(lower.state, Card.State.AVAILABLE, "unblocked immediately after only blocker removed")
+
+func test_coverage_just_below_threshold_does_not_block() -> void:
+	var lower := Card.new("lower", "cat", Vector2(0, 0), 0)
+	var higher := Card.new("higher", "dog", Vector2(43.200024, 0), 1)
+	var bm := BoardManager.new([lower, higher])
+	bm.recalculate_availability()
+	Assert.equals(lower.state, Card.State.AVAILABLE, "coverage 0.0999995 < 0.10 does not block")
+
+func test_removed_target_never_blocked() -> void:
+	var target := Card.new("target", "cat", Vector2(0, 0), 0)
+	var higher := Card.new("higher", "dog", Vector2(0, 0), 1)
+	var bm := BoardManager.new([target, higher])
+	Assert.is_true(bm.is_blocked(target), "active covered target is blocked")
+	target.state = Card.State.REMOVED
+	Assert.is_false(bm.is_blocked(target), "removed target is never blocked")
+
+func test_target_outside_board_never_blocked() -> void:
+	var target := Card.new("target", "cat", Vector2(0, 0), 0)
+	var higher := Card.new("higher", "dog", Vector2(0, 0), 1)
+	var bm := BoardManager.new([target, higher])
+	Assert.is_true(bm.is_blocked(target), "board target is blocked while covered")
+	target.location = Card.Location.CLEARING_ZONE
+	Assert.is_false(bm.is_blocked(target), "target outside board is never blocked")

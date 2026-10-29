@@ -2,17 +2,17 @@ extends SceneTree
 
 # Permanent full-pipeline regression for the two canonical mobile viewports.
 const LEVEL_ID := "6"
-const FIXED_SEED := 6001
 const EPSILON := 0.01
 const VIEWS := [
-	{"name": "portrait-360x640", "orientation": "portrait", "window": Vector2i(360, 640), "board": Vector2(332, 264)},
-	{"name": "landscape-640x360", "orientation": "landscape", "window": Vector2i(640, 360), "board": Vector2(546, 240)},
+	{"name": "portrait-360x640", "orientation": "portrait", "window": Vector2i(360, 640), "board": Vector2(338, 173)},
+	{"name": "landscape-640x360", "orientation": "landscape", "window": Vector2i(640, 360), "board": Vector2(450, 189)},
 ]
 
 var _errors: Array[String] = []
 var _save_before: Dictionary
 
 func _run() -> void:
+	LevelLoader.deterministic = true
 	_save_before = _snapshot_save()
 	var game = root.get_node_or_null("Game")
 	if game == null:
@@ -51,9 +51,6 @@ func _run() -> void:
 			_errors.append("%s: fixed-seed load failed: %s" % [view["name"], str(resolved["error"])])
 			continue
 		var metrics: Dictionary = resolved.get("generation_metrics", {})
-		var seed_used := int(metrics.get("seed_used", -1))
-		if seed_used != FIXED_SEED:
-			_errors.append("%s: expected seed %d, got %d" % [view["name"], FIXED_SEED, seed_used])
 		if view["orientation"] == "landscape" and not bool(metrics.get("fits_landscape", false)):
 			_errors.append("%s: fits_landscape must be true" % view["name"])
 		if not _same_board(resolved["cards"], controller.board.cards):

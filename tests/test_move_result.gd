@@ -87,7 +87,8 @@ func test_zone_overflow_reason_defeat_and_legacy() -> void:
 		"time_thresholds": {"three_stars": 60, "two_stars": 120},
 		"rewards": [],
 	}
-	g.start_level(lvl)
+	# An Undo in stock keeps the full zone recoverable, so the overflow path runs.
+	g.start_level(lvl, {"undo": 1})
 	g.select_card("a")
 	g.select_card("b")
 	var r := g.select_card_typed("c")

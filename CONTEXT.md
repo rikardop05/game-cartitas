@@ -5,11 +5,11 @@ A card-matching puzzle game built in Godot. The player clears a board by selecti
 ## Language
 
 **Level**:
-A playable stage with its own board layout, support decks, initial powers, and time thresholds.
+A playable stage with its own board layout, support decks, time thresholds, and first-win rewards.
 _Avoid_: Stage, Phase, "fase" (in code)
 
 **Board**:
-The physical layout of cards in a level, including layers and overlap.
+The physical layout of cards in a level: a grid-aligned layered pyramid (upper layers sit on half-card offsets over the layer below), so cards overlap across layers but never within one.
 
 **Card**:
 A single playable tile on the board. Has a unique id, a type, a position, a layer, a state, and a source (board or support deck).
@@ -22,7 +22,7 @@ _Avoid_: typeId (that is a field, not the concept)
 The lifecycle of a card: `HIDDEN`, `AVAILABLE`, `SELECTED`, `MATCHED`, `REMOVED`.
 
 **Blocked**:
-A card that cannot be selected because at least one active higher-layer card overlaps it.
+A card that cannot be selected because at least one active higher-layer card covers 10% or more of its area.
 
 **Clearing Zone**:
 The limited temporary area that holds selected cards. Three cards of the same type are removed automatically.
@@ -44,6 +44,16 @@ A temporary per-level area that holds cards moved out of the Clearing Zone. Card
 
 **Inventory**:
 The persistent stock of powers owned by the player.
+
+**Endless Mode**:
+A post-campaign mode, unlocked by winning the last campaign Level, made of consecutive Rounds with rising difficulty, a Score and a local best.
+
+**Round**:
+One generated board inside an Endless Mode run. Clearing it leads to the next Round; losing ends the run.
+_Avoid_: Level (inside Endless Mode), stage
+
+**Score**:
+Endless Mode points: per matched card plus a bonus per cleared Round. The campaign has no Score, only stars.
 
 **Action**:
 A single player interaction: select a card, draw a deck card, or use a power.

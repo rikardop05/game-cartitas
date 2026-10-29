@@ -11,6 +11,30 @@ suportados; qualquer expansão estrutural só será permitida mediante um
 `BoardEnvelopeProfile`/capability explícito — **nunca** por condicional de número de
 nível.
 
+> **Atualização (2026-10-28) — geração em grade e envelope paisagem 466×214.**
+> A decisão (níveis 11+ config-only dentro do envelope atual, sem condicional por número
+> de nível) **continua valendo**; mudou o que o "envelope" e os parâmetros significam. O
+> gerador espalhado (`LayoutGenerator` com `occupancy_*`, `overlap*`, `pitch_ratio`,
+> `slot_*`, `anchor_*`) foi substituído por `BoardPipeline` via `LevelBoardGenerator`:
+> cada linha de `DifficultyProfile` é mapeada por `LevelConfig.build_spec()` para um
+> `BoardSpec`, e o tabuleiro sai **alinhado à malha** — base em malha de cartas inteiras
+> (`columns × rows` agora é a base em cartas), layers superiores piramidais no ponto
+> médio exato de dois suportes adjacentes (offset de meia carta), sem sobreposição no
+> mesmo layer. Os parâmetros de dificuldade passam a ser `layers`, `layer_ratio`,
+> `free_ratio[_min/_max]`, `columns × rows` e os tipos/decks; as menções abaixo a
+> `overlap_h/v`, `occupancy_h/v`, `MIN_SAME_LAYER_DIST_RATIO`, `min_exposure` e
+> `_spatial_validation` descrevem o gerador anterior e valem aqui só como histórico.
+> Uma única regra de bloqueio (`BoardSpatialRules`, 10% da área) é usada por geração,
+> `LevelValidator` e `BoardManager`. Os guardrails globais seguem em
+> `LevelConfig.validate()` (grade base 7×6 em cartas, 4 layers, 36 cartas,
+> `MIN_CARD_SIZE_PX = 24`). Os envelopes vigentes são **retrato 332×264** (o 256×195
+> citado no topo é anterior) e **paisagem 466×214** (antes 546×240, reduzido pelo
+> redesenho da tela do Level, com coluna do mascote e painel de poderes;
+> `LevelConfig.PORTRAIT_BOARD_ENVELOPE` / `LANDSCAPE_BOARD_ENVELOPE`); `generation_metrics` reporta o ajuste (`fits_*`, `min_card_px_*`) para o tabuleiro
+> realmente ocupado. A garantia de solvabilidade (`SolvabilityChecker` com decks e
+> poderes) e a seed por tentativa (`randomize_per_attempt`, `LevelLoader.deterministic`)
+> não mudaram. Detalhes em `docs/LEVEL-CONFIG-SCHEMA.md`.
+
 ## Context
 
 A progressão é data-driven: cada nível é um JSON com `difficulty` apontando para uma
@@ -79,6 +103,11 @@ suas guardrails, seja validado pelo pipeline e reportado em `generation_metrics`
   espaciais.
 - Métricas tornam overlap/free ratio/ocupação observáveis; falhas nunca são silenciadas.
 - Determinismo preservado (seed por perfil, `seed_used`, deck determinístico).
+  *Atualização:* no jogo, cada tentativa sorteia uma seed base nova
+  (`randomize_per_attempt`, default `true`) para dar um tabuleiro novo a cada retry; a
+  seed do perfil continua sendo a referência reproduzível usada por testes e
+  ferramentas via `LevelLoader.deterministic = true`. O deck segue determinístico a
+  partir do `seed_used`.
 
 **Negativas / riscos:**
 - **Teto prático da dificuldade config-only ≈ L9–L10:** L10 vs L11 são quase

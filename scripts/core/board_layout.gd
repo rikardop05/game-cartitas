@@ -2,7 +2,7 @@ class_name BoardLayout
 extends RefCounted
 
 # Single source of scale for rendering the board. Cards are generated in
-# logical space (see LayoutGenerator._geometry); this function maps logical
+# logical space (see LevelBoardGenerator); this function maps logical
 # positions onto a target container with one uniform scale. Nothing snaps to a
 # fixed pitch here — the logical spacing is preserved, so distinct slots never
 # collapse onto the same cell. When the fitted scale would fall below

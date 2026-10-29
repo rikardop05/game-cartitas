@@ -6,6 +6,7 @@ const LevelSnapshotType = preload("res://scripts/core/level_snapshot.gd")
 const MoveResult = MoveResultType
 
 enum Status { READY, PLAYING, PAUSED, WON, LOST }
+enum LossReason { NONE, ZONE_FULL, TIMEOUT }
 
 const HOLD_COUNT := 3
 
@@ -26,6 +27,7 @@ var time_thresholds: Dictionary = {}
 var time_limit: float = 0.0
 var rewards: Array = []
 var stars: int = 0
+var loss_reason: int = LossReason.NONE
 var action_history: Array = []
 
 var _id_counter: int = 0
@@ -66,6 +68,7 @@ func start_level(level_data: Dictionary, inventory: Dictionary = {}) -> void:
 	reserve.clear()
 	powers = PowerManager.new(inventory)
 	stars = 0
+	loss_reason = LossReason.NONE
 	action_history.clear()
 
 	status = Status.PLAYING
@@ -171,9 +174,9 @@ func use_undo_typed() -> MoveResultType:
 		board.recalculate_availability()
 	else:
 		if card.source == Card.Source.DECK_A:
-			deck_a.return_type()
+			deck_a.return_type(card.type)
 		else:
-			deck_b.return_type()
+			deck_b.return_type(card.type)
 		card.state = Card.State.REMOVED
 	_check_end()
 	return _make_result(true)
@@ -206,19 +209,22 @@ func check_defeat() -> bool:
 
 func check_timeout() -> void:
 	if status == Status.PLAYING and time_limit > 0.0 and timer.elapsed_seconds() > time_limit:
-		_lose()
+		_lose(LossReason.TIMEOUT)
 
 func time_remaining() -> float:
 	if time_limit <= 0.0:
 		return INF
 	return maxf(0.0, time_limit - timer.elapsed_seconds())
 
+# Whole seconds, matching the MM:SS clock the player sees: 01:00 still earns
+# the 60 s threshold.
 func calculate_stars(elapsed: float) -> int:
 	var three: float = float(time_thresholds.get("three_stars", INF))
 	var two: float = float(time_thresholds.get("two_stars", INF))
-	if elapsed <= three:
+	var seconds := floorf(elapsed)
+	if seconds <= three:
 		return 3
-	if elapsed <= two:
+	if seconds <= two:
 		return 2
 	return 1
 
@@ -332,9 +338,14 @@ func _check_end() -> void:
 		status = Status.WON
 		timer.stop()
 		stars = calculate_stars(timer.elapsed_seconds())
+	elif zone.is_full() and not powers.has("hold") and not powers.has("undo"):
+		# Nothing can free a slot any more, so every remaining action would
+		# overflow: end the level now instead of waiting for a doomed tap.
+		_lose()
 
-func _lose() -> void:
+func _lose(reason: int = LossReason.ZONE_FULL) -> void:
 	status = Status.LOST
+	loss_reason = reason
 	timer.stop()
 
 func _get_deck(deck_id: String) -> DeckManager:

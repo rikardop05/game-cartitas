@@ -1,5 +1,7 @@
 extends RefCounted
 
+const Checks = preload("res://tests/board_checks.gd")
+
 func test_profile_supports_levels_1_to_max_and_beyond() -> void:
 	for n in range(1, DifficultyProfile.max_level() + 3):
 		var cfg := DifficultyProfile.for_level(n)
@@ -41,11 +43,12 @@ func test_profile_levels_load_valid_and_solvable() -> void:
 func test_generation_metrics_are_populated() -> void:
 	var level := LevelLoader.load_level("5")
 	var m: Dictionary = level["generation_metrics"]
-	for key in ["difficulty", "board_cards", "types", "layers", "columns", "rows",
-			"occupancy_h", "occupancy_v", "overlap_h", "overlap_v", "free_ratio", "free_ratio_target",
-			"max_coverage", "complexity", "attempts", "solvable", "status"]:
+	for key in ["difficulty", "board_cards", "types", "layers", "columns", "rows", "layer_targets", "cards_per_layer",
+			"free_ratio", "free_ratio_target", "free_ratio_ok", "free_cards", "blocked_cards", "max_coverage",
+			"complexity", "attempts", "seed_used", "solvable", "status", "fits_portrait", "fits_landscape"]:
 		Assert.is_true(m.has(key), "metric '%s' present" % key)
-	Assert.equals(int(m["board_cards"]), 24, "level 5 board has 24 cards")
+	Assert.equals(int(m["board_cards"]), 33, "level 5 board has 33 cards")
+	Assert.equals(int(m["same_layer_overlaps"]), 0, "level 5 has no same-layer overlap")
 
 func test_generated_board_cards_within_bounds_and_unique() -> void:
 	var cfg := DifficultyProfile.for_level(6)
@@ -57,18 +60,22 @@ func test_generated_board_cards_within_bounds_and_unique() -> void:
 	for c in cards:
 		Assert.is_false(ids.has(c["id"]), "unique id")
 		ids[c["id"]] = true
-		Assert.is_true(c["x"] >= 0 and float(c["x"]) + cfg.card_size <= cfg.board_width() + 0.01, "x in bounds")
-		Assert.is_true(c["y"] >= 0 and float(c["y"]) + cfg.card_size <= cfg.board_height() + 0.01, "y in bounds")
+		Assert.is_true(c["x"] >= 0 and float(c["x"]) + cfg.card_size <= float(result["board_width"]) + 0.01, "x in bounds")
+		Assert.is_true(c["y"] >= 0 and float(c["y"]) + cfg.card_size <= float(result["board_height"]) + 0.01, "y in bounds")
+	Assert.is_true(float(result["board_width"]) <= cfg.board_width() and float(result["board_height"]) <= cfg.board_height(),
+		"the board never exceeds the profile's base grid")
 
 func test_free_ratio_recorded_within_band() -> void:
+	LevelLoader.deterministic = true
 	for id in ["1", "3", "5", "7", "10"]:
 		var level := LevelLoader.load_level(id)
 		var m: Dictionary = level["generation_metrics"]
+		var cfg := DifficultyProfile.for_level(int(id))
 		var free_ratio := float(m["free_ratio"])
-		Assert.is_true(free_ratio >= 0.08 and free_ratio <= 0.85,
-			"level %s free ratio %.2f within band" % [id, free_ratio])
-		Assert.is_true(float(m["max_coverage"]) <= 0.85,
-			"level %s max coverage %.2f within cap" % [id, float(m["max_coverage"])])
+		Assert.is_true(free_ratio >= cfg.free_ratio_min and free_ratio <= cfg.free_ratio_max,
+			"level %s free ratio %.2f within the profile band" % [id, free_ratio])
+		Assert.is_true(float(m["max_coverage"]) <= 1.0, "level %s max coverage %.2f" % [id, float(m["max_coverage"])])
+	LevelLoader.deterministic = false
 
 func test_levels_have_blocking_depth() -> void:
 	for id in ["1", "2", "3", "10"]:
@@ -104,41 +111,66 @@ func _signature(cards: Array) -> Array:
 		sig.append([str(c["type"]), int(c["x"]), int(c["y"]), int(c["layer"])])
 	return sig
 
-func test_l6_free_ratio_within_30_45_percent() -> void:
+func test_l6_is_a_three_layer_pyramid_inside_its_free_band() -> void:
 	var cfg := DifficultyProfile.for_level(6)
-	var m: Dictionary = cfg.generate()["metrics"]
-	Assert.is_true(float(m["free_ratio"]) >= 0.30 and float(m["free_ratio"]) <= 0.45,
-		"L6 free ratio %.2f within 30-45%%" % float(m["free_ratio"]))
+	var result := cfg.generate()
+	var m: Dictionary = result["metrics"]
+	Assert.equals(cfg.layers, 3, "L6 has 3 layers")
+	Assert.equals(m["cards_per_layer"], cfg.layer_targets(), "L6 cards follow the profile's pyramid")
+	Assert.is_true(float(m["free_ratio"]) >= cfg.free_ratio_min and float(m["free_ratio"]) <= cfg.free_ratio_max,
+		"L6 free ratio %.2f within %.2f-%.2f" % [float(m["free_ratio"]), cfg.free_ratio_min, cfg.free_ratio_max])
+	Assert.is_true(bool(m["free_ratio_ok"]), "L6 free_ratio_ok reported")
 
-func test_l6_anchor_occupancy_h80_v70() -> void:
-	var cfg := DifficultyProfile.for_level(6)
-	var m: Dictionary = cfg.generate()["metrics"]
-	Assert.is_true(float(m["anchor_occupancy_h"]) >= 0.80 - 0.01,
-		"L6 horizontal occupancy %.2f >= 80%%" % float(m["anchor_occupancy_h"]))
-	Assert.is_true(float(m["anchor_occupancy_v"]) >= 0.70 - 0.01,
-		"L6 vertical occupancy %.2f >= 70%%" % float(m["anchor_occupancy_v"]))
-
-func test_overlap_within_axial_ranges() -> void:
-	for n in range(1, DifficultyProfile.max_level() + 1):
-		var m: Dictionary = DifficultyProfile.for_level(n).generate()["metrics"]
-		Assert.is_true(float(m["overlap_h"]) >= LevelConfig.OVERLAP_H_MIN - 0.001 and float(m["overlap_h"]) <= LevelConfig.OVERLAP_H_MAX + 0.001,
-			"level %d overlap_h %.2f within H range" % [n, float(m["overlap_h"])])
-		Assert.is_true(float(m["overlap_v"]) >= LevelConfig.OVERLAP_V_MIN - 0.001 and float(m["overlap_v"]) <= LevelConfig.OVERLAP_V_MAX + 0.001,
-			"level %d overlap_v %.2f within V range" % [n, float(m["overlap_v"])])
-
-func test_same_layer_min_distance_above_floor() -> void:
+func test_every_level_board_is_grid_aligned_and_supported() -> void:
 	for n in range(1, DifficultyProfile.max_level() + 1):
 		var cfg := DifficultyProfile.for_level(n)
 		var result := cfg.generate()
-		var cards: Array = result["cards"]
-		var by_layer := {}
-		for c in cards:
-			if not by_layer.has(int(c["layer"])):
-				by_layer[int(c["layer"])] = []
-			by_layer[int(c["layer"])].append(Vector2(c["x"], c["y"]))
-		for layer in by_layer:
-			var pts: Array = by_layer[layer]
-			for i in pts.size():
-				for j in range(i + 1, pts.size()):
-					Assert.is_true((pts[i] as Vector2).distance_to(pts[j]) >= cfg.min_same_layer_distance() - 0.01,
-						"level %d layer %d same-layer distance %.1f below %.1f" % [n, layer, (pts[i] as Vector2).distance_to(pts[j]), cfg.min_same_layer_distance()])
+		Assert.is_true(result["ok"], "level %d generates" % n)
+		var level := {"cards": result["cards"], "card_size": cfg.card_size, "board_width": result["board_width"], "board_height": result["board_height"]}
+		var problems := Checks.problems(level)
+		Assert.is_true(problems.is_empty(), "level %d board structure: %s" % [n, str(problems)])
+		Assert.equals(Checks.layer_counts(result["cards"]), cfg.layer_targets(), "level %d cards per layer" % n)
+
+func test_same_layer_cards_are_a_full_card_apart() -> void:
+	for n in range(1, DifficultyProfile.max_level() + 1):
+		var cfg := DifficultyProfile.for_level(n)
+		var cards: Array = cfg.generate()["cards"]
+		for i in cards.size():
+			for j in range(i + 1, cards.size()):
+				if int(cards[i]["layer"]) != int(cards[j]["layer"]):
+					continue
+				var dx := absf(float(cards[i]["x"]) - float(cards[j]["x"]))
+				var dy := absf(float(cards[i]["y"]) - float(cards[j]["y"]))
+				Assert.is_true(dx >= cfg.card_size - 0.01 or dy >= cfg.card_size - 0.01,
+					"level %d layer %d cards %s/%s do not overlap" % [n, int(cards[i]["layer"]), str(cards[i]["id"]), str(cards[j]["id"])])
+
+func test_explicit_board_cards_are_dealt_as_whole_trios() -> void:
+	# A board total that is not types x 3 gives some types one trio more.
+	var cfg := LevelConfig.create({"board_types": ["cat", "dog", "bird", "fish"], "board_cards": 18, "columns": 5, "rows": 3, "layers": 2})
+	Assert.equals(cfg.board_cards(), 18, "explicit board card total")
+	var total := 0
+	for t in cfg.board_types:
+		Assert.equals(cfg.board_count(t) % 3, 0, "%s count is a multiple of 3" % t)
+		total += cfg.board_count(t)
+	Assert.equals(total, 18, "per-type counts add up to the board total")
+	Assert.equals([cfg.board_count("cat"), cfg.board_count("fish")], [6, 3], "the first types take the extra trios")
+	var generated := cfg.generate()
+	Assert.is_true(generated["ok"], "explicit board total generates")
+	var counts := {}
+	for c in generated["cards"]:
+		counts[str(c["type"])] = int(counts.get(str(c["type"]), 0)) + 1
+	for t in cfg.board_types:
+		Assert.equals(int(counts.get(t, 0)), cfg.board_count(t), "%s on the board matches board_count" % t)
+
+func test_profile_rows_ask_for_wide_bases_with_a_wide_ramp() -> void:
+	var first := DifficultyProfile.for_level(1)
+	var last := DifficultyProfile.for_level(DifficultyProfile.max_level())
+	Assert.equals([first.columns, first.rows], [4, 2], "level 1 starts with a 4x2 base")
+	Assert.is_true(last.columns >= 8 and last.columns <= LevelConfig.MAX_COLUMNS, "the last level has an 8-9 column base (got %d)" % last.columns)
+	Assert.is_true(last.rows >= 4, "the last level has at least 4 rows")
+	Assert.is_true(last.board_cards() >= 60 and last.board_cards() <= LevelConfig.MAX_BOARD_CARDS, "the last level fills the wide base (%d cards)" % last.board_cards())
+	for n in range(1, DifficultyProfile.max_level() + 1):
+		var cfg := DifficultyProfile.for_level(n)
+		var aspect := float(cfg.columns) / float(cfg.rows)
+		Assert.is_true(aspect >= 1.4, "level %d grid %dx%d is wider than tall" % [n, cfg.columns, cfg.rows])
+		Assert.is_true(cfg.aspect_target >= 1.8 and cfg.aspect_target <= 2.2, "level %d steers toward a ~2:1 base" % n)

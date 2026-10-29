@@ -1,8 +1,8 @@
 extends SceneTree
 
-# Full-pipeline regression: logical slots (LevelConfig) -> LayoutGenerator
+# Full-pipeline regression: profile grid (LevelConfig) -> BoardPipeline
 # positions -> level_screen._board_layout()/render() final node positions, for
-# L1-L10 across every viewport (portrait canonical 360x640, landscape 640x360
+# every shipped level across every viewport (portrait canonical 360x640, landscape 640x360
 # and the four mandatory desktop resolutions). Loads the real scene headless.
 # Guards double compression: no same-layer collisions, no unique-position
 # collapse, intentional cross-layer overlap preserved, non-degenerate pitch and
@@ -20,7 +20,10 @@ const VIEWS := [
 const SAME_LAYER_EPS := 1.0
 const EPSILON := 0.01
 const DEGENERATE_PITCH := 8.0
-const MIN_CARD_SCALE := 0.85
+# Rendered board cards: never above the UI cap, never below a touch-sized minimum.
+const MIN_CARD_SCALE := LevelConfig.MIN_CARD_SCALE
+const MAX_CARD_PX := LevelConfig.MAX_BOARD_CARD_PX
+const MIN_CARD_PX := 30.0
 
 var _fails: Array[String] = []
 
@@ -107,8 +110,8 @@ func _report(level_id: String, view: Dictionary, scene, controller, container: C
 			gen_layer[int(c.layer)] = []
 		gen_layer[int(c.layer)].append(Vector2(c.position.x, c.position.y))
 	var cfg := DifficultyProfile.for_level(int(level_id))
-	var slot_cols := cfg.slot_columns()
-	var slot_rows := cfg.slot_rows()
+	var slot_cols := cfg.columns
+	var slot_rows := cfg.rows
 	var min_eff := INF
 	var layer_lines: Array = []
 	for layer in gen_layer:
@@ -135,6 +138,10 @@ func _report(level_id: String, view: Dictionary, scene, controller, container: C
 	_check(same_layer_col == 0, "L%s %s: %d same-layer coincidences after re-snap" % [level_id, view["name"], same_layer_col])
 	var cross := _cross_layer_overlaps(final_by_id, controller, node_size.y)
 	_check(cross >= 1, "L%s %s: no intentional cross-layer overlap found" % [level_id, view["name"]])
+	_check(node_size.y <= MAX_CARD_PX + 0.01,
+		"L%s %s: rendered card %.1fpx above the %.0fpx cap" % [level_id, view["name"], node_size.y, MAX_CARD_PX])
+	_check(node_size.y >= MIN_CARD_PX - 0.01,
+		"L%s %s: rendered card %.1fpx below the %.0fpx touch minimum" % [level_id, view["name"], node_size.y, MIN_CARD_PX])
 	_check(rendered_scale >= MIN_CARD_SCALE - 0.01,
 		"L%s %s: rendered card scale %.2f below MIN_CARD_SCALE %.2f" % [level_id, view["name"], rendered_scale, MIN_CARD_SCALE])
 	_check(out_of_container == 0,
@@ -154,6 +161,7 @@ func _report(level_id: String, view: Dictionary, scene, controller, container: C
 		print(l)
 
 func _run() -> void:
+	LevelLoader.deterministic = true
 	var game = root.get_node("Game")
 	for level_id in LEVELS:
 		for view in VIEWS:

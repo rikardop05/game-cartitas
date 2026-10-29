@@ -1,23 +1,49 @@
 # Art Guide — Cartitas Infinity (EN)
 
-Guide for the pixel artist to add card, effects, and UI sprites to the Godot project.
+Guide for the pixel artist to produce and deliver card and UI sprites.
+The illustrated version to send to the artist is the PDF [`ART-DELIVERY-PT.pdf`](ART-DELIVERY-PT.pdf) (Portuguese; source: `docs/art-delivery/ART-DELIVERY-PT.html`).
 
 ## 1. Overview
 
-- 2D **pixel art** game, primary logical resolution **640×360** (16:9 landscape), with a **1280×720** development window, integer upscale, *nearest* filtering (no smoothing).
-- Portrait mode remains available at **360×640**, but it is not the current reference layout.
-- File format: **PNG**.
-- The sizes below are source-art sizes. The rendered size can change with the available layout area.
-- Current size units:
-  - **Card (face and back): 64×64 px**
-  - **Cards on the board, Support Decks and Clearing Zone: 48×48 px rendered**
-  - **Reserve cards: 24–48×24–48 px**, reduced and stacked in two columns according to the count
-  - **Power and star icons: 16×16 px**
-  - Base UI grid: **8 px** (use multiples of 8 for alignment).
+- 2D **pixel art** game, primary logical resolution **640×360** (16:9 landscape). The development window is **1280×720** (integer 2×) with *nearest* filtering (no smoothing).
+- Portrait mode remains available at **360×640**, but it is not the reference layout.
+- Format: **32-bit PNG (RGBA, 8 bits per channel)**, sRGB, non-interlaced.
+- All art is drawn at **1 art pixel = 1 logical game pixel**. The game scales by code; do not deliver upscaled files as production assets.
 
-## 2. Palette
+## 2. Sizes (card art standard)
 
-Use a **shared limited palette** (~32 colors) for cohesion. Each card type's base color is already defined in `scripts/core/card_type_registry.gd`:
+Card faces are delivered at **high resolution** and the game scales them at draw time: **square 960×960 px PNG** (minimum 512; prefer multiples of 64 — 960 = 64 × 15 keeps the pixel-art frame aligned). The current Pack A files are 480–960 px.
+
+Why: the UI is laid out at 640×360 (landscape) / 360×640 (portrait) **logical** px but drawn at the **physical screen resolution** (`stretch mode = canvas_items`). A 40 px logical card is 80 real px in a 1280×720 window, 120 px in 1080p fullscreen, and more on bigger screens. The game builds **mipmaps** when it loads the art and draws it with **trilinear** filtering (`UiHelpers.card_texture` + `_make_card_art`), so the GPU scales straight from the original to the real size — sharp at any resolution, no re-export needed.
+
+Sizes where a card appears (logical px; multiply by the window scale for real pixels):
+
+| Where | Displayed size |
+|-------|----------------|
+| Board | up to 40 (`LevelConfig.MAX_BOARD_CARD_PX`), smaller on big boards |
+| Clearing Zone | 40 (landscape) / 36 (portrait) |
+| Reserve | 18–40, in a grid that fits the box |
+| Support Decks | top card inside the 64 px slot |
+
+Consequence for the art: the subject must read at **~30 logical px** (strong silhouette, dark outline, few very thin details).
+
+## 3. Card anatomy
+
+The PNG is drawn **as the whole card face** (no extra background or border from the game). Follow the Pack A template (`assets/cards/card_dog.png`):
+
+- A pixel-art wooden **frame** around the edge (at 960 px each frame "pixel" is 15 px), bottom shadow included.
+- A light **inner area** (white with a lilac rim) with the **illustration centred**, dark outline, ~15% breathing room to the frame.
+- **Transparent** outside the frame; corners may use fully transparent pixels.
+- Same framing and lighting on every card so the set reads as one family.
+- Blocked cards are darkened by the game; do not deliver dark variants.
+
+## 3b. Painted HUD art
+
+Painted plaques and icons (stars, stopwatch, gear) live in `assets/ui/hud/` and follow the card standard: transparent high-resolution PNGs (icons >= 512 px; star plaques ~1024 px wide, one image per state `stars_1/2/3.png`), drawn with mipmaps and trilinear filtering.
+
+## 4. Palette
+
+Use a **shared limited palette** (~32 colors). Base colors per type live in `scripts/core/card_type_registry.gd`:
 
 | Type | Base color |
 |------|------------|
@@ -34,54 +60,72 @@ Use a **shared limited palette** (~32 colors) for cohesion. Each card type's bas
 | gem | `#6ac9d9` |
 | crystal | `#9a7ae0` |
 
-Providing a reference PNG of the full palette (cards + UI + background) in `assets/` is recommended.
+UI colors already in use: level screen background `#c78454`, panel border `#f3d28d`, text `#fff1d2`, stars `#ffe36e`, placeholder frame `#fff2d5`.
 
-## 3. Required files
+Note: `heart` (`#e06a6a`) and `cat` (`#e07a7a`) are nearly identical — tell them apart by symbol and silhouette, not color.
 
-| File (suggested) | Size | Description |
-|------------------|------|-------------|
-| `assets/cards/card_cat.png` … `card_crystal.png` | 64×64 | 12 card faces (one file per type) |
-| `assets/cards/back.png` | 64×64 | Back reserved for future use; Support Decks currently show the top face |
-| `assets/ui/power_hold.png` | 16×16 | Hold power icon |
-| `assets/ui/power_undo.png` | 16×16 | Undo power icon |
-| `assets/ui/power_refresh.png` | 16×16 | Refresh power icon |
-| `assets/ui/star_filled.png` | 16×16 | Filled star |
-| `assets/ui/star_empty.png` | 16×16 | Empty star |
-| `assets/ui/background.png` | 640×360 | Landscape screen background; portrait variant should be 360×640 |
+Deliver a `palette/palette.png` with every color used (one 8×8 square per color).
 
-**Naming convention:** `card_<type>.png` (e.g. `card_cat.png`), all lowercase. The 12 types are: `cat, dog, bird, fish, flower, moon, star, sun, leaf, heart, gem, crystal`.
+## 5. Files
 
-> Do not use the reference screenshot (1920×1020) as the production size. It is a presentation image; create art against the 640×360 logical resolution.
+### Phase 1 — required (already loaded by the game)
 
-## 4. Card visual states
+| File | Size | Description |
+|------|------|-------------|
+| `assets/cards/card_<type>.png` | 960×960 (min. 512, square) | 12 card faces, one per type (frame included) |
 
-Logic already drives state; art/overlay only represents it. In v1, the project uses **code-applied overlays** (tint/darken) — no drawn variants needed:
+`UiHelpers.card_texture()` looks for `res://assets/cards/card_<type>.png`; without the file, the game uses the placeholder (color + emoji). The 12 types: `cat, dog, bird, fish, flower, moon, star, sun, leaf, heart, gem, crystal`.
 
-- **Blocked (HIDDEN):** darkened/desaturated (gray overlay).
+### Phase 2 — optional (not wired in code yet; the UI uses text/emoji today)
+
+| File | Size | Description |
+|------|------|-------------|
+| `assets/cards/back.png` | 48×48 | Card back (reserved for future use) |
+| `assets/ui/power_hold.png` | 16×16 | Hold power icon (moves 3 cards from the Clearing Zone to the Reserve) |
+| `assets/ui/power_undo.png` | 16×16 | Undo power icon (returns the last Clearing Zone card) |
+| `assets/ui/power_refresh.png` | 16×16 | Refresh power icon (reshuffles the board and Support Decks) |
+| `assets/ui/star_filled.png` | 16×16 | Filled star (HUD) |
+| `assets/ui/star_empty.png` | 16×16 | Empty star (HUD) |
+| `assets/ui/background.png` | 640×360 | Screen background, landscape |
+| `assets/ui/background_portrait.png` | 360×640 | Screen background, portrait |
+
+The background sits behind dark semi-transparent panels and the cards: keep contrast low and avoid detail in the center.
+
+**Naming:** all lowercase, no spaces or accents, exactly as in the tables.
+
+> Do not use the 1920×1020 reference screenshot as a production size. It is a presentation image.
+
+## 6. Visual states
+
+Logic drives state; the art needs no variants.
+
 - **Available (AVAILABLE):** full color.
-- **Selected (SELECTED):** white outline (optional glow).
-- **Match (MATCHED):** scale + fade animation (done in code).
+- **Blocked (HIDDEN):** the code multiplies the card by 62% gray (`modulate = Color(0.62, 0.62, 0.62)`). Art must stay readable when darkened — avoid details that rely on dark tones.
+- **Selected / match:** the card flies to the Clearing Zone and, on a triple, disappears with scale + fade. All tweens; no outline or frame is drawn.
 
-## 5. Animations
+## 7. Animations
 
-Animations (flying to the Clearing Zone, match, unlock, shuffle) are **code tweens**, not frame-by-frame art. Only the static art above is required.
+Flying to the Clearing Zone, matching, unlocking and shuffling are **code tweens**. Only static art is needed.
 
-## 6. Godot import
+## 8. Delivery
 
-When adding a PNG to `assets/`, set in the *Import* panel:
+A single `.zip` whose root mirrors the project (it can be unzipped straight into the repository root):
 
-- **Filter:** Nearest
-- **Mipmaps:** off
-- **Compress:** Lossless (for pixel art)
+```
+cartitas_arte_v01_YYYY-MM-DD.zip
+├── assets/
+│   ├── cards/   card_cat.png … card_crystal.png (12)  [+ back.png]
+│   └── ui/      (phase 2, if delivered)
+├── palette/     palette.png
+├── source/      editable files (.aseprite, .psd, …)
+├── preview/     (optional) same art upscaled 4× — for review only
+└── LEIAME.txt   version, date, change list, notes
+```
 
-The project already sets nearest as the default filter; check new files only.
+## 9. Godot import (done by the integrator)
 
-## 7. Replacing placeholders
+- **Cards** (`assets/cards/`): just copy the PNG as `card_<type>.png`. The game builds the mipmaps and uses trilinear filtering on its own; no *Import* panel changes needed. Older art lives in `assets/cards/legacy/` (a folder Godot ignores).
+- **Pixel-art UI kit and icons** (`assets/ui/kit/`): Filter **Nearest** (project default), Mipmaps **off**, Compress **Lossless**, drawn at 1x or whole multiples.
+- **Painted backgrounds** (`assets/ui/`): the game applies linear filtering and the softening shader.
 
-The game currently uses **placeholders** (background color + emoji per type), defined in `scripts/core/card_type_registry.gd`. To switch to real art:
-
-1. Create the PNGs at the paths above.
-2. Optional loading already looks for `assets/cards/card_<type>.png`; without the file, the placeholder remains active.
-3. Power, star, back and background art are references for the next visual integration; the current UI still uses text, emoji and a color background for these elements.
-
-No game rule depends on art; art is purely presentation.
+No game rule depends on the art; art is presentation only.

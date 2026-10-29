@@ -1,6 +1,11 @@
 class_name LevelLoader
 extends RefCounted
 
+# Each attempt at a difficulty level draws a fresh base seed (a new, still
+# solvable board per retry). Tests and tools set this to reproduce the
+# profile's fixed seed instead.
+static var deterministic := false
+
 static func level_path(level_id) -> String:
 	return "res://levels/level_%s.json" % str(level_id)
 
@@ -61,18 +66,22 @@ static func _resolve_from_difficulty(level: Dictionary, deck_pool: Array, board_
 	if config == null:
 		return {"error": "no difficulty profile for level %d" % difficulty}
 	config.with_deck(deck_pool)
+	if not deterministic and bool(level.get("randomize_per_attempt", true)):
+		var seed_rng := RandomNumberGenerator.new()
+		seed_rng.randomize()
+		config.seed = seed_rng.randi_range(1, 1 << 30)
 	var validation := config.validate()
 	if not validation["valid"]:
 		return {"error": "difficulty config invalid: %s" % "; ".join(validation["errors"])}
 	var base_attempts := maxi(1, int(level.get("max_generation_attempts", config.max_attempts)))
 	var started := Time.get_ticks_msec()
 	var result: Dictionary = {}
-	for round in 4:
-		config.max_attempts = base_attempts * (round + 1)
+	for retry_round in 4:
+		config.max_attempts = base_attempts * (retry_round + 1)
 		result = config.generate(board_size)
 		if result["ok"]:
 			break
-		push_warning("difficulty %d: round %d failed (%d attempts)" % [difficulty, round + 1, config.max_attempts])
+		push_warning("difficulty %d: round %d failed (%d attempts)" % [difficulty, retry_round + 1, config.max_attempts])
 	if not result["ok"]:
 		push_error("difficulty %d: could not generate a solvable board after %d attempts" % [difficulty, config.max_attempts])
 		return {"error": "could not generate a solvable board for difficulty %d after %d attempts" % [difficulty, config.max_attempts]}
@@ -81,8 +90,8 @@ static func _resolve_from_difficulty(level: Dictionary, deck_pool: Array, board_
 	out.erase("difficulty")
 	out.erase("layout")
 	out["cards"] = result["cards"]
-	out["board_width"] = config.board_width()
-	out["board_height"] = config.board_height()
+	out["board_width"] = float(result["board_width"])
+	out["board_height"] = float(result["board_height"])
 	out["card_size"] = config.card_size
 	var metrics: Dictionary = result["metrics"]
 	metrics["generation_time_ms"] = elapsed_ms
@@ -111,22 +120,12 @@ static func _assign_shuffled_decks(level: Dictionary, pool: Array) -> void:
 	level["deck_b"] = p.slice(half)
 
 static func _assign_deterministic_decks(level: Dictionary, pool: Array, seed: int) -> void:
-	# Mirrors the deck split used by the generation pipeline (LayoutGenerator
-	# _instantiate_level) so the returned level matches the solvability check.
-	var p := pool.duplicate()
-	var rng := RandomNumberGenerator.new()
-	rng.seed = seed
-	_shuffle_seeded(p, rng)
-	var half := int(ceil(p.size() / 2.0))
-	level["deck_a"] = p.slice(0, half)
-	level["deck_b"] = p.slice(half)
+	# Same split LevelBoardGenerator used for the solvability check, so the
+	# returned level matches what was proven solvable.
+	var decks := LevelBoardGenerator.split_decks(pool, seed)
+	level["deck_a"] = decks["deck_a"]
+	level["deck_b"] = decks["deck_b"]
 
-static func _shuffle_seeded(arr: Array, rng: RandomNumberGenerator) -> void:
-	for i in range(arr.size() - 1, 0, -1):
-		var j := rng.randi_range(0, i)
-		var tmp = arr[i]
-		arr[i] = arr[j]
-		arr[j] = tmp
 
 static func _shuffle(arr: Array) -> void:
 	var rng := RandomNumberGenerator.new()
