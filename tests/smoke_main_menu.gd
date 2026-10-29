@@ -38,6 +38,7 @@ func _run() -> void:
 func _scenario(game) -> void:
 	game.progress = ProgressManager.new()
 	game.settings["sound"] = true
+	game.settings["volume"] = 1.0
 	game.settings["mascot"] = true
 	change_scene_to_file("res://scenes/main.tscn")
 	var menu = await _wait_scene("MainMenu")
@@ -65,28 +66,39 @@ func _scenario(game) -> void:
 	await _frames(3)
 	_check(menu.find_child("PlayButton", true, false) != null, "Back returns to the main menu")
 
-	# Options: sound toggle.
+	# Options: volume row (minus, slider, plus, mute glyph).
 	_press(menu, "OptionsButton")
 	await _frames(3)
 	_check(_find_label(menu, Localizer.t("options")) != null, "options screen shows its heading")
-	for node_name in ["LanguageButton", "OrientationButton", "MascotButton", "SoundButton", "ResetButton"]:
+	for node_name in ["LanguageButton", "OrientationButton", "MascotButton", "VolumeRow", "VolumeDown", "VolumeSlider", "VolumeUp", "SoundButton", "ResetButton"]:
 		_check(menu.find_child(node_name, true, false) != null, "options has %s" % node_name)
-	var sound_btn := menu.find_child("SoundButton", true, false) as Button
-	if sound_btn == null:
+	var mute := menu.find_child("SoundButton", true, false) as TextureButton
+	var slider := menu.find_child("VolumeSlider", true, false) as Control
+	if mute == null or slider == null:
 		return
-	_check(game.sound_enabled(), "sound starts enabled")
-	_check(sound_btn.text == "%s: %s" % [Localizer.t("sound_label"), Localizer.t("option_on")], "sound row reads On (got '%s')" % sound_btn.text)
-	_check(_sound_icon_is(menu, "icon_sound_on.png"), "sound row shows the 'on' icon")
-	sound_btn.pressed.emit()
-	await _frames(3)
-	_check(not game.sound_enabled(), "toggling sound turns it off")
-	_check(not bool(SaveManager.load(THROWAWAY_SAVE).get("settings", {}).get("sound", true)), "sound off is saved to the throwaway file")
-	sound_btn = menu.find_child("SoundButton", true, false) as Button
-	_check(sound_btn.text == "%s: %s" % [Localizer.t("sound_label"), Localizer.t("option_off")], "sound row reads Off (got '%s')" % sound_btn.text)
-	_check(_sound_icon_is(menu, "icon_sound_off.png"), "sound row shows the 'off' icon")
-	sound_btn.pressed.emit()
-	await _frames(3)
-	_check(game.sound_enabled(), "toggling sound again turns it back on")
+	_check(is_equal_approx(game.volume(), 1.0) and game.sound_enabled(), "sound starts at full volume")
+	_check(_sound_icon_is(menu, "icon_sound_on.png"), "volume row shows the 'on' glyph")
+	var handle := slider.find_child("Handle", true, false) as Control
+	var full_x := handle.position.x if handle != null else -1.0
+	# Minus steps the volume down and moves the handle left.
+	_press_texture(menu, "VolumeDown")
+	await _frames(2)
+	_check(is_equal_approx(game.volume(), 0.75), "minus lowers the volume to 0.75 (got %.2f)" % game.volume())
+	_check(handle != null and handle.position.x < full_x, "the handle moves left with the volume")
+	# A click at the slider's left end mutes: glyph turns 'off', saved on release.
+	_click_slider(slider, 0.0)
+	await _frames(2)
+	_check(is_zero_approx(game.volume()) and not game.sound_enabled(), "clicking the left end mutes")
+	_check(_sound_icon_is(menu, "icon_sound_off.png"), "muted shows the 'off' glyph")
+	_check(is_zero_approx(float(SaveManager.load(THROWAWAY_SAVE).get("settings", {}).get("volume", -1.0))), "mute is saved to the throwaway file")
+	# The glyph unmutes back to the last volume, plus raises it.
+	mute.pressed.emit()
+	await _frames(2)
+	_check(is_equal_approx(game.volume(), 0.75), "the glyph unmutes to the last volume (got %.2f)" % game.volume())
+	_press_texture(menu, "VolumeUp")
+	await _frames(2)
+	_check(is_equal_approx(game.volume(), 1.0), "plus raises the volume back to 1.0")
+	_check(_sound_icon_is(menu, "icon_sound_on.png"), "unmuted shows the 'on' glyph")
 
 	# Reset progress: needs the confirm step, and Cancel keeps the progress.
 	game.progress.levels["1"] = {"completed": true, "stars": 3}
@@ -162,8 +174,24 @@ func _check_menu(menu, locale: String) -> void:
 		_check(stacked, "[%s] main buttons stack without overlapping" % locale)
 
 func _sound_icon_is(menu: Node, file_name: String) -> bool:
-	var icon := menu.find_child("SoundIcon", true, false) as TextureRect
-	return icon != null and icon.texture != null and icon.texture.resource_path.ends_with(file_name)
+	var icon := menu.find_child("SoundButton", true, false) as TextureButton
+	return icon != null and icon.texture_normal != null and icon.texture_normal.resource_path.ends_with(file_name)
+
+func _press_texture(menu: Node, node_name: String) -> void:
+	var btn := menu.find_child(node_name, true, false) as TextureButton
+	if btn == null:
+		_fail("no texture button named %s" % node_name)
+		return
+	btn.pressed.emit()
+
+# Press and release on the slider at a fraction of its width, as a real click would.
+func _click_slider(slider: Control, fraction: float) -> void:
+	for pressed in [true, false]:
+		var e := InputEventMouseButton.new()
+		e.button_index = MOUSE_BUTTON_LEFT
+		e.pressed = pressed
+		e.position = Vector2(slider.size.x * fraction, slider.size.y * 0.5)
+		slider.gui_input.emit(e)
 
 func _press(menu: Node, node_name: String) -> void:
 	var btn := menu.find_child(node_name, true, false) as Button

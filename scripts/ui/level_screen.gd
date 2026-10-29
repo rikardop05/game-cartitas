@@ -1103,15 +1103,9 @@ func _make_empty_slot(card_size: Vector2, on_zone: bool = false) -> Control:
 	slot.custom_minimum_size = card_size
 	slot.size = card_size
 	slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var style := StyleBoxFlat.new()
-	if on_zone:
-		style.bg_color = Color(0.48, 0.22, 0.05, 0.34)
-		style.border_color = Color(1.0, 0.86, 0.58, 0.55)
-	else:
-		style.bg_color = Color(0.12, 0.08, 0.06, 0.28)
-		style.border_color = Color(1, 0.87, 0.62, 0.46)
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(5)
+	# The kit's 48 px square, 9-sliced to the slot size and dimmed so cards stand out on it.
+	var style := UiHelpers.kit_stylebox("slot_48", 4, 0)
+	style.modulate_color = Color(0.82, 0.74, 0.66, 0.9) if on_zone else Color(0.62, 0.55, 0.5, 0.75)
 	slot.add_theme_stylebox_override("panel", style)
 	return slot
 
@@ -1268,6 +1262,19 @@ func _on_help() -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
 	panel.add_child(col)
+	# Kit close icon in the panel's top-right corner, next to the Close button below.
+	var header := HBoxContainer.new()
+	header.alignment = BoxContainer.ALIGNMENT_END
+	col.add_child(header)
+	var corner_close := TextureButton.new()
+	corner_close.name = "HelpCornerClose"
+	corner_close.texture_normal = UiHelpers.kit_texture("icon_close_green")
+	corner_close.ignore_texture_size = true
+	corner_close.stretch_mode = TextureButton.STRETCH_SCALE
+	corner_close.custom_minimum_size = Vector2(24, 24)
+	corner_close.tooltip_text = Localizer.t("close")
+	corner_close.pressed.connect(_close_help)
+	header.add_child(corner_close)
 	# Width follows the viewport so the panel always fits, in both orientations.
 	var viewport_size := get_viewport_rect().size
 	var text_width := minf(400.0, viewport_size.x - 64.0)
@@ -1688,6 +1695,7 @@ func _play_sfx(kind: String) -> void:
 		_sfx_player = AudioStreamPlayer.new()
 		_sfx_player.name = "PlaceholderSfx"
 		add_child(_sfx_player)
+	_sfx_player.volume_db = linear_to_db(Game.volume())
 	var stream := AudioStreamGenerator.new()
 	stream.mix_rate = 22050.0
 	stream.buffer_length = 0.18

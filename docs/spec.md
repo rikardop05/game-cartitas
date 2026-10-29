@@ -129,7 +129,7 @@ A lógica é separada da apresentação: `GameController` (classe pura, sem `Nod
 ### Arte de UI e fundos
 - Kit de UI em pixel art em `assets/ui/kit/` (janelas, barras, painel de poderes, quadrados de deck, placas, botões do menu e ícones), desenhado na escala lógica 1:1 (paisagem 640×360, retrato 360×640, filtro *nearest*). A tela de jogo segue o mockup: seta verde, placas de relógio e estrelas no topo, botão de som, janela do tabuleiro (464×208 / 352×192) com o fundo escurecido dentro, poderes e deck B à direita, deck A à esquerda, Reserve e barra da Clearing Zone no rodapé.
 - Fundos pintados com filtro (desfoque, escurecimento, tom quente, vinheta): campo nos Levels 1–3 e no menu, cidade de outono do Level 4 em diante e no Endless (`UiHelpers.AUTUMN_FROM_LEVEL`).
-- Som liga/desliga no HUD e em Opções (`settings.sound`).
+- Som: em Opções, controle de volume do kit (−, barra com alça arrastável, +, ícone que vira "mudo" em zero), salvo em `settings.volume`; no HUD só o ícone, que silencia ou volta ao último volume.
 
 ### Mascote
 - Personagem original **Ás** (*Ace* em inglês), uma carta de baralho viva desenhada em código (sem arte externa e sem nada da IP de referência), com humores neutro/feliz/preocupado/triste.

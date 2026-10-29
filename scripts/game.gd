@@ -53,12 +53,27 @@ func set_mascot(enabled: bool) -> void:
 	settings["mascot"] = enabled
 	save_progress()
 
-func sound_enabled() -> bool:
-	return bool(settings.get("sound", true))
+# Sound effects volume, 0..1. Saves from before the slider only had settings["sound"].
+func volume() -> float:
+	var fallback := 1.0 if bool(settings.get("sound", true)) else 0.0
+	return clampf(float(settings.get("volume", fallback)), 0.0, 1.0)
 
+# `persist` is false while a slider is being dragged, so only the release writes the save.
+func set_volume(value: float, persist: bool = true) -> void:
+	value = clampf(value, 0.0, 1.0)
+	settings["volume"] = value
+	settings["sound"] = value > 0.0
+	if value > 0.0:
+		settings["last_volume"] = value
+	if persist:
+		save_progress()
+
+func sound_enabled() -> bool:
+	return volume() > 0.0
+
+# Mute keeps the last volume, so unmuting brings the slider back where it was.
 func set_sound(enabled: bool) -> void:
-	settings["sound"] = enabled
-	save_progress()
+	set_volume(float(settings.get("last_volume", 1.0)) if enabled else 0.0)
 
 func mascot_lines() -> MascotLines:
 	if _mascot_lines == null:
