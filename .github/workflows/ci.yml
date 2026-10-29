@@ -17,6 +17,11 @@ jobs:
           mv Godot_v4.7-stable_linux.x86_64 godot
           chmod +x godot
 
+      # .godot/ is not in git, so a clean checkout has no global class cache: without an
+      # import, class_name scripts (Assert, LevelLoader, ...) are unknown and nothing parses.
+      - name: Import project (builds .godot/ and the global class cache)
+        run: ./godot --headless --import
+
       - name: Run unit tests (tests/run_tests.gd)
         run: ./godot --headless --script res://tests/run_tests.gd --quit
 
