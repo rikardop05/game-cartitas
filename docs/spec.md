@@ -126,6 +126,11 @@ A lógica é separada da apresentação: `GameController` (classe pura, sem `Nod
 - **Poderes:** estoque próprio da partida (2 Hold, 2 Undo, 1 Refresh; +1 poder a cada 3 rodadas, em rodízio). O *Inventory* persistente não é usado nem alterado, e as recompensas da campanha não se aplicam.
 - **Saída:** voltar ao menu ou fechar o jogo no meio da partida encerra a partida e registra a pontuação.
 
+### Arte de UI e fundos
+- Kit de UI em pixel art em `assets/ui/kit/` (janelas, barras, painel de poderes, quadrados de deck, placas, botões do menu e ícones), desenhado na escala lógica 1:1 (paisagem 640×360, retrato 360×640, filtro *nearest*). A tela de jogo segue o mockup: seta verde, placas de relógio e estrelas no topo, botão de som, janela do tabuleiro (464×208 / 352×192) com o fundo escurecido dentro, poderes e deck B à direita, deck A à esquerda, Reserve e barra da Clearing Zone no rodapé.
+- Fundos pintados com filtro (desfoque, escurecimento, tom quente, vinheta): campo nos Levels 1–3 e no menu, cidade de outono do Level 4 em diante e no Endless (`UiHelpers.AUTUMN_FROM_LEVEL`).
+- Som liga/desliga no HUD e em Opções (`settings.sound`).
+
 ### Mascote
 - Personagem original **Ás** (*Ace* em inglês), uma carta de baralho viva desenhada em código (sem arte externa e sem nada da IP de referência), com humores neutro/feliz/preocupado/triste.
 - Balão com a instrução de como jogar (~4 s no início do Level/rodada), dicas rotativas e reações (início de Level/rodada, trio formado, Clearing Zone quase cheia, poder usado, vitória por estrelas, derrota). Nunca intercepta toques. Pode ser desligado em Opções (`settings.mascot`).

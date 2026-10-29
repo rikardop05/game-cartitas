@@ -159,8 +159,8 @@ satisfy that.
 > Configs stay inside these guardrails; structural expansion requires an explicit
 > `BoardEnvelopeProfile`, never a per-level conditional.
 
-Canonical mode is **portrait** (360x640, board area 332x264 after the responsive
-layout). Landscape has a dedicated responsive UI (640x360) leaving a 466x214 board
+Canonical mode is **portrait** (360x640, board area 338x173 inside the 352x192 kit board
+window). Landscape (640x360) leaves a 450x189 board area inside the 464x208 window, a 450x189 board
 area.
 
 - `MAX_COLUMNS = 9`, `MAX_ROWS = 6` — base grid in cards.
@@ -257,7 +257,7 @@ On failure the generator returns only `{status: "failed", attempts, difficulty}`
 `MAX_VISIBLE_LAYERS=4`. The level screen consumes the level's `card_size` and
 clamps the board scale between `MIN_CARD_SCALE` and the `MAX_BOARD_CARD_PX` cap (`BoardLayout.compute`
 `scale_limited`). The board frames are 344x272 (portrait) and 478x222 (landscape),
-which leave the 332x264 and 466x214 envelopes above.
+which leave the 338x173 and 450x189 envelopes above.
 
 ## Render scale (single source)
 
