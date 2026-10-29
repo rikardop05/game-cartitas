@@ -22,10 +22,13 @@ const FRAME_MARGIN := 7
 # stacks the same pieces. Every piece is a kit panel at an exact position, nothing reflows.
 const LAND_HUD_HEIGHT := 48.0
 const LAND_CHEVRON := Rect2(19, 11, 32, 30)
-const LAND_TITLE := Rect2(58, 12, 170, 28)
+const LAND_TITLE := Rect2(58, 12, 165, 28)
 const LAND_PILL_CLOCK := Vector2(241, 14)
 const LAND_PILL_SECOND := Vector2(322, 14)
-const LAND_HELP := Rect2(538, 14, 36, 32)
+# Campaign: the stars plaque (about 2.5:1, like its art) sits right of the clock plate.
+const LAND_PLAQUE := Rect2(314, 11, 90, 36)
+const LAND_HELP := Rect2(500, 14, 36, 32)
+const LAND_GEAR := Rect2(538, 5, 36, 36)
 const LAND_SOUND := Rect2(576, 5, 36, 36)
 const LAND_BOARD_FRAME := Rect2(96, 62, 464, 208)
 # Inside the frame art (its transparent centre), in frame-local px.
@@ -39,10 +42,14 @@ const LAND_ZONE := Rect2(172, 280, 464, 64)
 const LAND_MASCOT_AREA := Rect2(3, 48, 87, 147)
 const PORT_HUD_HEIGHT := 44.0
 const PORT_CHEVRON := Rect2(4, 7, 32, 30)
-const PORT_TITLE := Rect2(40, 6, 66, 32)
+const PORT_TITLE := Rect2(40, 6, 54, 32)
 const PORT_PILL_CLOCK := Vector2(108, 6)
 const PORT_PILL_SECOND := Vector2(188, 6)
-const PORT_HELP := Rect2(284, 6, 36, 32)
+# Campaign portrait: the plaque is smaller, so the clock moves left to keep the pair centred.
+const PORT_PILL_CLOCK_CAMPAIGN := Vector2(111, 6)
+const PORT_PLAQUE := Rect2(179, 8, 70, 28)
+const PORT_HELP := Rect2(253, 7, 30, 30)
+const PORT_GEAR := Rect2(284, 4, 36, 36)
 const PORT_SOUND := Rect2(320, 4, 36, 36)
 const PORT_BOARD_FRAME := Rect2(4, 46, 352, 192)
 const PORT_BOARD_INNER := Rect2(5, 6, 342, 177)
@@ -54,6 +61,18 @@ const PORT_RESERVE := Rect2(74, 248, 212, 64)
 const PORT_ZONE := Rect2(4, 322, 352, 64)
 const PORT_MASCOT_AREA := Rect2(0, 468, 360, 172)
 const PILL_SIZE := Vector2(64, 32)
+# The stopwatch badge overlaps the left end of the clock plate (relative to the plate); the time
+# text is centred on the part of the plate it leaves free.
+const STOPWATCH_RECT := Rect2(-13, 0, 33, 32)
+const CLOCK_TEXT_X := 20.0
+# Where the three stars sit on the plaque art (fractions of its width / height).
+const PLAQUE_STAR_X := [0.235, 0.5, 0.765]
+const PLAQUE_STAR_Y := 0.52
+const STARS_PATH_FORMAT := "stars_%d"
+const STAR_PUFF_COUNT := 7
+# End panel: the plaque of the earned stars (the art is 1024x409).
+const END_PLAQUE_LANDSCAPE := Vector2(132, 53)
+const END_PLAQUE_PORTRAIT := Vector2(168, 67)
 # The inside of a 64x64 slot (deck piles are centred in it).
 const SLOT_INNER := Rect2(5, 6, 54, 52)
 const ZONE_TITLE_X := 8.0
@@ -134,7 +153,15 @@ var deck_a_btn: Button
 var deck_b_btn: Button
 var power_buttons: Dictionary = {}
 var timer_label: Label
-var stars_label: Label
+# Live stars: the stars plaque (campaign only; null in Endless). Its base picture shows the stars
+# kept so far; the star at stake turns to stone gradually (an overlay of the next-lower picture
+# fades in) and puffs away once its threshold passes. The first star never turns to stone (a
+# win earns at least one). stars_row is the "StarsPill" node itself.
+var stars_row: Control
+var stars_base: TextureRect
+var stars_overlay: TextureRect
+# Stars still gold on the plaque (3, 2 or 1), -1 until the first sync after a (re)build.
+var stars_shown := -1
 var score_label: Label
 var level_label: Label
 var zone_header: Label
@@ -144,7 +171,8 @@ var _instruction_bubble: PanelContainer
 var _is_landscape := true
 var _ended := false
 var _help_shown := false
-var _live_star_count := -1
+# The in-game settings overlay is open (the clock is paused; a rebuild re-creates the overlay).
+var _settings_open := false
 var _level_id: String = ""
 var _sfx_player: AudioStreamPlayer
 var _card_size: float = 48.0
@@ -213,7 +241,7 @@ func _notification(what: int) -> void:
 		NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_APPLICATION_PAUSED:
 			controller.pause()
 		NOTIFICATION_APPLICATION_FOCUS_IN, NOTIFICATION_APPLICATION_RESUMED:
-			if not _help_shown:
+			if not _help_shown and not _settings_open:
 				controller.resume()
 
 func _process(_delta: float) -> void:
@@ -295,6 +323,10 @@ func _build_ui() -> void:
 	layout.add_child(_mascot_area)
 	_build_mascot()
 	_fx()
+	# The settings overlay survives a rebuild (language, orientation, mascot): it is rebuilt on
+	# top of the new screen and the clock stays paused underneath.
+	if _settings_open:
+		_build_settings_overlay()
 
 # Campaign Levels 1-3 use the meadow, later ones (and Endless) the autumn town.
 func _background_level() -> int:
@@ -415,13 +447,16 @@ func _place(control: Control, rect: Rect2) -> void:
 	control.size = rect.size
 
 # A plain decorative picture at an exact size (never takes input).
-func _make_art(node_name: String, texture: Texture2D, rect: Rect2) -> TextureRect:
+func _make_art(node_name: String, texture: Texture2D, rect: Rect2, hires: bool = false) -> TextureRect:
 	var art := TextureRect.new()
 	art.name = node_name
 	art.texture = texture
 	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	art.stretch_mode = TextureRect.STRETCH_SCALE
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if hires:
+		# Painted full-resolution art, scaled by the GPU to the real screen size (see hires_texture).
+		art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_place(art, rect)
 	return art
 
@@ -475,17 +510,17 @@ func _board_frame_texture() -> Texture2D:
 
 # A flat button showing a picture at an exact size; it nudges down one pixel while pressed
 # and brightens on hover.
-func _make_icon_button(node_name: String, texture: Texture2D, rect: Rect2) -> Button:
+func _make_icon_button(node_name: String, texture: Texture2D, rect: Rect2, hires: bool = false, inset: float = 0.0) -> Button:
 	var btn := Button.new()
 	btn.name = node_name
 	btn.flat = true
 	btn.focus_mode = Control.FOCUS_NONE
 	_make_flat_button_compact(btn)
 	_place(btn, rect)
-	var icon := _make_art("Icon", texture, Rect2(Vector2.ZERO, rect.size))
+	var icon := _make_art("Icon", texture, Rect2(Vector2(inset, inset), rect.size - Vector2(inset, inset) * 2.0), hires)
 	btn.add_child(icon)
-	btn.button_down.connect(func(): icon.position.y = 1.0)
-	btn.button_up.connect(func(): icon.position.y = 0.0)
+	btn.button_down.connect(func(): icon.position.y = inset + 1.0)
+	btn.button_up.connect(func(): icon.position.y = inset)
 	btn.mouse_entered.connect(func(): icon.modulate = Color(1.18, 1.18, 1.18))
 	btn.mouse_exited.connect(func(): icon.modulate = Color.WHITE)
 	return btn
@@ -542,6 +577,12 @@ func _build_hud(parent: Control) -> void:
 	_place(help, _pick(LAND_HELP, PORT_HELP))
 	hud.add_child(help)
 
+	# The gear opens the in-game settings; it has the sound toggle's footprint and style.
+	var gear := _make_icon_button("SettingsButton", UiHelpers.hud_texture("icon_gear"), _pick(LAND_GEAR, PORT_GEAR), true, 3.0)
+	gear.tooltip_text = Localizer.t("settings")
+	gear.pressed.connect(_on_settings)
+	hud.add_child(gear)
+
 	_sound_icon = null
 	var sound := _make_icon_button("SoundButton", _sound_texture(), _pick(LAND_SOUND, PORT_SOUND))
 	_sound_icon = sound.get_node("Icon") as TextureRect
@@ -588,7 +629,7 @@ func _on_sound_toggle() -> void:
 func _make_pill(node_name: String, at: Vector2) -> TextureRect:
 	return _make_art(node_name, UiHelpers.kit_texture("pill"), Rect2(at, PILL_SIZE))
 
-func _make_pill_label(pill: TextureRect, text: String, font_size: int, color: Color, symbols: bool = false) -> Label:
+func _make_pill_label(pill: TextureRect, text: String, font_size: int, color: Color, symbols: bool = false, inset_left: float = 0.0) -> Label:
 	var label := UiHelpers.symbol_label(text, font_size) if symbols else Label.new()
 	if not symbols:
 		label.text = text
@@ -598,25 +639,29 @@ func _make_pill_label(pill: TextureRect, text: String, font_size: int, color: Co
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_place(label, Rect2(0.0, 4.0, PILL_SIZE.x, 24.0))
+	_place(label, Rect2(inset_left, 4.0, PILL_SIZE.x - inset_left, 24.0))
 	pill.add_child(label)
 	return label
 
-# Clock plate, then the live stars plate (Endless: the run score instead of stars).
+# Clock plate (the stopwatch badge stuck on its left end), then the live stars plaque
+# (Endless: the run score plate instead).
 func _build_hud_pills(hud: Control) -> void:
-	var clock_pill := _make_pill("ClockPill", _pick(LAND_PILL_CLOCK, PORT_PILL_CLOCK))
+	var clock_at: Vector2 = _pick(LAND_PILL_CLOCK, PORT_PILL_CLOCK if _endless != null else PORT_PILL_CLOCK_CAMPAIGN)
+	var clock_pill := _make_pill("ClockPill", clock_at)
 	hud.add_child(clock_pill)
-	timer_label = _make_pill_label(clock_pill, "00:00", 12, TEXT_PRIMARY)
+	timer_label = _make_pill_label(clock_pill, "00:00", 12, TEXT_PRIMARY, false, CLOCK_TEXT_X)
+	clock_pill.add_child(_make_art("Stopwatch", UiHelpers.hud_texture("icon_stopwatch"), STOPWATCH_RECT, true))
 
-	var second := _make_pill("ScorePill" if _endless != null else "StarsPill", _pick(LAND_PILL_SECOND, PORT_PILL_SECOND))
-	hud.add_child(second)
 	if _endless != null:
-		stars_label = null
-		score_label = _make_pill_label(second, _score_text(), 11, GOLD, true)
+		stars_row = null
+		stars_base = null
+		stars_overlay = null
+		var score := _make_pill("ScorePill", _pick(LAND_PILL_SECOND, PORT_PILL_SECOND))
+		hud.add_child(score)
+		score_label = _make_pill_label(score, _score_text(), 11, GOLD, true)
 	else:
 		score_label = null
-		stars_label = _make_pill_label(second, "☆☆☆", 13, GOLD, true)
-		stars_label.pivot_offset = stars_label.size * 0.5
+		_build_stars_plaque(hud)
 
 func _make_flat_button_compact(button: Button) -> void:
 	var empty := StyleBoxEmpty.new()
@@ -1325,10 +1370,145 @@ func _close_help() -> void:
 	if controller != null:
 		controller.resume()
 
+# --- In-game settings ---------------------------------------------------------------------
+# The gear opens the same four settings as the Options screen. Everything applies at once
+# through the Game API (and so persists); the level itself is never restarted: language and
+# mascot rebuild the screen UI around the live controller, orientation goes through the
+# existing resize path, and the overlay is re-created on top of either rebuild.
+
+func _on_settings() -> void:
+	if _settings_open or _help_shown or _ended or controller == null:
+		return
+	_settings_open = true
+	controller.pause()
+	if mascot != null:
+		mascot.hide_bubble()
+	_build_settings_overlay()
+
+func _close_settings() -> void:
+	var overlay := get_node_or_null("SettingsOverlay")
+	if overlay != null:
+		overlay.name = "SettingsOverlayClosing"
+		overlay.queue_free()
+	if not _settings_open:
+		return
+	_settings_open = false
+	if controller != null:
+		controller.resume()
+
+func _build_settings_overlay() -> void:
+	var overlay := Control.new()
+	overlay.name = "SettingsOverlay"
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.z_index = 900
+	add_child(overlay)
+	# Tapping the shade also closes, so the overlay can never trap the player.
+	var shade := ColorRect.new()
+	shade.name = "SettingsShade"
+	shade.color = Color(0, 0, 0, 0.6)
+	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shade.mouse_filter = Control.MOUSE_FILTER_STOP
+	shade.gui_input.connect(func(event: InputEvent):
+		if event is InputEventMouseButton and event.pressed:
+			_close_settings()
+	)
+	overlay.add_child(shade)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(center)
+	var panel := _make_kit_panel(18, 12, 16)
+	panel.name = "SettingsPanel"
+	panel.theme = UiHelpers.warm_theme()
+	center.add_child(panel)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 6 if _is_landscape else 8)
+	panel.add_child(col)
+	# Heading with the kit's green close icon in the top-right corner.
+	var header := HBoxContainer.new()
+	col.add_child(header)
+	var heading := Label.new()
+	heading.text = Localizer.t("settings")
+	heading.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.add_theme_font_size_override("font_size", 16)
+	heading.add_theme_color_override("font_color", TEXT_PRIMARY)
+	header.add_child(heading)
+	var corner_close := TextureButton.new()
+	corner_close.name = "SettingsCornerClose"
+	corner_close.texture_normal = UiHelpers.kit_texture("icon_close_green")
+	corner_close.ignore_texture_size = true
+	corner_close.stretch_mode = TextureButton.STRETCH_SCALE
+	corner_close.custom_minimum_size = Vector2(24, 24)
+	corner_close.tooltip_text = Localizer.t("close")
+	corner_close.pressed.connect(_close_settings)
+	header.add_child(corner_close)
+	var row_height := 34 if _is_landscape else 42
+	col.add_child(_make_settings_row("LanguageButton", Localizer.t("language"), _on_settings_language, row_height))
+	col.add_child(_make_settings_row("OrientationButton", _settings_orientation_text(), _on_settings_orientation, row_height))
+	col.add_child(_make_settings_row("MascotButton", _settings_mascot_text(), _on_settings_mascot, row_height))
+	var volume := VolumeRow.new(row_height)
+	volume.changed.connect(_refresh_sound_icon)
+	col.add_child(volume)
+	var close := Button.new()
+	close.name = "SettingsClose"
+	close.text = Localizer.t("close")
+	close.custom_minimum_size = Vector2(120, 32)
+	close.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	close.pressed.connect(_close_settings)
+	col.add_child(close)
+
+func _make_settings_row(node_name: String, text: String, callback: Callable, height: int) -> Button:
+	var btn := Button.new()
+	btn.name = node_name
+	btn.text = text
+	btn.custom_minimum_size = Vector2(280, height)
+	btn.pressed.connect(callback)
+	UiHelpers.apply_plate_style(btn)
+	return btn
+
+func _settings_orientation_text() -> String:
+	var current := "landscape" if str(Game.settings.get("orientation", "portrait")) == "landscape" else "portrait"
+	return "%s: %s" % [Localizer.t("orientation_label"), Localizer.t(current)]
+
+func _settings_mascot_text() -> String:
+	return "%s: %s" % [Localizer.t("mascot_label"), Localizer.t("option_on" if Game.mascot_enabled() else "option_off")]
+
+func _on_settings_language() -> void:
+	Game.set_locale("en" if Localizer.current == "pt" else "pt")
+	_rebuild_for_settings()
+
+func _on_settings_mascot() -> void:
+	Game.set_mascot(not Game.mascot_enabled())
+	_rebuild_for_settings()
+
+# The window changes shape: the existing resize path (_on_resized) rebuilds the screen, and
+# _build_ui re-creates this overlay on top of it.
+func _on_settings_orientation() -> void:
+	Game.set_orientation(str(Game.settings.get("orientation", "portrait")) != "landscape")
+
+# Rebuilds the screen UI around the live controller (state untouched) and redraws the board.
+func _rebuild_for_settings() -> void:
+	_build_ui()
+	render()
+	# Ace's area is only laid out a couple of frames later: draw once more by then.
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if is_inside_tree() and controller != null:
+		render()
+
+func _refresh_sound_icon() -> void:
+	if _sound_icon != null and is_instance_valid(_sound_icon):
+		_sound_icon.texture = _sound_texture()
+
 func _unhandled_input(event: InputEvent) -> void:
-	if _help_shown and event.is_action_pressed("ui_cancel"):
-		_close_help()
-		get_viewport().set_input_as_handled()
+	if event.is_action_pressed("ui_cancel"):
+		if _help_shown:
+			_close_help()
+			get_viewport().set_input_as_handled()
+		elif _settings_open:
+			_close_settings()
+			get_viewport().set_input_as_handled()
 
 # --- Moves --------------------------------------------------------------------------------
 # A tap goes to the controller immediately, whatever is still animating: state is the source
@@ -1742,6 +1922,9 @@ func _play_sfx(kind: String) -> void:
 		"lose":
 			frequency = 180.0
 			duration = 0.20
+		"puff":
+			frequency = 260.0
+			duration = 0.12
 	var frames := int(stream.mix_rate * duration)
 	var buffer := PackedVector2Array()
 	buffer.resize(frames)
@@ -1793,7 +1976,8 @@ func _show_end(win: bool) -> void:
 	var stage_num := Label.new()
 	stage_num.text = str(controller.level_id)
 	stage_num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	stage_num.add_theme_font_size_override("font_size", 40)
+	# Landscape is only 360 px tall: a smaller number leaves room for the stars plaque.
+	stage_num.add_theme_font_size_override("font_size", 32 if _is_landscape else 40)
 	stage_num.add_theme_color_override("font_color", TEXT_PRIMARY)
 	info.add_child(stage_num)
 
@@ -1810,21 +1994,20 @@ func _show_end(win: bool) -> void:
 	info.add_child(title)
 
 	if win:
-		var stars_row := HBoxContainer.new()
-		stars_row.alignment = BoxContainer.ALIGNMENT_CENTER
-		stars_row.add_theme_constant_override("separation", 6)
-		info.add_child(stars_row)
-		for i in 3:
-			var earned: bool = i < controller.stars
-			var star := UiHelpers.symbol_label("★" if earned else "☆", 36)
-			star.add_theme_color_override("font_color", GOLD if earned else Color(1, 1, 1, 0.35))
-			star.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			star.custom_minimum_size = Vector2(40, 44)
-			star.pivot_offset = star.custom_minimum_size / 2.0
-			star.modulate = Color(1, 1, 1, 0)
-			star.scale = Vector2(0.3, 0.3)
-			stars_row.add_child(star)
-		_reveal_stars(stars_row)
+		var plaque := TextureRect.new()
+		plaque.name = "EndStars"
+		plaque.texture = UiHelpers.hud_texture(STARS_PATH_FORMAT % clampi(controller.stars, 1, 3))
+		plaque.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		plaque.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		plaque.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		plaque.custom_minimum_size = END_PLAQUE_LANDSCAPE if _is_landscape else END_PLAQUE_PORTRAIT
+		plaque.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		plaque.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		plaque.pivot_offset = plaque.custom_minimum_size * 0.5
+		plaque.modulate = Color(1, 1, 1, 0)
+		plaque.scale = Vector2(0.3, 0.3)
+		info.add_child(plaque)
+		_reveal_plaque(plaque)
 
 		var time_line := Label.new()
 		time_line.text = "%s: %s" % [Localizer.t("time"), _format_time(controller.timer.elapsed_seconds())]
@@ -2024,15 +2207,15 @@ func _make_end_button(text: String, callback: Callable) -> Button:
 	btn.pressed.connect(callback)
 	return btn
 
-func _reveal_stars(stars_row: HBoxContainer) -> void:
+# The earned plaque pops in with a little overshoot.
+func _reveal_plaque(plaque: Control) -> void:
 	await get_tree().process_frame
-	for child in stars_row.get_children():
-		var star := child as Control
-		var t := create_tween()
-		t.set_parallel(true)
-		t.tween_property(star, "modulate", Color.WHITE, 0.2)
-		t.tween_property(star, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-		await get_tree().create_timer(0.3).timeout
+	if not is_instance_valid(plaque):
+		return
+	var t := plaque.create_tween()
+	t.set_parallel(true)
+	t.tween_property(plaque, "modulate", Color.WHITE, 0.2)
+	t.tween_property(plaque, "scale", Vector2.ONE, 0.45).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 func _play_intro() -> void:
 	var overlay := Control.new()
@@ -2071,10 +2254,15 @@ func _play_intro() -> void:
 	t.tween_property(burst, "modulate:a", 0.0, 0.5)
 	t.tween_property(title, "modulate", Color.WHITE, 0.25)
 	await get_tree().create_timer(0.7).timeout
+	# A rebuild (settings change) during the intro frees the overlay with everything else.
+	if not is_instance_valid(overlay) or not is_instance_valid(title):
+		_say_instruction()
+		return
 	var fade := create_tween()
 	fade.tween_property(title, "modulate:a", 0.0, 0.2)
 	await fade.finished
-	overlay.queue_free()
+	if is_instance_valid(overlay):
+		overlay.queue_free()
 	_say_instruction()
 
 func _show_error(msg: String) -> void:
@@ -2094,25 +2282,109 @@ func _format_time(sec: float) -> String:
 	var ss := s % 60
 	return "%02d:%02d" % [m, ss]
 
-func _update_live_stars() -> void:
-	if stars_label == null:
-		return
-	var s: int = controller.stars
-	if controller.status == GameController.Status.PLAYING:
-		s = controller.calculate_stars(controller.timer.elapsed_seconds())
-	var txt := ""
-	for i in 3:
-		txt += "★" if i < s else "☆"
-	stars_label.text = txt
-	if s < _live_star_count:
-		_animate_star_loss()
-	_live_star_count = s
+# The wooden plaque with three stars (campaign HUD). Base = the state kept so far; the overlay
+# is the next-lower state, faded in as the star at stake turns to stone.
+func _build_stars_plaque(hud: Control) -> void:
+	var rect: Rect2 = _pick(LAND_PLAQUE, PORT_PLAQUE)
+	stars_row = Control.new()
+	stars_row.name = "StarsPill"
+	stars_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(stars_row, rect)
+	stars_row.pivot_offset = rect.size * 0.5
+	hud.add_child(stars_row)
+	var full := Rect2(Vector2.ZERO, rect.size)
+	stars_base = _make_art("StarsBase", UiHelpers.hud_texture(STARS_PATH_FORMAT % 3), full, true)
+	stars_row.add_child(stars_base)
+	stars_overlay = _make_art("StarsOverlay", UiHelpers.hud_texture(STARS_PATH_FORMAT % 2), full, true)
+	stars_overlay.modulate.a = 0.0
+	stars_row.add_child(stars_overlay)
+	# -1 = not synced yet: the first update shows the right state with no puff.
+	stars_shown = -1
 
-func _animate_star_loss() -> void:
-	if stars_label == null:
+# Fraction of the current star's time window already used (0 = fresh, 1 = about to puff).
+# Star 3 burns from 0 s to three_stars, star 2 from three_stars to two_stars.
+func _star_burn(elapsed: float, stars: int) -> float:
+	var three: float = float(controller.time_thresholds.get("three_stars", INF))
+	var two: float = float(controller.time_thresholds.get("two_stars", INF))
+	# Stars count whole seconds like the clock, so a star really goes one second after its
+	# threshold: burn over that whole window so it is fully dark exactly when it puffs.
+	var start := 0.0 if stars == 3 else three + 1.0
+	var finish := (three if stars == 3 else two) + 1.0
+	if is_inf(finish) or finish <= start:
+		return 0.0
+	return clampf((elapsed - start) / (finish - start), 0.0, 1.0)
+
+func _update_live_stars() -> void:
+	if stars_row == null or stars_base == null or not is_instance_valid(stars_base):
 		return
-	var t := stars_label.create_tween()
-	t.tween_property(stars_label, "scale", Vector2(1.25, 1.25), 0.12)
-	t.tween_property(stars_label, "scale", Vector2.ONE, 0.18)
-	t.tween_property(stars_label, "modulate", Color(1, 0.55, 0.3), 0.1)
-	t.tween_property(stars_label, "modulate", Color.WHITE, 0.15)
+	var elapsed := controller.timer.elapsed_seconds()
+	var playing := controller.status == GameController.Status.PLAYING
+	var stars: int = controller.stars if controller.status == GameController.Status.WON else controller.calculate_stars(elapsed)
+	stars = clampi(stars, 1, 3)
+	if stars_shown < 0:
+		# First sync (new screen or rebuild): stars already lost are just stone, no puff.
+		stars_shown = stars
+		stars_base.texture = UiHelpers.hud_texture(STARS_PATH_FORMAT % stars)
+	elif stars < stars_shown:
+		# The star at stake passed its threshold: puff at its place, then show the lower state.
+		for index in range(stars, stars_shown):
+			_puff_star(index)
+		stars_shown = stars
+		stars_base.texture = UiHelpers.hud_texture(STARS_PATH_FORMAT % stars)
+	var burn := 0.0
+	if stars > 1 and playing:
+		burn = _star_burn(elapsed, stars)
+	if stars > 1:
+		stars_overlay.texture = UiHelpers.hud_texture(STARS_PATH_FORMAT % (stars - 1))
+	stars_overlay.modulate.a = burn
+	stars_overlay.visible = burn > 0.0 and stars > 1
+
+# Global centre of star `index` (0-2) on the plaque.
+func _plaque_star_center(index: int) -> Vector2:
+	return stars_row.global_position + Vector2(stars_row.size.x * float(PLAQUE_STAR_X[index]), stars_row.size.y * PLAQUE_STAR_Y)
+
+# The star that just turned to stone: the plaque pops, a small flash and puff of smoke are left
+# at that star's place (overlay only).
+func _puff_star(index: int) -> void:
+	var center := _plaque_star_center(index)
+	var pop := stars_row.create_tween()
+	pop.tween_property(stars_row, "scale", Vector2(1.12, 1.12), 0.09)
+	pop.tween_property(stars_row, "scale", Vector2.ONE, 0.16)
+	_play_sfx("puff")
+	var fx := _fx()
+	var flash := UiHelpers.symbol_label("✦", 22)
+	flash.size = Vector2(22, 22)
+	flash.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	flash.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	flash.modulate = Color(1, 0.95, 0.8, 0.95)
+	flash.pivot_offset = Vector2(11, 11)
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fx.add_child(flash)
+	flash.global_position = center - Vector2(11, 11)
+	var burst := flash.create_tween()
+	burst.set_parallel(true)
+	burst.tween_property(flash, "scale", Vector2(1.7, 1.7), 0.18)
+	burst.tween_property(flash, "modulate:a", 0.0, 0.18)
+	burst.chain().tween_callback(flash.queue_free)
+	for i in STAR_PUFF_COUNT:
+		var puff := Panel.new()
+		puff.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color(0.86, 0.84, 0.80, 0.92)
+		style.set_corner_radius_all(4)
+		puff.add_theme_stylebox_override("panel", style)
+		puff.size = Vector2(7, 7)
+		puff.pivot_offset = puff.size * 0.5
+		puff.global_position = center - puff.size * 0.5
+		fx.add_child(puff)
+		var dir := Vector2.RIGHT.rotated(TAU * float(i) / float(STAR_PUFF_COUNT) + randf_range(-0.3, 0.3))
+		var drift := puff.create_tween()
+		drift.set_parallel(true)
+		drift.tween_property(puff, "position", puff.position + dir * randf_range(10.0, 15.0), 0.42).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+		drift.tween_property(puff, "scale", Vector2.ONE * randf_range(1.6, 2.2), 0.42)
+		drift.tween_property(puff, "modulate:a", 0.0, 0.42).set_ease(Tween.EASE_IN)
+		# A rebuild mid-puff frees the overlay first; never touch a freed puff.
+		drift.chain().tween_callback(func():
+			if is_instance_valid(puff):
+				puff.queue_free()
+		)

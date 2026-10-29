@@ -11,9 +11,6 @@ const GOLD := UiHelpers.GOLD
 const MENU_PANEL_SIZE := Vector2(160, 192)
 const MENU_BUTTON_SIZE := Vector2(128, 64)
 
-const VOLUME_STEP := 0.25
-const SLIDER_TRACK_PX := 64
-
 var _screen: Screen = Screen.MENU
 var _reset_armed := false
 
@@ -140,21 +137,7 @@ func _make_face_button(texture: Texture2D, min_size: Vector2) -> Button:
 
 # Kit-plate style for list/option rows (9-sliced, so any width works) with hover/press tints.
 func _apply_plate_style(btn: Button, tint := Color.WHITE) -> void:
-	for state in ["normal", "hover", "pressed", "disabled"]:
-		var style := UiHelpers.kit_stylebox("panel_reserve", 6, 8)
-		style.content_margin_top = 3
-		style.content_margin_bottom = 3
-		var shade := tint
-		match state:
-			"hover":
-				shade = tint.lightened(0.15)
-			"pressed":
-				shade = tint.darkened(0.2)
-			"disabled":
-				shade = Color(tint.r * 0.7, tint.g * 0.7, tint.b * 0.7, 0.8)
-		style.modulate_color = shade
-		btn.add_theme_stylebox_override(state, style)
-	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	UiHelpers.apply_plate_style(btn, tint)
 
 # The brown kit window the list and the options sit on.
 func _make_window() -> PanelContainer:
@@ -244,107 +227,12 @@ func _build_options() -> void:
 	vbox.add_child(_make_option_row("LanguageButton", Localizer.t("language"), Localizer.t("language"), _on_toggle_language, row_height))
 	vbox.add_child(_make_option_row("OrientationButton", _orientation_label(), Localizer.t("orientation_label"), _on_toggle_orientation, row_height))
 	vbox.add_child(_make_option_row("MascotButton", _mascot_label(), Localizer.t("mascot_label"), _on_toggle_mascot, row_height))
-	vbox.add_child(_make_volume_row(row_height))
+	vbox.add_child(VolumeRow.new(row_height))
 
 	if _reset_armed:
 		vbox.add_child(_make_reset_confirm(row_height))
 	else:
 		vbox.add_child(_make_option_row("ResetButton", Localizer.t("reset"), Localizer.t("reset"), _on_reset, row_height))
-
-# Volume row from the kit: minus, a slider bar with a draggable handle, plus, and the sound
-# glyph (muted at zero) on a light plate, since the glyph is dark. Tapping the glyph mutes or
-# brings back the last volume. Pieces are drawn at 2x like the rest of the menu art.
-func _make_volume_row(height: int) -> PanelContainer:
-	var row := PanelContainer.new()
-	row.name = "VolumeRow"
-	row.custom_minimum_size = Vector2(280, height)
-	row.tooltip_text = Localizer.t("sound_label")
-	var style := UiHelpers.kit_stylebox("panel_reserve", 6, 8)
-	style.content_margin_top = 3
-	style.content_margin_bottom = 3
-	row.add_theme_stylebox_override("panel", style)
-	var box := HBoxContainer.new()
-	box.alignment = BoxContainer.ALIGNMENT_CENTER
-	box.add_theme_constant_override("separation", 6)
-	row.add_child(box)
-	box.add_child(_make_kit_icon_button("VolumeDown", "icon_minus", func(): _step_volume(-VOLUME_STEP)))
-	box.add_child(_make_volume_slider())
-	box.add_child(_make_kit_icon_button("VolumeUp", "icon_plus", func(): _step_volume(VOLUME_STEP)))
-	var plate := PanelContainer.new()
-	plate.name = "SoundPlate"
-	plate.add_theme_stylebox_override("panel", UiHelpers.kit_stylebox("panel_menu", 3, 1))
-	box.add_child(plate)
-	var mute := _make_kit_icon_button("SoundButton", "icon_sound_on" if Game.sound_enabled() else "icon_sound_off", _on_toggle_sound)
-	mute.tooltip_text = Localizer.t("sound_label")
-	plate.add_child(mute)
-	return row
-
-func _make_kit_icon_button(node_name: String, kit_name: String, callback: Callable) -> TextureButton:
-	var btn := TextureButton.new()
-	btn.name = node_name
-	btn.texture_normal = UiHelpers.kit_texture(kit_name)
-	btn.ignore_texture_size = true
-	btn.stretch_mode = TextureButton.STRETCH_SCALE
-	btn.custom_minimum_size = Vector2(32, 32)
-	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	btn.pressed.connect(callback)
-	btn.button_down.connect(func(): btn.modulate = Color(0.8, 0.8, 0.8))
-	btn.button_up.connect(func(): btn.modulate = Color.WHITE)
-	return btn
-
-# The kit's 48 px bar is stretched to SLIDER_TRACK_PX keeping its rounded ends (9-slice),
-# then drawn at 2x; the handle slides from the left end (muted) to the right end (full).
-func _make_volume_slider() -> Control:
-	var slider := Control.new()
-	slider.name = "VolumeSlider"
-	slider.custom_minimum_size = Vector2(SLIDER_TRACK_PX * 2, 32)
-	slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	slider.mouse_filter = Control.MOUSE_FILTER_STOP
-	slider.tooltip_text = Localizer.t("sound_label")
-	var bar := UiHelpers.kit_panel("slider_bar", 4)
-	bar.name = "Track"
-	bar.size = Vector2(SLIDER_TRACK_PX, 16)
-	bar.scale = Vector2(2, 2)
-	slider.add_child(bar)
-	var handle := TextureRect.new()
-	handle.name = "Handle"
-	handle.texture = UiHelpers.kit_texture("slider_handle")
-	handle.size = Vector2(16, 16)
-	handle.scale = Vector2(2, 2)
-	handle.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	handle.position = Vector2(_handle_x(Game.volume()), 0)
-	slider.add_child(handle)
-	slider.gui_input.connect(_on_volume_slider_input.bind(slider))
-	return slider
-
-# Left edge of the handle (in slider px) for a volume: the handle stays inside the bar.
-func _handle_x(value: float) -> float:
-	return value * float(SLIDER_TRACK_PX * 2 - 32)
-
-func _on_volume_slider_input(event: InputEvent, slider: Control) -> void:
-	var drag: bool = event is InputEventMouseMotion and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0
-	var press: bool = event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT
-	if not drag and not press:
-		return
-	var value := clampf((event.position.x - 16.0) / float(SLIDER_TRACK_PX * 2 - 32), 0.0, 1.0)
-	# Save only when the finger lifts; while dragging just move the handle and the glyph.
-	var released: bool = press and not event.pressed
-	Game.set_volume(value, released)
-	_sync_volume_row(slider.get_parent())
-
-func _step_volume(delta: float) -> void:
-	Game.set_volume(snappedf(Game.volume() + delta, VOLUME_STEP))
-	_sync_volume_row(find_child("VolumeRow", true, false))
-
-func _sync_volume_row(row: Node) -> void:
-	if row == null:
-		return
-	var handle := row.find_child("Handle", true, false) as Control
-	if handle != null:
-		handle.position.x = _handle_x(Game.volume())
-	var mute := row.find_child("SoundButton", true, false) as TextureButton
-	if mute != null:
-		mute.texture_normal = UiHelpers.kit_texture("icon_sound_on" if Game.sound_enabled() else "icon_sound_off")
 
 func _make_option_row(node_name: String, text: String, tooltip: String, callback: Callable, height: int) -> Button:
 	var btn := Button.new()
@@ -511,7 +399,3 @@ func _mascot_label() -> String:
 func _on_toggle_mascot() -> void:
 	Game.set_mascot(not Game.mascot_enabled())
 	_build()
-
-func _on_toggle_sound() -> void:
-	Game.set_sound(not Game.sound_enabled())
-	_sync_volume_row(find_child("VolumeRow", true, false))

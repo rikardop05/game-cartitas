@@ -25,8 +25,12 @@ static func symbol_font() -> SystemFont:
 # and pixelated it once the window upscaled the result). Mipmaps are built here, so any
 # delivered PNG works without import tweaks. Cached per type.
 static func card_texture(type: String) -> Texture2D:
-	if not _card_texture_cache.has(type):
-		var path := "res://assets/cards/card_%s.png" % type
+	return hires_texture("res://assets/cards/card_%s.png" % type)
+
+# Any painted (not pixel-art) picture at full resolution: loaded once, mipmaps generated, cached
+# by path, null when the file is missing. Draw it with TEXTURE_FILTER_LINEAR_WITH_MIPMAPS.
+static func hires_texture(path: String) -> Texture2D:
+	if not _card_texture_cache.has(path):
 		var texture: Texture2D = null
 		if ResourceLoader.exists(path):
 			var source := load(path) as Texture2D
@@ -40,8 +44,12 @@ static func card_texture(type: String) -> Texture2D:
 				texture = ImageTexture.create_from_image(image)
 			else:
 				texture = source
-		_card_texture_cache[type] = texture
-	return _card_texture_cache[type]
+		_card_texture_cache[path] = texture
+	return _card_texture_cache[path]
+
+# HUD art (assets/ui/hud/<name>.png): the star plaque states and the stopwatch/gear icons.
+static func hud_texture(name: String) -> Texture2D:
+	return hires_texture(HUD_DIR + name + ".png")
 
 # True when `type` has a painted card face (assets/cards/card_<type>.png); the others keep the
 # emoji placeholder.
@@ -85,6 +93,7 @@ static func warm_theme() -> Theme:
 # Full-screen painted background for the orientation, calmed by a filter shader so
 # the cards and HUD stay readable. Falls back to the flat warm colour without art.
 const KIT_DIR := "res://assets/ui/kit/"
+const HUD_DIR := "res://assets/ui/hud/"
 # Levels from this one on (and Endless) use the second background set.
 const AUTUMN_FROM_LEVEL := 4
 
@@ -118,6 +127,24 @@ static func kit_panel(name: String, margin: int = 5) -> NinePatchRect:
 	panel.patch_margin_bottom = margin
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return panel
+
+# Kit-plate style for list/option rows (9-sliced, so any width works) with hover/press tints.
+static func apply_plate_style(btn: Button, tint := Color.WHITE) -> void:
+	for state in ["normal", "hover", "pressed", "disabled"]:
+		var style := kit_stylebox("panel_reserve", 6, 8)
+		style.content_margin_top = 3
+		style.content_margin_bottom = 3
+		var shade := tint
+		match state:
+			"hover":
+				shade = tint.lightened(0.15)
+			"pressed":
+				shade = tint.darkened(0.2)
+			"disabled":
+				shade = Color(tint.r * 0.7, tint.g * 0.7, tint.b * 0.7, 0.8)
+		style.modulate_color = shade
+		btn.add_theme_stylebox_override(state, style)
+	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 
 # `level` picks the background set: 1-3 the meadow, AUTUMN_FROM_LEVEL+ (and Endless,
 # passed as a large number) the autumn town; 0 (menus) uses the meadow.

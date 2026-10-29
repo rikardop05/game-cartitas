@@ -9,6 +9,7 @@ const STRINGS := {
 	"play": {"en": "Play", "pt": "Jogar"},
 	"play_tip": {"en": "Open the level selection", "pt": "Abrir a seleção de levels"},
 	"options": {"en": "Options", "pt": "Opções"},
+	"settings": {"en": "Settings", "pt": "Configurações"},
 	"options_tip": {"en": "Language, orientation, sound and progress settings", "pt": "Idioma, orientação, som e configurações de progresso"},
 	"quit": {"en": "Quit", "pt": "Sair"},
 	"quit_tip": {"en": "Close the game", "pt": "Fechar o jogo"},

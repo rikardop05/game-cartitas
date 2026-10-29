@@ -73,7 +73,7 @@ func _scenario(game) -> void:
 		return
 	var controller: GameController = scene.controller
 	_check(scene.level_label.text == Localizer.t("endless_round") % 1, "HUD shows the round label (got '%s')" % scene.level_label.text)
-	_check(scene.stars_label == null and scene.score_label != null, "stars pill is replaced by a score pill")
+	_check(scene.stars_row == null and scene.score_label != null, "stars pill is replaced by a score pill")
 	if scene.score_label == null:
 		return
 	_check(scene.score_label.text == "✦ 0", "score pill starts at zero (got '%s')" % scene.score_label.text)

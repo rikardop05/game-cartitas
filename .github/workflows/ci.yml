@@ -38,6 +38,12 @@ jobs:
       - name: Smoke Reserve taps (tests/smoke_reserve.gd)
         run: ./godot --headless --script res://tests/smoke_reserve.gd
 
+      - name: Smoke live stars (tests/smoke_stars.gd)
+        run: ./godot --headless --script res://tests/smoke_stars.gd
+
+      - name: Smoke in-game settings (tests/smoke_settings.gd)
+        run: ./godot --headless --script res://tests/smoke_settings.gd
+
       - name: Board layout regression (tests/regression_board_layout.gd)
         run: ./godot --headless --script res://tests/regression_board_layout.gd
 

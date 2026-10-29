@@ -6,7 +6,8 @@ extends SceneTree
 # and verifies the save file is byte-identical before/after the run.
 #
 # Layout contract (see LevelScreen): the screen is a "Layout" of kit pieces at fixed
-# positions: Hud (back chevron, title, clock and stars plates, help, sound toggle),
+# positions: Hud (back chevron, title, clock plate + stopwatch badge, stars plaque or
+# score plate, help, settings gear, sound toggle),
 # BoardFrame (darkened window + Board), DeckA / DeckB (kit slots), Reserve, ClearingZone and
 # Powers, plus MascotArea (a spacer). Landscape follows the owner's mockup (positions are
 # asserted below), portrait stacks the same pieces. The regions never overlap, blocked
@@ -15,7 +16,7 @@ extends SceneTree
 
 const LEVEL_ID := "6"
 const EPSILON := 0.01
-const COMMON_REQUIRED := ["Layout", "Hud", "BoardFrame", "DeckA", "DeckB", "Reserve", "ClearingZone", "Powers", "MascotArea", "BackButton", "HelpButton", "SoundButton", "ClockPill"]
+const COMMON_REQUIRED := ["Layout", "Hud", "BoardFrame", "DeckA", "DeckB", "Reserve", "ClearingZone", "Powers", "MascotArea", "BackButton", "HelpButton", "SettingsButton", "SoundButton", "ClockPill", "Stopwatch"]
 const LANDSCAPE_EXTRA := []
 const PORTRAIT_EXTRA := []
 # Regions that must never overlap each other (MascotArea is a spacer; the mascot has its own checks).
@@ -131,7 +132,7 @@ func _run_view(game, view: Dictionary) -> void:
 		if not actual.position.is_equal_approx(expected.position) or not actual.size.is_equal_approx(expected.size):
 			_fail("position:%s" % node_name, "rect=%s expected=%s" % [str(actual), str(expected)])
 	_assert_regions_disjoint(nodes)
-	_assert_top_bar(nodes, landscape)
+	_assert_top_bar(nodes, landscape, endless)
 	_assert_sound_toggle(game, scene, nodes["SoundButton"])
 
 	# Every visible Control under the HUD must stay inside the viewport. This is
@@ -157,13 +158,17 @@ func _run_view(game, view: Dictionary) -> void:
 		_assert_action_button(power_buttons.get(power_name) as Button, "power:%s" % power_name, viewport_bounds, nodes["Layout"], scene)
 	await _assert_instruction_bubble(scene, nodes, bool(view["mascot"]), viewport_bounds)
 
-# The top bar: chevron at the left, the clock and stars/score plates, the help button and the
-# sound toggle, all inside the Hud, in order and without touching each other.
-func _assert_top_bar(nodes: Dictionary, landscape: bool) -> void:
+# The top bar: chevron at the left, the title, the clock plate with the stopwatch badge stuck on
+# its left end, the stars plaque (campaign) or score plate (Endless), then help, the settings
+# gear and the sound toggle, all inside the Hud, in that order and without touching each other.
+func _assert_top_bar(nodes: Dictionary, landscape: bool, endless: bool) -> void:
 	var hud: Rect2 = nodes["Hud"].get_global_rect()
 	var back: Rect2 = nodes["BackButton"].get_global_rect()
+	var title: Rect2 = nodes["Hud"].find_child("Title", true, false).get_global_rect()
 	var clock: Rect2 = nodes["ClockPill"].get_global_rect()
+	var stopwatch: Rect2 = nodes["Stopwatch"].get_global_rect()
 	var help: Rect2 = nodes["HelpButton"].get_global_rect()
+	var gear: Rect2 = nodes["SettingsButton"].get_global_rect()
 	var sound: Rect2 = nodes["SoundButton"].get_global_rect()
 	var second := nodes["Hud"].find_child("StarsPill", true, false) as Control
 	if second == null:
@@ -172,18 +177,48 @@ func _assert_top_bar(nodes: Dictionary, landscape: bool) -> void:
 		_fail("hud", "second plate (StarsPill/ScorePill) missing")
 		return
 	var plate: Rect2 = second.get_global_rect()
-	var row := [["back", back], ["clock", clock], ["second plate", plate], ["help", help], ["sound", sound]]
+	# The badge is part of the clock: its left edge starts the clock group.
+	var clock_group := clock.merge(stopwatch)
+	var row := [["back", back], ["title", title], ["stopwatch+clock", clock_group], ["second plate", plate], ["help", help], ["gear", gear], ["sound", sound]]
 	for item in row:
 		if _max_overflow(_overflow(item[1], hud)) > EPSILON:
 			_fail("hud-in-bar", "%s %s is outside the Hud %s" % [item[0], str(item[1]), str(hud)])
 	for i in row.size() - 1:
 		if row[i][1].end.x > row[i + 1][1].position.x + EPSILON:
 			_fail("hud-order", "%s %s overlaps or follows %s %s" % [row[i][0], str(row[i][1]), row[i + 1][0], str(row[i + 1][1])])
-	# The two plates sit side by side in the middle of the bar.
+	# The plates sit side by side in the middle of the bar (the clock plate itself, not the badge).
 	var middle := (clock.position.x + plate.end.x) * 0.5
 	var viewport_middle := hud.size.x * 0.5
 	if absf(middle - viewport_middle) > (16.0 if landscape else 2.0):
 		_fail("hud-centre", "plates are centred on x=%.1f, the screen on x=%.1f" % [middle, viewport_middle])
+	# Stopwatch: a 30-34 px tall badge centred on the plate, its right part over the plate's left edge.
+	if stopwatch.size.y < 30.0 or stopwatch.size.y > 34.0:
+		_fail("stopwatch", "badge height %.1f is not 30-34 px" % stopwatch.size.y)
+	if absf(stopwatch.get_center().y - clock.get_center().y) > 1.0:
+		_fail("stopwatch", "badge %s is not centred vertically on the plate %s" % [str(stopwatch), str(clock)])
+	if not (stopwatch.position.x < clock.position.x and stopwatch.end.x > clock.position.x + 8.0 and stopwatch.end.x < clock.end.x):
+		_fail("stopwatch", "badge %s does not overlap the plate's left end %s" % [str(stopwatch), str(clock)])
+	# The time text stays fully readable: inside the plate, clear of the badge.
+	var label := nodes["ClockPill"].get_child(0) as Label
+	var text_rect := label.get_global_rect()
+	var text_width := label.get_theme_font("font").get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, label.get_theme_font_size("font_size")).x
+	var text_left := text_rect.get_center().x - text_width * 0.5
+	var text_right := text_rect.get_center().x + text_width * 0.5
+	if text_left < stopwatch.end.x - 1.0 or text_right > clock.end.x:
+		_fail("stopwatch", "the time text (%.1f-%.1f) is covered by the badge (ends %.1f) or leaves the plate (ends %.1f)" % [text_left, text_right, stopwatch.end.x, clock.end.x])
+	# Campaign plaque: the art's aspect ratio (1024x409), 90x36 in landscape and 70x28 in portrait.
+	if not endless:
+		var expected := Vector2(90, 36) if landscape else Vector2(70, 28)
+		if not plate.size.is_equal_approx(expected):
+			_fail("plaque", "stars plaque is %s, expected %s" % [str(plate.size), str(expected)])
+		if absf(plate.size.x / plate.size.y - 1024.0 / 409.0) > 0.08:
+			_fail("plaque", "stars plaque %s is not in the art's 1024:409 ratio" % str(plate.size))
+	# The gear has the sound toggle's footprint and is drawn like the other painted art.
+	if not gear.size.is_equal_approx(sound.size):
+		_fail("gear", "gear %s and sound toggle %s differ in size" % [str(gear.size), str(sound.size)])
+	var gear_icon := nodes["SettingsButton"].get_node_or_null("Icon") as TextureRect
+	if gear_icon == null or gear_icon.texture == null or gear_icon.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS:
+		_fail("gear", "the gear icon is missing or not drawn with mipmaps + trilinear filtering")
 
 # The sound toggle flips Game.sound_enabled() and its icon, and no sound is made while it is off.
 func _assert_sound_toggle(game, scene, button: Button) -> void:
@@ -397,7 +432,7 @@ func _verify_endless_round(game, scene, controller, board: Control) -> void:
 		_fail("infrastructure", "endless round build failed: %s" % str(resolved["error"]))
 	elif not _same_board(resolved["cards"], controller.board.cards):
 		_fail("infrastructure", "scene board differs from deterministic endless round 1")
-	if scene.get("score_label") == null or scene.get("stars_label") != null:
+	if scene.get("score_label") == null or scene.get("stars_row") != null:
 		_fail("endless-hud", "expected a score pill instead of the live stars")
 
 func _same_board(resolved_cards: Array, runtime_cards: Array) -> bool:
