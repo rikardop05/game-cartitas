@@ -3,7 +3,8 @@ extends RefCounted
 
 # Generator for the board of every parametric Level and Endless round: maps a
 # LevelConfig (DifficultyProfile row) to a BoardSpec, builds the board with
-# BoardPipeline (grid-aligned, pyramidal, one shared blocking rule) and keeps the
+# BoardPipeline (full-card base, upper layers scattered on a quarter-card lattice,
+# pyramidal counts, one shared blocking rule) and keeps the
 # fairness guarantees on top:
 #  - every returned board is solvable WITH the level's Support Decks and a power
 #    stock (SolvabilityChecker); an unsolvable board is never returned;
@@ -19,7 +20,7 @@ const SYMBOL_SEED_ADD := 0x1B873593
 const CLEARING_CAPACITY := 7
 
 # Returns {"cards", "metrics", "ok", "board_width", "board_height"}. Cards are
-# [{id, type, x, y, layer}] on the half-card grid, cropped so the board touches
+# [{id, type, x, y, layer}] on the quarter-card lattice, cropped so the board touches
 # (0, 0); board_width/board_height are the occupied size. On failure only
 # {"cards": [], "metrics": {...status "failed"}, "ok": false}.
 # board_size (the UI's available board area) never changes the geometry, so one
@@ -93,7 +94,8 @@ static func instantiate_level(config: LevelConfig, cards: Array, seed_used: int)
 	}
 
 # Pipeline cards -> level cards, shifted so the occupied box starts at (0, 0).
-# The shift is a whole number of half-card steps, so grid alignment is kept.
+# The shift is a whole number of cards (the base lattice), so the upper layers stay
+# on the quarter-card lattice.
 static func _export_board(pipeline_cards: Array, card_size: float) -> Dictionary:
 	var min_x := INF
 	var min_y := INF
@@ -133,6 +135,9 @@ static func _metrics(config: LevelConfig, pipeline_metrics: Dictionary, board: D
 	m["free_ratio_ok"] = in_band
 	m["free_cards"] = int(pipeline_metrics.get("free_cards", 0))
 	m["blocked_cards"] = int(pipeline_metrics.get("blocked_cards", 0))
+	m["free_per_layer"] = pipeline_metrics.get("free_per_layer", [])
+	m["run_ratio"] = float(pipeline_metrics.get("run_ratio", 0.0))
+	m["longest_run"] = int(pipeline_metrics.get("longest_run", 0))
 	m["cards_per_layer"] = pipeline_metrics.get("cards_per_layer", [])
 	m["layer_count"] = int(pipeline_metrics.get("layer_count", config.layers))
 	m["max_coverage"] = float(pipeline_metrics.get("max_coverage", 0.0))

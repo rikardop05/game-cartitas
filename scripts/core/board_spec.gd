@@ -77,7 +77,7 @@ func validate() -> Dictionary:
 				seen_types[card_type] = true
 	if errors.is_empty():
 		# The base layer sits on the full-card lattice of the board; the upper
-		# layers only need the half-card offsets between base cards.
+		# layers are scattered over it on a quarter-card lattice inside its footprint.
 		var lattice_columns := floori(board_width / card_size)
 		var lattice_rows := floori(board_height / card_size)
 		var targets := BoardPipeline.layer_targets(card_count, layers, layer_ratio)

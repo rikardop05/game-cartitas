@@ -36,8 +36,10 @@ func test_layer0_grid_and_pixels_from_step() -> void:
 	for c in result.cards:
 		Assert.equals(int(c["layer"]), 0, "all layer 0")
 		Assert.is_true(c.has("grid_x") and c.has("grid_y"), "grid coords present")
-		Assert.equals(c["x"], int(c["grid_x"]) * 24, "x derived from step_x 24")
-		Assert.equals(c["y"], int(c["grid_y"]) * 24, "y derived from step_y 24")
+		Assert.equals(c["x"], int(c["grid_x"]) * 12, "x derived from the quarter-card step 12")
+		Assert.equals(c["y"], int(c["grid_y"]) * 12, "y derived from the quarter-card step 12")
+		Assert.equals(int(c["grid_x"]) % 4, 0, "base card on a full-card column")
+		Assert.equals(int(c["grid_y"]) % 4, 0, "base card on a full-card row")
 
 func test_all_cards_within_bounds() -> void:
 	var result := BoardPipeline.generate(_spec())
@@ -137,6 +139,7 @@ func test_layered_pyramid_50_seeds() -> void:
 		var by_id := {}
 		for c in result.cards:
 			by_id[str(c["id"])] = c
+		var bounds := _base_bounds(result.cards)
 		var upper := 0
 		for c in result.cards:
 			var layer := int(c["layer"])
@@ -144,25 +147,28 @@ func test_layered_pyramid_50_seeds() -> void:
 				continue
 			upper += 1
 			var support_ids: Array = c.get("support_ids", [])
-			Assert.equals(support_ids.size(), 2, "seed %d card %s has exactly 2 supports" % [s, str(c["id"])])
+			Assert.is_true(support_ids.size() >= 2, "seed %d card %s rests on at least 2 cards" % [s, str(c["id"])])
+			var cr := Rect2(Vector2(float(c["x"]), float(c["y"])), Vector2(CARD_SIZE, CARD_SIZE))
+			Assert.is_true(bounds.encloses(cr), "seed %d card %s stays inside the base footprint" % [s, str(c["id"])])
 			for sid in support_ids:
 				var support = by_id.get(str(sid), null)
 				Assert.is_true(support != null, "seed %d support %s exists" % [s, str(sid)])
 				if support != null:
 					Assert.equals(int(support["layer"]), layer - 1, "seed %d support %s is layer-1" % [s, str(sid)])
-			if support_ids.size() == 2 and by_id.has(str(support_ids[0])) and by_id.has(str(support_ids[1])):
-				var s0 = by_id[str(support_ids[0])]
-				var s1 = by_id[str(support_ids[1])]
-				var mid_grid_x := (float(s0["grid_x"]) + float(s1["grid_x"])) / 2.0
-				var mid_grid_y := (float(s0["grid_y"]) + float(s1["grid_y"])) / 2.0
-				Assert.is_true(absf(float(c["grid_x"]) - mid_grid_x) <= 1.5 and absf(float(c["grid_y"]) - mid_grid_y) <= 1.5,
-					"seed %d upper uses an integer slot near the supports midpoint" % s)
-				var cr := Rect2(Vector2(float(c["x"]), float(c["y"])), Vector2(CARD_SIZE, CARD_SIZE))
-				for sid in support_ids:
-					var sp = by_id[str(sid)]
-					var sr := Rect2(Vector2(float(sp["x"]), float(sp["y"])), Vector2(CARD_SIZE, CARD_SIZE))
+					var sr := Rect2(Vector2(float(support["x"]), float(support["y"])), Vector2(CARD_SIZE, CARD_SIZE))
 					var cov := BoardSpatialRules.coverage(cr, sr)
-					Assert.is_true(cov >= 0.10, "seed %d support coverage >= 0.10 (got %.3f)" % [s, cov])
+					Assert.is_true(BoardSpatialRules.at_or_above_threshold(cov), "seed %d support coverage >= 0.10 (got %.3f)" % [s, cov])
+			# support_ids lists every card of the layer below the card rests on at the threshold.
+			var expected: Array = []
+			for o in result.cards:
+				if int(o["layer"]) == layer - 1 and BoardSpatialRules.at_or_above_threshold(BoardSpatialRules.coverage(cr, Rect2(Vector2(float(o["x"]), float(o["y"])), Vector2(CARD_SIZE, CARD_SIZE)))):
+					expected.append(str(o["id"]))
+			var listed: Array = []
+			for sid in support_ids:
+				listed.append(str(sid))
+			expected.sort()
+			listed.sort()
+			Assert.equals(listed, expected, "seed %d card %s lists every card it rests on" % [s, str(c["id"])])
 		Assert.is_true(upper > 0, "seed %d has upper cards" % s)
 		Assert.equals(int(m.get("unsupported_cards", -1)), 0, "seed %d unsupported_cards 0" % s)
 		Assert.is_true(int(m.get("support_edge_count", -1)) >= 2 * upper, "seed %d support_edge_count >= 2*upper" % s)
@@ -245,8 +251,8 @@ func test_metrics_bbox_computed_from_first_card() -> void:
 		min_gy = mini(min_gy, gy)
 		max_gy = maxi(max_gy, gy)
 	Assert.is_true(min_gx > 0 and min_gy > 0, "fixture min (%d,%d) > 0 catches the min=0 init bug" % [min_gx, min_gy])
-	var exp_w := float(max_gx - min_gx) * 24.0 + CARD_SIZE
-	var exp_h := float(max_gy - min_gy) * 24.0 + CARD_SIZE
+	var exp_w := float(max_gx - min_gx) * 12.0 + CARD_SIZE
+	var exp_h := float(max_gy - min_gy) * 12.0 + CARD_SIZE
 	var m: Dictionary = result.metrics
 	var got_w := float(m.get("occupied_width", 0.0))
 	var got_h := float(m.get("occupied_height", 0.0))
@@ -307,33 +313,28 @@ func test_real_connectivity_full_graph_single_component() -> void:
 		Assert.is_true(bool(m.get("connected_layout", false)), "seed %d connected_layout true" % s)
 
 func test_stack_identity_and_support_preserved() -> void:
-	var result := BoardPipeline.generate(_multi_spec(SEED))
-	Assert.is_true(result.ok, "generation ok")
-	var by_id := {}
-	for c in result.cards:
-		by_id[str(c["id"])] = c
-	var found_stack := false
-	for i in result.cards.size():
-		for j in range(i + 1, result.cards.size()):
-			var a: Dictionary = result.cards[i]
-			var b: Dictionary = result.cards[j]
-			if int(a["layer"]) == int(b["layer"]):
-				continue
-			if int(a["grid_x"]) == int(b["grid_x"]) and int(a["grid_y"]) == int(b["grid_y"]):
-				found_stack = true
-				Assert.not_equals(str(a["id"]), str(b["id"]), "stacked cards keep distinct ids")
-				var upper: Dictionary
-				if int(a["layer"]) > int(b["layer"]):
-					upper = a
-				else:
-					upper = b
-				for sid in upper.get("support_ids", []):
-					var support = by_id.get(str(sid), null)
-					Assert.is_true(support != null, "stacked upper support %s exists" % str(sid))
-					if support != null:
-						Assert.equals(int(support["layer"]), int(upper["layer"]) - 1,
-							"stacked upper support resolves to layer-1 (not the coincident card)")
-	Assert.is_true(found_stack, "expected at least one upper/lower x/y coincidence in the fixture")
+	for s in range(1, 6):
+		var result := BoardPipeline.generate(_multi_spec(s))
+		Assert.is_true(result.ok, "seed %d generation ok" % s)
+		if not result.ok:
+			continue
+		var by_id := {}
+		for c in result.cards:
+			Assert.is_false(by_id.has(str(c["id"])), "seed %d card ids are unique (%s)" % [s, str(c["id"])])
+			by_id[str(c["id"])] = c
+		for i in result.cards.size():
+			for j in range(i + 1, result.cards.size()):
+				var a: Dictionary = result.cards[i]
+				var b: Dictionary = result.cards[j]
+				if int(a["layer"]) == int(b["layer"]):
+					continue
+				if int(a["grid_x"]) == int(b["grid_x"]) and int(a["grid_y"]) == int(b["grid_y"]):
+					# Two layers may line up exactly: the cards stay distinct and the
+					# upper one still rests on the layer right below it.
+					var upper: Dictionary = a if int(a["layer"]) > int(b["layer"]) else b
+					for sid in upper.get("support_ids", []):
+						Assert.equals(int(by_id[str(sid)]["layer"]), int(upper["layer"]) - 1,
+							"seed %d stacked upper support resolves to layer-1 (not the coincident card)" % s)
 
 func test_multilayer_signature_determinism() -> void:
 	for s in range(1, 11):
@@ -448,7 +449,7 @@ func test_layers_minimum_pyramid_has_compact_geometric_supports() -> void:
 			continue
 		upper_count += 1
 		var support_ids: Array = c.get("support_ids", [])
-		Assert.equals(support_ids.size(), 2, "upper card %s has exactly two supports" % str(c["id"]))
+		Assert.is_true(support_ids.size() >= 2, "upper card %s has at least two supports" % str(c["id"]))
 		var upper_rect := Rect2(Vector2(float(c["x"]), float(c["y"])), Vector2(CARD_SIZE, CARD_SIZE))
 		for support_id in support_ids:
 			var support = by_id.get(str(support_id), null)
@@ -537,7 +538,7 @@ func test_geometric_support_board_component_count_real() -> void:
 	Assert.equals(int(m.get("component_count", 0)), 1, "completed geometric-support board has one real component")
 	Assert.equals(int(m.get("total_cards", 0)), 5, "completed board reports all cards")
 
-func test_same_layer_cards_never_overlap_and_sit_on_the_half_card_grid() -> void:
+func test_same_layer_cards_never_overlap_and_sit_on_the_lattices() -> void:
 	for s in range(1, 41):
 		var result := BoardPipeline.generate(_multi_spec(s))
 		Assert.is_true(result.ok, "seed %d generation ok" % s)
@@ -546,8 +547,8 @@ func test_same_layer_cards_never_overlap_and_sit_on_the_half_card_grid() -> void
 		Assert.equals(int(result.metrics.get("same_layer_overlaps", -1)), 0, "seed %d metrics report no same-layer overlap" % s)
 		for i in result.cards.size():
 			var a: Dictionary = result.cards[i]
-			Assert.equals(fposmod(float(a["x"]), 24.0), 0.0, "seed %d card %s x on the half-card grid" % [s, str(a["id"])])
-			Assert.equals(fposmod(float(a["y"]), 24.0), 0.0, "seed %d card %s y on the half-card grid" % [s, str(a["id"])])
+			Assert.equals(fposmod(float(a["x"]), 12.0), 0.0, "seed %d card %s x on the quarter-card lattice" % [s, str(a["id"])])
+			Assert.equals(fposmod(float(a["y"]), 12.0), 0.0, "seed %d card %s y on the quarter-card lattice" % [s, str(a["id"])])
 			if int(a["layer"]) == 0:
 				Assert.equals(fposmod(float(a["x"]) - float(result.cards[0]["x"]), 48.0), 0.0, "seed %d base card %s on the full-card lattice (x)" % [s, str(a["id"])])
 				Assert.equals(fposmod(float(a["y"]) - float(result.cards[0]["y"]), 48.0), 0.0, "seed %d base card %s on the full-card lattice (y)" % [s, str(a["id"])])
@@ -558,31 +559,33 @@ func test_same_layer_cards_never_overlap_and_sit_on_the_half_card_grid() -> void
 				var overlap := absf(float(a["x"]) - float(b["x"])) < CARD_SIZE and absf(float(a["y"]) - float(b["y"])) < CARD_SIZE
 				Assert.is_false(overlap, "seed %d cards %s and %s overlap on layer %d" % [s, str(a["id"]), str(b["id"]), int(a["layer"])])
 
-func test_upper_cards_sit_half_a_card_off_their_two_supports() -> void:
+func test_upper_cards_use_quarter_offsets_and_never_hide_more_than_three_quarters() -> void:
+	# Upper layers leave the half-card staircase: fractional offsets of a quarter card
+	# appear, and no single card hides more than 75% of a card of the layer below.
+	var quarter_offsets := 0
+	var upper_total := 0
 	for s in range(1, 21):
 		var result := BoardPipeline.generate(_multi_spec(s))
 		Assert.is_true(result.ok, "seed %d generation ok" % s)
 		if not result.ok:
 			continue
-		var by_id := {}
-		for c in result.cards:
-			by_id[str(c["id"])] = c
-		var exact_midpoints := 0
-		var upper := 0
+		var origin := Vector2(float(result.cards[0]["x"]), float(result.cards[0]["y"]))
 		for c in result.cards:
 			if int(c["layer"]) == 0:
 				continue
-			upper += 1
-			var supports: Array = c["support_ids"]
-			var mid := Vector2.ZERO
-			for sid in supports:
-				mid += Vector2(float(by_id[str(sid)]["x"]), float(by_id[str(sid)]["y"]))
-			mid /= 2.0
-			if mid.is_equal_approx(Vector2(float(c["x"]), float(c["y"]))):
-				exact_midpoints += 1
-		Assert.is_true(upper > 0, "seed %d has upper cards" % s)
-		Assert.is_true(float(exact_midpoints) >= float(upper) * 0.6,
-			"seed %d: most upper cards sit exactly between their supports (%d of %d)" % [s, exact_midpoints, upper])
+			upper_total += 1
+			var gx := fposmod(float(c["x"]) - origin.x, 48.0)
+			var gy := fposmod(float(c["y"]) - origin.y, 48.0)
+			if not is_zero_approx(fposmod(gx, 24.0)) or not is_zero_approx(fposmod(gy, 24.0)):
+				quarter_offsets += 1
+			for o in result.cards:
+				if int(o["layer"]) == int(c["layer"]) - 1:
+					var cov := BoardSpatialRules.coverage(
+						Rect2(Vector2(float(o["x"]), float(o["y"])), Vector2(CARD_SIZE, CARD_SIZE)),
+						Rect2(Vector2(float(c["x"]), float(c["y"])), Vector2(CARD_SIZE, CARD_SIZE)))
+					Assert.is_true(cov <= 0.75 + 0.001, "seed %d card %s hides %.2f of %s" % [s, str(c["id"]), cov, str(o["id"])])
+	Assert.is_true(float(quarter_offsets) >= float(upper_total) * 0.2,
+		"a good share of the upper cards sit a quarter card off the base grid (%d of %d)" % [quarter_offsets, upper_total])
 
 func test_layer_targets_shrink_strictly_and_keep_the_total() -> void:
 	Assert.equals(BoardPipeline.layer_targets(36, 4), [19, 10, 5, 2], "36 cards / 4 layers")
@@ -602,6 +605,16 @@ func test_layer_targets_shrink_strictly_and_keep_the_total() -> void:
 					Assert.is_true(int(targets[i]) < int(targets[i - 1]), "%d/%d layers strictly decrease" % [count, layers])
 			Assert.equals(total, count, "%d/%d keeps the exact total" % [count, layers])
 
+func _base_bounds(cards: Array) -> Rect2:
+	var low := Vector2(INF, INF)
+	var high := Vector2(-INF, -INF)
+	for c in cards:
+		if int(c["layer"]) != 0:
+			continue
+		low = Vector2(minf(low.x, float(c["x"])), minf(low.y, float(c["y"])))
+		high = Vector2(maxf(high.x, float(c["x"]) + CARD_SIZE), maxf(high.y, float(c["y"]) + CARD_SIZE))
+	return Rect2(low, high - low)
+
 func _layer_cards(cards: Array, layer: int) -> Array:
 	var out := []
 	for c in cards:
@@ -616,8 +629,8 @@ func _base_density(cards: Array) -> float:
 	var min_y := 1000000
 	var max_y := -1000000
 	for c in cards:
-		var gx := int(c["grid_x"])
-		var gy := int(c["grid_y"])
+		var gx := int(c["grid_x"]) / 2  # quarter-card steps -> the half-card raster
+		var gy := int(c["grid_y"]) / 2
 		for dx in 2:
 			for dy in 2:
 				var x := gx + dx
@@ -640,8 +653,8 @@ func _base_aspect(cards: Array) -> float:
 		max_gx = maxi(max_gx, int(c["grid_x"]))
 		min_gy = mini(min_gy, int(c["grid_y"]))
 		max_gy = maxi(max_gy, int(c["grid_y"]))
-	var w := float(max_gx - min_gx) * 24.0 + CARD_SIZE
-	var h := float(max_gy - min_gy) * 24.0 + CARD_SIZE
+	var w := float(max_gx - min_gx) * 12.0 + CARD_SIZE
+	var h := float(max_gy - min_gy) * 12.0 + CARD_SIZE
 	return w / h if h > 0.0 else 0.0
 
 func _base_no_large_holes(cards: Array) -> int:
@@ -655,8 +668,8 @@ func _base_holes(cards: Array) -> Dictionary:
 	var raster_w := 0
 	var raster_h := 0
 	for c in cards:
-		var gx := int(c["grid_x"])
-		var gy := int(c["grid_y"])
+		var gx := int(c["grid_x"]) / 2  # quarter-card steps -> the half-card raster
+		var gy := int(c["grid_y"]) / 2
 		for dx in 2:
 			for dy in 2:
 				covered["%d,%d" % [gx + dx, gy + dy]] = true
@@ -715,14 +728,14 @@ func _base_narrow_bridges(cards: Array) -> int:
 		return 0
 	var pos := {}
 	for i in n:
-		pos["%d,%d" % [int(cards[i]["grid_x"]), int(cards[i]["grid_y"])]] = i
+		pos["%d,%d" % [int(cards[i]["grid_x"]) / 2, int(cards[i]["grid_y"]) / 2]] = i
 	var adj: Array = []
 	adj.resize(n)
 	for i in n:
 		var list: Array[int] = []
-		var gx := int(cards[i]["grid_x"])
-		var gy := int(cards[i]["grid_y"])
-		for delta in _moves():
+		var gx := int(cards[i]["grid_x"]) / 2  # quarter-card steps -> the half-card raster
+		var gy := int(cards[i]["grid_y"]) / 2
+		for delta in _moves_half():
 			var j: int = pos.get("%d,%d" % [gx + delta.x, gy + delta.y], -1)
 			if j >= 0:
 				list.append(int(j))
@@ -833,7 +846,13 @@ func _component_count(cards: Array) -> int:
 						stack.append(j)
 	return comps
 
+# Neighbours in quarter-card steps (full-card and half-card).
 func _moves() -> Array:
+	return [Vector2i(4, 0), Vector2i(-4, 0), Vector2i(0, 4), Vector2i(0, -4),
+			Vector2i(2, 2), Vector2i(2, -2), Vector2i(-2, 2), Vector2i(-2, -2)]
+
+# The same neighbours on the half-card raster.
+func _moves_half() -> Array:
 	return [Vector2i(2, 0), Vector2i(-2, 0), Vector2i(0, 2), Vector2i(0, -2),
 			Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1)]
 

@@ -1,26 +1,40 @@
 class_name BoardPipeline
 extends RefCounted
 
-# Builds a classic tile-stacking board on the half-card grid: the connected base
-# layer (layer 0) sits on a full-card lattice, and every upper layer is stacked
-# pyramidally on half-card offsets over two supporting cards of the layer below.
-# The whole board is validated with the single shared spatial blocking rule
+# Builds a classic tile-stacking board: the connected base layer (layer 0) fills a
+# full-card lattice, and the upper layers are scattered over it on a QUARTER-card
+# lattice, like the front cards of a shuffled pile. Every card stores its position in
+# quarter-card steps (grid_x / grid_y: base cards sit on multiples of 4), and the
+# whole board is validated with the single shared spatial blocking rule
 # (BoardSpatialRules), also used by BoardManager at runtime and by LevelValidator.
 # BoardSpec -> BoardBuildResult. Decks and solvability stay outside (see
 # LevelBoardGenerator); optional symbols are assigned only after geometry and all
 # spatial gates have passed.
 #
 # Layers: target counts shrink geometrically (LAYER_RATIO) so the base holds the
-# largest share and each upper layer strictly fewer cards. Each card on layer
-# k > 0 is supported by exactly 2 cards on layer k-1 whose rectangles both
-# overlap it at the shared spatial threshold. Candidates are the exact midpoints
-# of two orthogonally adjacent supports (half-card offset), chosen greedily by
-# how few lower cards they newly block and a seeded compact/noise score; cards of
-# one layer never overlap (half-cell footprint exclusion). No random coordinates.
+# largest share and each upper layer strictly fewer cards.
+#
+# Upper layers: candidates are every quarter-card position inside the base footprint
+# whose card overlaps at least TWO cards of the layer right below at or above the
+# shared spatial threshold (it visibly rests on the pile, never floats) without
+# hiding more than 75% of any one of them. Cards of one layer never overlap. A seeded
+# greedy scatter then fills the layer: each step takes the cheapest candidate, where
+# cost grows with (a) a same-layer card exactly side by side on the same row or
+# column (no straight runs) or merely in line with it, (b) crowding by same-layer
+# neighbours (blue-noise style repulsion), (c) fractional x / y offsets already used
+# by the layer (varied offsets relative to the base grid), (d) the layer's cards
+# already in that left/centre/right x top/bottom region (spread over the board) and
+# (e) burying lower cards, a stack on cards the layer already covers being cheaper than
+# burying fresh ones (fair starts), plus a little seeded noise. A dense layer relaxes
+# the spread costs (SCATTER_RELAX) until it fits. A few cards of each big layer are
+# reserved: no card above may block them, so no layer starts buried completely. No
+# random coordinates.
 #
 # Acceptance: up to MAX_ATTEMPTS deterministic attempts (attempt salt derived
 # from the geometry seed) are grown; a candidate is accepted only when it passes the
-# base compactness gates (for layers == 1) and the layer/support/blocking gates.
+# base compactness gates (for layers == 1) and the layer/support/blocking gates, and
+# for layered boards the scatter gates (no tidy runs, varied offsets, cards in every
+# region, no layer starved of free cards).
 # If all attempts are rejected the pipeline fails structurally with
 # COMPACTNESS_REJECTED (or BUDGET_EXHAUSTED when growth never completes).
 
@@ -39,8 +53,34 @@ const ASPECT_MAX := 2.25
 const MAX_HOLE_HALF_CELLS := 4
 const BRIDGE_GROUP_MIN := 3
 const LAYER_RATIO := 0.5  # each upper layer targets about this fraction of the layer below
-const ORDER_NOISE := 6.0  # seeded noise (half-cell^2) mixed into the compact ordering of upper slots
 const SMALL_BASE_CARDS := 3  # bases this small skip the aspect and bridge shape gates
+
+const QUARTERS := 4  # lattice steps per card edge: grid_x / grid_y count quarter cards
+const MAX_HIDDEN_QUARTER_AREA := 12  # of 16: one card hides at most 75% of a card below (LevelValidator.MAX_OVERLAP)
+const MIN_SUPPORTS := 2  # lower cards an upper card must overlap at the shared spatial threshold
+const SCATTER_ROW_PENALTY := 12.0  # same row / column, exactly side by side
+const SCATTER_ALIGN_PENALTY := 3.0  # same row / column within three cards
+const SCATTER_ALIGN_REACH := 12  # quarter cards
+const SCATTER_DENSITY := 3.0  # crowding by same-layer neighbours ...
+const SCATTER_RADIUS := 9  # ... within this many quarter cards
+const SCATTER_X_CLASS := 1.5  # per card of the layer already at this fractional x
+const SCATTER_Y_CLASS := 1.5  # per card of the layer already at this fractional y
+const SCATTER_REGION := 1.2  # per card of the layer already in this region
+const SCATTER_NEW_COVER := 6.0  # per lower card newly blocked: keeps cards free at the start
+const SCATTER_DOUBLE_COVER := -2.0  # per lower card another card of the layer already blocks (a bonus: stacks close up instead of burying the rest)
+const SCATTER_NOISE := 1.5
+const SCATTER_RELAX := [1.0, 0.5, 0.2, 0.0]  # spread-cost scale tried in turn until the layer fits
+const REGION_COLUMNS := 3
+const REGION_ROWS := 2
+const RUN_RATIO_MAX := 0.5  # share of upper cards allowed in a straight run (old generator: ~0.95)
+const RUN_LONGEST_MAX := 3  # longest chain of cards side by side on one row / column
+const RUN_MIN_CARDS := 5  # smaller upper layers are too sparse for the run gates
+const VARIETY_MIN_LAYER_CARDS := 5  # a layer this big uses at least 2 distinct fractional x and y offsets ...
+const VARIETY_BIG_LAYER_CARDS := 8  # ... and a layer this big at least 3 distinct fractional x and y offsets
+const REGION_MIN_LAYER_CARDS := 6  # a layer this big has cards in every horizontal third and both vertical halves
+const RESERVE_SHARE := 0.10  # share of a layer's cards kept free of every card above (spread out) ...
+const RESERVE_MIN_LAYER_CARDS := 8  # ... for layers of at least this many cards (below the top layer)
+const STARVED_FREE_SHARE := 0.07  # such a layer keeps at least this share of its cards free at the start
 
 # Base aspect (width / height) the growth steers toward and the band the base must land in.
 # These are the defaults; BoardSpec.aspect_target / aspect_min / aspect_max override them
@@ -101,14 +141,17 @@ func _generate(spec: BoardSpec) -> BoardBuildResult:
 	if not validation["valid"]:
 		result.error_code = BoardBuildResult.ErrorCode.SPEC_INVALID
 		result.error_message = "; ".join(validation["errors"])
-		result.metrics = _metrics_from([], spec, spec.card_size / 2.0, spec.card_size / 2.0, {}, 0)
+		result.metrics = _metrics_from([], spec, spec.card_size / QUARTERS, spec.card_size / QUARTERS, {}, 0)
 		return result
 
 	_aspect_target = spec.aspect_target
 	_aspect_min = spec.aspect_min
 	_aspect_max = spec.aspect_max
+	# The base grows on the half-card raster (full-card moves); positions are reported
+	# in quarter-card steps.
 	var step_x := spec.card_size / 2.0
 	var step_y := spec.card_size / 2.0
+	var quarter := spec.card_size / QUARTERS
 	var cells_x := floori((spec.board_width - spec.card_size) / step_x) + 1
 	var cells_y := floori((spec.board_height - spec.card_size) / step_y) + 1
 	# Even coordinates keep the base lattice flush with the board's left/top edge,
@@ -136,12 +179,12 @@ func _generate(spec: BoardSpec) -> BoardBuildResult:
 				best_failure_kind = "build"
 			continue
 		var cards: Array = built["cards"]
-		var gates := _evaluate_gates_full(cards, spec, step_x, step_y)
+		var gates := _evaluate_gates_full(cards, spec, quarter, quarter)
 		if gates["pass"]:
 			_assign_symbols(cards, spec)
 			result.ok = true
 			result.cards = cards
-			result.metrics = _metrics_from(cards, spec, step_x, step_y, gates, attempts, rejection_counts)
+			result.metrics = _metrics_from(cards, spec, quarter, quarter, gates, attempts, rejection_counts)
 			return result
 		for reason in gates["rejections"]:
 			var key := String(reason)
@@ -156,7 +199,7 @@ func _generate(spec: BoardSpec) -> BoardBuildResult:
 	if best_cards.is_empty():
 		result.error_code = BoardBuildResult.ErrorCode.BUDGET_EXHAUSTED
 		result.error_message = "growth never completed in %d attempts: %s" % [attempts, best_growth_error]
-		result.metrics = _metrics_from([], spec, step_x, step_y, {}, attempts, rejection_counts)
+		result.metrics = _metrics_from([], spec, quarter, quarter, {}, attempts, rejection_counts)
 	else:
 		var is_layer_failure := best_failure_kind == "build"
 		if best_failure_kind == "gates":
@@ -176,7 +219,7 @@ func _generate(spec: BoardSpec) -> BoardBuildResult:
 		else:
 			result.error_code = BoardBuildResult.ErrorCode.COMPACTNESS_REJECTED
 			result.error_message = "no candidate passed the compactness gates in %d attempts" % attempts
-		result.metrics = _metrics_from(best_cards, spec, step_x, step_y, failure_gates, attempts, rejection_counts)
+		result.metrics = _metrics_from(best_cards, spec, quarter, quarter, failure_gates, attempts, rejection_counts)
 	return result
 
 func _build_layers(spec: BoardSpec, seed: int, layer_targets: Array, step_x: float, step_y: float, cells_x: int, cells_y: int, center: Vector2i) -> Dictionary:
@@ -191,29 +234,79 @@ func _build_layers(spec: BoardSpec, seed: int, layer_targets: Array, step_x: flo
 		return {"ok": false, "cards": [], "error": base_growth["error"]}
 	var cards: Array[Dictionary] = []
 	cards.assign(base_growth["cards"])
-	var id_by_grid := {}
-	var positions_by_layer := {}
+	# The base was grown on the half-card raster; from here on every card counts
+	# quarter-card steps (a base card sits on multiples of QUARTERS).
 	for c in cards:
-		id_by_grid["%d:%d,%d" % [0, int(c["grid_x"]), int(c["grid_y"])]] = str(c["id"])
-		positions_by_layer[0] = positions_by_layer.get(0, {})
-		positions_by_layer[0]["%d,%d" % [int(c["grid_x"]), int(c["grid_y"])]] = true
+		c["grid_x"] = int(c["grid_x"]) * (QUARTERS / 2)
+		c["grid_y"] = int(c["grid_y"]) * (QUARTERS / 2)
+	var bounds := _footprint(cards)
+	var by_layer := {0: cards.duplicate()}
+	# Free-card reserve: a few cards of each big layer stay clear of every card above
+	# them, spread over the layer, so no layer is buried completely.
+	var reserved: Array[Vector2i] = []
+	var reserve_layers := not _is_minimum_pyramid(spec)
+	if reserve_layers and layer_targets.size() > 1:
+		reserved.append_array(_pick_reserved(cards, seed, 0))
 
 	for layer in range(1, layer_targets.size()):
 		var target := int(layer_targets[layer])
-		if not positions_by_layer.has(layer - 1):
+		if not by_layer.has(layer - 1):
 			return {"ok": false, "cards": cards, "error": "missing lower layer %d" % (layer - 1)}
-		var placed := _place_upper_layer(positions_by_layer[layer - 1], id_by_grid, layer, target, seed, step_x, step_y, cells_x, cells_y)
+		var placed := _place_upper_layer(by_layer[layer - 1], bounds, layer, target, seed, cards.size(), spec.card_size, reserved)
 		if not placed["ok"]:
 			return {"ok": false, "cards": cards, "error": "layer %d: %s" % [layer, placed["error"]]}
+		by_layer[layer] = placed["cards"]
 		for c in placed["cards"]:
 			cards.append(c)
-			id_by_grid["%d:%d,%d" % [int(c["layer"]), int(c["grid_x"]), int(c["grid_y"])]] = str(c["id"])
-			positions_by_layer[layer] = positions_by_layer.get(layer, {})
-			positions_by_layer[layer]["%d,%d" % [int(c["grid_x"]), int(c["grid_y"])]] = true
+		if reserve_layers and layer < layer_targets.size() - 1:
+			reserved.append_array(_pick_reserved(placed["cards"], seed, layer))
 
 	if cards.size() != spec.card_count:
 		return {"ok": false, "cards": cards, "error": "card count %d != %d" % [cards.size(), spec.card_count]}
 	return {"ok": true, "cards": cards, "error": ""}
+
+# Cards of a layer (quarter-card positions) that every card above must leave free:
+# RESERVE_SHARE of the layer, chosen by farthest-point sampling from a seeded start so
+# they are spread over the layer. Small layers keep none.
+func _pick_reserved(layer_cards: Array, seed: int, layer: int) -> Array[Vector2i]:
+	var picked: Array[Vector2i] = []
+	if layer_cards.size() < RESERVE_MIN_LAYER_CARDS:
+		return picked
+	var wanted := ceili(RESERVE_SHARE * float(layer_cards.size()))
+	var cells: Array[Vector2i] = []
+	for c in layer_cards:
+		cells.append(Vector2i(int(c["grid_x"]), int(c["grid_y"])))
+	var first := 0
+	var first_hash := 2.0
+	for i in cells.size():
+		var h := _hash01(seed ^ (layer * 40503), cells[i].x, cells[i].y)
+		if h < first_hash:
+			first_hash = h
+			first = i
+	picked.append(cells[first])
+	while picked.size() < wanted:
+		var far := -1
+		var far_distance := -1.0
+		for i in cells.size():
+			var nearest := INF
+			for p in picked:
+				nearest = minf(nearest, Vector2(cells[i] - p).length_squared())
+			if nearest > far_distance:
+				far_distance = nearest
+				far = i
+		picked.append(cells[far])
+	return picked
+
+# Bounding box of the cards, in quarter-card steps, card extent included.
+func _footprint(cards: Array) -> Rect2i:
+	var low := Vector2i(1 << 30, 1 << 30)
+	var high := Vector2i(-(1 << 30), -(1 << 30))
+	for c in cards:
+		low.x = mini(low.x, int(c["grid_x"]))
+		low.y = mini(low.y, int(c["grid_y"]))
+		high.x = maxi(high.x, int(c["grid_x"]) + QUARTERS)
+		high.y = maxi(high.y, int(c["grid_y"]) + QUARTERS)
+	return Rect2i(low, high - low)
 
 # At the triangular minimum every base card participates in the support
 # staircase. A single full-card row is the only same-layer-overlap-free base
@@ -229,181 +322,152 @@ func _build_minimum_pyramid_base(count: int, step_x: float, step_y: float, cells
 		cards.append(_make_card(i, Vector2i(origin_x + 2 * i, center.y), step_x, step_y, 0))
 	return {"ok": true, "cards": cards, "error": ""}
 
-# Derives candidates geometrically from orthogonally adjacent pairs on the# immediately lower layer (see the slot rule below), then greedily places the# layer: slots that newly block the fewest lower cards first, then the seeded# compact/noise order. Same-layer footprints never overlap.
-func _place_upper_layer(lower_positions: Dictionary, id_by_grid: Dictionary, layer: int, target: int, seed: int, step_x: float, step_y: float, cells_x: int, cells_y: int) -> Dictionary:
-	var lower_cells: Array[Vector2i] = []
-	for key in lower_positions:
-		var parts := String(key).split(",")
-		lower_cells.append(Vector2i(int(parts[0]), int(parts[1])))
-	lower_cells.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return _cell_less(a, b))
-	var min_lower_x := lower_cells[0].x
-	var max_lower_x := lower_cells[0].x
-	var min_lower_y := lower_cells[0].y
-	var max_lower_y := lower_cells[0].y
-	for cell in lower_cells:
-		min_lower_x = mini(min_lower_x, cell.x)
-		max_lower_x = maxi(max_lower_x, cell.x)
-		min_lower_y = mini(min_lower_y, cell.y)
-		max_lower_y = maxi(max_lower_y, cell.y)
-	var lower_center := Vector2(float(min_lower_x + max_lower_x) / 2.0, float(min_lower_y + max_lower_y) / 2.0)
-	var card_extent := Vector2(step_x * 2.0, step_y * 2.0)
+# Scatters one upper layer over the lower one (see the header): every quarter-card
+# position inside `bounds` that rests on at least MIN_SUPPORTS lower cards is a
+# candidate, and a seeded greedy picks the cheapest one `target` times. Scatter
+# costs are kept incrementally per candidate (the board has a few hundred of them).
+func _place_upper_layer(lower: Array, bounds: Rect2i, layer: int, target: int, seed: int, next_index: int, card_size: float, reserved: Array[Vector2i] = []) -> Dictionary:
+	var quarter := card_size / QUARTERS
+	var extent := Vector2(card_size, card_size)
+	var x0 := bounds.position.x
+	var y0 := bounds.position.y
+	var ny := bounds.size.y - QUARTERS + 1
+	var count := (bounds.size.x - QUARTERS + 1) * ny
+	if count <= 0:
+		return {"ok": false, "cards": [], "error": "no room for layer %d" % layer}
 
-	# A slot is the exact midpoint of two orthogonally adjacent supports (half a
-	# card offset on one axis), so the card rests fully inside its two supports and
-	# never overhangs the layer below. The shared spatial rule must accept the
-	# overlap with both supports.
-	var candidates := {}
-	for a in lower_cells:
-		for step in [Vector2i(2, 0), Vector2i(0, 2)]:
-			var b: Vector2i = a + step
-			if not lower_positions.has("%d,%d" % [b.x, b.y]):
-				continue
-			var pos: Vector2i = a + step / 2
-			if pos.x < 0 or pos.x + 1 >= cells_x or pos.y < 0 or pos.y + 1 >= cells_y:
-				continue
-			var upper_rect := Rect2(Vector2(float(pos.x) * step_x, float(pos.y) * step_y), card_extent)
-			var support_a_rect := Rect2(Vector2(float(a.x) * step_x, float(a.y) * step_y), card_extent)
-			var support_b_rect := Rect2(Vector2(float(b.x) * step_x, float(b.y) * step_y), card_extent)
-			var coverage_a := BoardSpatialRules.coverage(upper_rect, support_a_rect)
-			var coverage_b := BoardSpatialRules.coverage(upper_rect, support_b_rect)
-			if not BoardSpatialRules.at_or_above_threshold(coverage_a) or not BoardSpatialRules.at_or_above_threshold(coverage_b):
-				continue
-			var compact_distance := Vector2(pos).distance_squared_to(lower_center)
-			candidates["%d,%d" % [pos.x, pos.y]] = {
-				"pos": pos,
-				"supports": [a, b],
-				"midpoint_distance": 0.0,
-				"compact_distance": compact_distance,
-				"overlap_strength": minf(coverage_a, coverage_b),
-				"order_score": compact_distance + _hash01(seed, pos.x, pos.y) * ORDER_NOISE,
-				"support_key": "%d,%d:%d,%d" % [a.x, a.y, b.x, b.y],
-			}
+	# Lower cards overlapping each candidate at the shared spatial threshold.
+	var supports: Array = []
+	supports.resize(count)
+	for i in count:
+		supports[i] = []
+	var too_hidden := PackedByteArray()
+	too_hidden.resize(count)
+	for li in lower.size():
+		var lx := int(lower[li]["grid_x"])
+		var ly := int(lower[li]["grid_y"])
+		var lower_rect := Rect2(Vector2(float(lx), float(ly)) * quarter, extent)
+		for cx in range(maxi(x0, lx - QUARTERS + 1), mini(x0 + bounds.size.x - QUARTERS, lx + QUARTERS - 1) + 1):
+			for cy in range(maxi(y0, ly - QUARTERS + 1), mini(y0 + bounds.size.y - QUARTERS, ly + QUARTERS - 1) + 1):
+				var ci := (cx - x0) * ny + (cy - y0)
+				if (QUARTERS - absi(cx - lx)) * (QUARTERS - absi(cy - ly)) > MAX_HIDDEN_QUARTER_AREA:
+					too_hidden[ci] = 1
+					continue
+				var upper_rect := Rect2(Vector2(float(cx), float(cy)) * quarter, extent)
+				if BoardSpatialRules.at_or_above_threshold(BoardSpatialRules.coverage(upper_rect, lower_rect)):
+					(supports[ci] as Array).append(li)
 
+	# Candidates that would block a reserved (kept free) card of any layer below.
+	for cell in reserved:
+		var reserved_rect := Rect2(Vector2(float(cell.x), float(cell.y)) * quarter, extent)
+		for cx in range(maxi(x0, cell.x - QUARTERS + 1), mini(x0 + bounds.size.x - QUARTERS, cell.x + QUARTERS - 1) + 1):
+			for cy in range(maxi(y0, cell.y - QUARTERS + 1), mini(y0 + bounds.size.y - QUARTERS, cell.y + QUARTERS - 1) + 1):
+				if BoardSpatialRules.blocks(reserved_rect, Rect2(Vector2(float(cx), float(cy)) * quarter, extent)):
+					too_hidden[(cx - x0) * ny + (cy - y0)] = 1
 
-	# Which lower cells each candidate would block (shared spatial rule), so the
-	# greedy choice below can prefer slots that cover cards already covered: the
-	# upper layer then forms contiguous blocks and keeps more cards free.
-	var candidate_list: Array = []
-	for key in candidates:
-		var cand: Dictionary = candidates[key]
-		var upper_rect := Rect2(Vector2(float(cand["pos"].x) * step_x, float(cand["pos"].y) * step_y), card_extent)
-		var covers: Array[Vector2i] = []
-		for cell in lower_cells:
-			var lower_rect := Rect2(Vector2(float(cell.x) * step_x, float(cell.y) * step_y), card_extent)
-			if BoardSpatialRules.blocks(lower_rect, upper_rect):
-				covers.append(cell)
-		cand["covers"] = covers
-		candidate_list.append(cand)
-
-	var placed: Array = []
-	# Half-cell raster of this layer: a card covers a 2x2 block, so two cards of
-	# the same layer never overlap.
-	var taken := {}
-	var covered := {}
-	while placed.size() < target:
-		var best: Dictionary = {}
-		for cand in candidate_list:
-			if bool(cand.get("used", false)) or _footprint_taken(taken, cand["pos"]):
-				continue
-			var newly := 0
-			for cell in cand["covers"]:
-				if not covered.has(cell):
-					newly += 1
-			cand["newly_covered"] = newly
-			if best.is_empty() or _upper_candidate_less(cand, best, seed):
-				best = cand
-		if best.is_empty():
-			break
-		best["used"] = true
-		var pos: Vector2i = best["pos"]
-		var support_ids: Array[String] = []
-		for s in best["supports"]:
-			var sid = id_by_grid.get("%d:%d,%d" % [layer - 1, s.x, s.y], "")
-			if str(sid) == "":
-				continue
-			support_ids.append(str(sid))
-		if support_ids.size() != 2:
+	var candidates: Array[int] = []
+	var region_of := PackedInt32Array()
+	region_of.resize(count)
+	var noise := PackedFloat32Array()
+	noise.resize(count)
+	for ci in count:
+		if too_hidden[ci] == 1 or (supports[ci] as Array).size() < MIN_SUPPORTS:
 			continue
-		_take_footprint(taken, pos)
-		for cell in best["covers"]:
-			covered[cell] = true
-		var index := _next_card_index(id_by_grid)
-		var card := _make_card(index, pos, step_x, step_y, layer)
-		card["support_ids"] = support_ids
-		id_by_grid["%d:%d,%d" % [layer, pos.x, pos.y]] = str(card["id"])
-		placed.append(card)
+		candidates.append(ci)
+		var cx := x0 + ci / ny
+		var cy := y0 + ci % ny
+		var rx := clampi((cx * 2 + QUARTERS - x0 * 2) * REGION_COLUMNS / (2 * bounds.size.x), 0, REGION_COLUMNS - 1)
+		var ry := clampi((cy * 2 + QUARTERS - y0 * 2) * REGION_ROWS / (2 * bounds.size.y), 0, REGION_ROWS - 1)
+		region_of[ci] = ry * REGION_COLUMNS + rx
+		noise[ci] = _hash01(seed + layer * 7919, cx, cy) * SCATTER_NOISE
+
+	# A dense layer cannot always keep the full scatter spacing: the spread terms are
+	# relaxed step by step until the layer fits (the row / column penalty stays).
+	var placed: Array[Dictionary] = []
+	for relax in SCATTER_RELAX:
+		placed = _scatter_fill(candidates, supports, region_of, noise, lower, bounds, layer, target, next_index, quarter, relax)
+		if placed.size() >= target:
+			break
 	if placed.size() < target:
 		return {"ok": false, "cards": placed, "error": "only %d/%d supported positions found" % [placed.size(), target]}
 	return {"ok": true, "cards": placed, "error": ""}
 
-# Greedy order for upper slots: exact support midpoints first, then slots that
-# newly block the fewest lower cards, then the strongest support overlap, then
-# the seeded compact/noise score.
-func _upper_candidate_less(a: Dictionary, b: Dictionary, seed: int) -> bool:
-	var midpoint_a := float(a["midpoint_distance"])
-	var midpoint_b := float(b["midpoint_distance"])
-	if not is_equal_approx(midpoint_a, midpoint_b):
-		return midpoint_a < midpoint_b
-	var newly_a := int(a["newly_covered"])
-	var newly_b := int(b["newly_covered"])
-	if newly_a != newly_b:
-		return newly_a < newly_b
-	return _geometric_candidate_less(a, b, seed)
+# One greedy scatter pass over the candidates (see _place_upper_layer). `relax`
+# scales the spacing, alignment, region and offset-variety costs.
+func _scatter_fill(candidates: Array[int], supports: Array, region_of: PackedInt32Array, noise: PackedFloat32Array, lower: Array, bounds: Rect2i, layer: int, target: int, next_index: int, quarter: float, relax: float) -> Array[Dictionary]:
+	var x0 := bounds.position.x
+	var y0 := bounds.position.y
+	var nx := bounds.size.x - QUARTERS + 1
+	var ny := bounds.size.y - QUARTERS + 1
+	var live := candidates.duplicate()
+	var penalty := PackedFloat32Array()
+	penalty.resize(nx * ny)
+	var x_used := PackedInt32Array([0, 0, 0, 0])
+	var y_used := PackedInt32Array([0, 0, 0, 0])
+	var region_used := PackedInt32Array()
+	region_used.resize(REGION_COLUMNS * REGION_ROWS)
+	var covered_by := PackedInt32Array()
+	covered_by.resize(lower.size())
+	var reach := maxi(SCATTER_ALIGN_REACH, SCATTER_RADIUS)
+	var placed: Array[Dictionary] = []
 
-func _footprint_taken(taken: Dictionary, cell: Vector2i) -> bool:
-	for dx in 2:
-		for dy in 2:
-			if taken.has(Vector2i(cell.x + dx, cell.y + dy)):
-				return true
-	return false
+	while placed.size() < target and not live.is_empty():
+		var best := -1
+		var best_cost := INF
+		for ci in live:
+			var cost := penalty[ci] + noise[ci] 				+ relax * (SCATTER_X_CLASS * x_used[posmod(ci / ny, QUARTERS)] 					+ SCATTER_Y_CLASS * y_used[posmod(ci % ny, QUARTERS)] 					+ SCATTER_REGION * region_used[region_of[ci]])
+			for li in supports[ci]:
+				cost += SCATTER_NEW_COVER if covered_by[li] == 0 else SCATTER_DOUBLE_COVER
+			if cost < best_cost:
+				best_cost = cost
+				best = ci
+		var px := x0 + best / ny
+		var py := y0 + best % ny
+		var support_ids: Array[String] = []
+		for li in supports[best]:
+			covered_by[li] += 1
+			support_ids.append(str(lower[li]["id"]))
+		var card := _make_card(next_index + placed.size(), Vector2i(px, py), quarter, quarter, layer)
+		card["support_ids"] = support_ids
+		placed.append(card)
+		x_used[posmod(px - x0, QUARTERS)] += 1
+		y_used[posmod(py - y0, QUARTERS)] += 1
+		region_used[region_of[best]] += 1
+		# Candidates this card overlaps are gone; the ones near it get costlier.
+		var remaining: Array[int] = []
+		for ci in live:
+			if absi(x0 + ci / ny - px) >= QUARTERS or absi(y0 + ci % ny - py) >= QUARTERS:
+				remaining.append(ci)
+		live = remaining
+		for dx in range(-reach, reach + 1):
+			var cx := px + dx
+			if cx < x0 or cx >= x0 + nx:
+				continue
+			for dy in range(-reach, reach + 1):
+				var cy := py + dy
+				if cy < y0 or cy >= y0 + ny or (absi(dx) < QUARTERS and absi(dy) < QUARTERS):
+					continue
+				var added := 0.0
+				var distance := sqrt(float(dx * dx + dy * dy))
+				if distance < SCATTER_RADIUS:
+					added += relax * SCATTER_DENSITY * (1.0 - distance / SCATTER_RADIUS)
+				if (dy == 0 and absi(dx) == QUARTERS) or (dx == 0 and absi(dy) == QUARTERS):
+					added += SCATTER_ROW_PENALTY
+				elif (dy == 0 and absi(dx) <= SCATTER_ALIGN_REACH) or (dx == 0 and absi(dy) <= SCATTER_ALIGN_REACH):
+					added += relax * SCATTER_ALIGN_PENALTY
+				if added > 0.0:
+					penalty[(cx - x0) * ny + (cy - y0)] += added
+	return placed
 
-func _take_footprint(taken: Dictionary, cell: Vector2i) -> void:
-	for dx in 2:
-		for dy in 2:
-			taken[Vector2i(cell.x + dx, cell.y + dy)] = true
-
-func _geometric_candidate_less(a: Dictionary, b: Dictionary, seed: int) -> bool:
-	var midpoint_a := float(a["midpoint_distance"])
-	var midpoint_b := float(b["midpoint_distance"])
-	if not is_equal_approx(midpoint_a, midpoint_b):
-		return midpoint_a < midpoint_b
-	var overlap_a := float(a["overlap_strength"])
-	var overlap_b := float(b["overlap_strength"])
-	if not is_equal_approx(overlap_a, overlap_b):
-		return overlap_a > overlap_b
-	var order_a := float(a["order_score"])
-	var order_b := float(b["order_score"])
-	if not is_equal_approx(order_a, order_b):
-		return order_a < order_b
-	var pos_a: Vector2i = a["pos"]
-	var pos_b: Vector2i = b["pos"]
-	var hash_a := _hash01(seed, pos_a.x, pos_a.y)
-	var hash_b := _hash01(seed, pos_b.x, pos_b.y)
-	if hash_a != hash_b:
-		return hash_a < hash_b
-	var support_a := String(a["support_key"])
-	var support_b := String(b["support_key"])
-	if support_a != support_b:
-		return support_a < support_b
-	return _cell_less(pos_a, pos_b)
-
-func _next_card_index(id_by_grid: Dictionary) -> int:
-	var max_index := -1
-	for key in id_by_grid:
-		var id_str := str(id_by_grid[key])
-		if id_str.begins_with("c"):
-			max_index = maxi(max_index, int(id_str.trim_prefix("c")))
-	return max_index + 1
-
+# step_x / step_y: one quarter card. The base compactness gates (holes, bridges,
+# density, aspect) work on the half-card raster the base grows on, so they get the
+# base cards with their coordinates halved.
 func _evaluate_gates_full(cards: Array, spec: BoardSpec, step_x: float, step_y: float) -> Dictionary:
 	var base_cards: Array = []
-	if spec.layers <= 1:
-		base_cards = cards
-	else:
-		for c in cards:
-			if int(c["layer"]) == 0:
-				base_cards.append(c)
-	var compact := _evaluate_gates(base_cards, spec, step_x, step_y)
+	for c in cards:
+		if int(c["layer"]) == 0:
+			base_cards.append({"grid_x": int(c["grid_x"]) / (QUARTERS / 2), "grid_y": int(c["grid_y"]) / (QUARTERS / 2)})
+	var compact := _evaluate_gates(base_cards, spec, step_x * (QUARTERS / 2), step_y * (QUARTERS / 2))
 	if _shape_gates_waived(spec):
 		var kept: Array[String] = []
 		for r in compact["rejections"]:
@@ -417,6 +481,16 @@ func _evaluate_gates_full(cards: Array, spec: BoardSpec, step_x: float, step_y: 
 		rejections.append(r)
 	if int(spatial["same_layer_overlaps"]) > 0 or (spec.layers > 1 and not bool(spatial["valid_layers"])):
 		rejections.append("layers")
+	var scatter := _scatter_metrics(cards)
+	if spec.layers > 1 and int(scatter["upper_cards"]) >= RUN_MIN_CARDS:
+		if float(scatter["run_ratio"]) > RUN_RATIO_MAX or int(scatter["longest_run"]) > RUN_LONGEST_MAX:
+			rejections.append("tidy")
+	if spec.layers > 1 and bool(scatter["samey"]):
+		rejections.append("samey")
+	if spec.layers > 1 and bool(scatter["lopsided"]):
+		rejections.append("lopsided")
+	if spec.layers > 1 and bool(spatial["starved_layer"]) and not _is_minimum_pyramid(spec):
+		rejections.append("starved")
 	var pass_ := rejections.is_empty()
 	var score := float(compact["score"]) if spec.layers <= 1 else (float(spatial["score"]) + float(compact["score"]) * 0.001)
 	return {
@@ -437,6 +511,9 @@ func _evaluate_gates_full(cards: Array, spec: BoardSpec, step_x: float, step_y: 
 		"blocking_edge_count": spatial["blocking_edge_count"],
 		"free_cards": spatial["free_cards"],
 		"blocked_cards": spatial["blocked_cards"],
+		"free_per_layer": spatial["free_per_layer"],
+		"run_ratio": scatter["run_ratio"],
+		"longest_run": scatter["longest_run"],
 		"layer_count": spatial["layer_count"],
 		"cards_per_layer": spatial["cards_per_layer"],
 		"component_count": int(connectivity["component_count"]),
@@ -465,7 +542,7 @@ func _compute_connectivity(cards: Array) -> Dictionary:
 		var layer := int(c["layer"])
 		var gx := int(c["grid_x"])
 		var gy := int(c["grid_y"])
-		for delta in _moves():
+		for delta in _moves_quarter():
 			var j: int = grid_idx.get("%d:%d,%d" % [layer, gx + delta.x, gy + delta.y], -1)
 			if j >= 0 and j != i:
 				(adj[i] as Array).append(j)
@@ -491,6 +568,82 @@ func _compute_connectivity(cards: Array) -> Dictionary:
 					visited[nb] = true
 					stack.append(nb)
 	return {"component_count": comps, "connected": comps == 1}
+
+# Straightness of the upper layers (quarter-card coordinates): the share of upper
+# cards that have a same-layer card exactly side by side with them on one row or
+# column, and the longest such chain.
+func _scatter_metrics(cards: Array) -> Dictionary:
+	var at := {}
+	var upper := 0
+	for c in cards:
+		if int(c["layer"]) > 0:
+			upper += 1
+			at["%d:%d,%d" % [int(c["layer"]), int(c["grid_x"]), int(c["grid_y"])]] = true
+	var in_run := 0
+	var longest := 1 if upper > 0 else 0
+	for c in cards:
+		var layer := int(c["layer"])
+		if layer == 0:
+			continue
+		var gx := int(c["grid_x"])
+		var gy := int(c["grid_y"])
+		var has_neighbor := false
+		for step in [Vector2i(QUARTERS, 0), Vector2i(0, QUARTERS)]:
+			var before := at.has("%d:%d,%d" % [layer, gx - step.x, gy - step.y])
+			if before or at.has("%d:%d,%d" % [layer, gx + step.x, gy + step.y]):
+				has_neighbor = true
+			# Chains are counted from their first card.
+			if not before:
+				var length := 1
+				while at.has("%d:%d,%d" % [layer, gx + step.x * length, gy + step.y * length]):
+					length += 1
+				longest = maxi(longest, length)
+		if has_neighbor:
+			in_run += 1
+	# Variety of fractional offsets and spread over the base footprint, per layer.
+	var bounds := Rect2i()
+	var base_cards: Array = []
+	for c in cards:
+		if int(c["layer"]) == 0:
+			base_cards.append(c)
+	if not base_cards.is_empty():
+		bounds = _footprint(base_cards)
+	var x_classes := {}
+	var y_classes := {}
+	var thirds := {}
+	var halves := {}
+	var layer_cards := {}
+	for c in cards:
+		var layer := int(c["layer"])
+		if layer == 0:
+			continue
+		layer_cards[layer] = int(layer_cards.get(layer, 0)) + 1
+		x_classes[layer] = x_classes.get(layer, {})
+		y_classes[layer] = y_classes.get(layer, {})
+		thirds[layer] = thirds.get(layer, {})
+		halves[layer] = halves.get(layer, {})
+		var ox := int(c["grid_x"]) - bounds.position.x
+		var oy := int(c["grid_y"]) - bounds.position.y
+		x_classes[layer][posmod(ox, QUARTERS)] = true
+		y_classes[layer][posmod(oy, QUARTERS)] = true
+		thirds[layer][clampi((2 * ox + QUARTERS) * REGION_COLUMNS / (2 * bounds.size.x), 0, REGION_COLUMNS - 1)] = true
+		halves[layer][clampi((2 * oy + QUARTERS) * REGION_ROWS / (2 * bounds.size.y), 0, REGION_ROWS - 1)] = true
+	var samey := false
+	var lopsided := false
+	for layer in layer_cards:
+		var n := int(layer_cards[layer])
+		var wanted := 3 if n >= VARIETY_BIG_LAYER_CARDS else 2
+		if n >= VARIETY_MIN_LAYER_CARDS and (x_classes[layer].size() < wanted or y_classes[layer].size() < wanted):
+			samey = true
+		if n >= REGION_MIN_LAYER_CARDS and (thirds[layer].size() < REGION_COLUMNS or halves[layer].size() < REGION_ROWS):
+			lopsided = true
+	return {
+		"upper_cards": upper,
+		"run_ratio": float(in_run) / float(upper) if upper > 0 else 0.0,
+		"longest_run": longest,
+		"samey": samey,
+		"lopsided": lopsided,
+	}
 
 # Computes the spatial/support/blocking metrics and stamps each card's "blocked"
 # field using the single shared rule BoardSpatialRules.
@@ -519,7 +672,7 @@ func _compute_spatial_metrics(cards: Array, spec: BoardSpec, step_x: float, step
 			continue
 		var support_ids: Array = c.get("support_ids", [])
 		support_edge_count += support_ids.size()
-		if support_ids.size() != 2:
+		if support_ids.size() < MIN_SUPPORTS:
 			unsupported += 1
 			coverage_ok = false
 			continue
@@ -541,6 +694,9 @@ func _compute_spatial_metrics(cards: Array, spec: BoardSpec, step_x: float, step
 	var blocked_cards := 0
 	var free_cards := 0
 	var blocking_edge_count := 0
+	var free_per_layer: Array = []
+	for _l in cards_per_layer.size():
+		free_per_layer.append(0)
 	for i in cards.size():
 		var ci = cards[i]
 		var layer_i := int(ci["layer"])
@@ -561,6 +717,7 @@ func _compute_spatial_metrics(cards: Array, spec: BoardSpec, step_x: float, step
 			blocked_cards += 1
 		else:
 			free_cards += 1
+			free_per_layer[layer_i] = int(free_per_layer[layer_i]) + 1
 
 	# Same-layer cards must never overlap (grid alignment); coverage is the largest
 	# fraction of any card hidden by a single card of a higher layer.
@@ -581,6 +738,11 @@ func _compute_spatial_metrics(cards: Array, spec: BoardSpec, step_x: float, step
 	for i in range(1, cards_per_layer.size()):
 		if int(cards_per_layer[i]) >= int(cards_per_layer[i - 1]):
 			strictly_decreasing = false
+	# A layer buried almost completely leaves the player nothing to uncover from it.
+	var starved_layer := false
+	for l in range(cards_per_layer.size() - 1):
+		if int(cards_per_layer[l]) >= RESERVE_MIN_LAYER_CARDS and float(free_per_layer[l]) < maxf(1.0, ceilf(STARVED_FREE_SHARE * float(cards_per_layer[l]))):
+			starved_layer = true
 	var valid_layers := unsupported == 0 and coverage_ok and strictly_decreasing and layer_count == spec.layers and same_layer_overlaps == 0
 	var score := float(blocking_edge_count) + float(free_cards) + float(support_edge_count) - float(unsupported) * 100.0
 	return {
@@ -592,6 +754,8 @@ func _compute_spatial_metrics(cards: Array, spec: BoardSpec, step_x: float, step
 		"blocking_edge_count": blocking_edge_count,
 		"free_cards": free_cards,
 		"blocked_cards": blocked_cards,
+		"free_per_layer": free_per_layer,
+		"starved_layer": starved_layer,
 		"layer_count": layer_count,
 		"cards_per_layer": cards_per_layer,
 		"coverage_ok": coverage_ok,
@@ -836,6 +1000,9 @@ func _metrics_from(cards: Array, spec: BoardSpec, step_x: float, step_y: float, 
 		"blocking_edge_count": int(gates.get("blocking_edge_count", 0)),
 		"free_cards": int(gates.get("free_cards", 0)),
 		"blocked_cards": int(gates.get("blocked_cards", 0)),
+		"free_per_layer": gates.get("free_per_layer", []),
+		"run_ratio": float(gates.get("run_ratio", 0.0)),
+		"longest_run": int(gates.get("longest_run", 0)),
 		"layer_count": int(gates.get("layer_count", 1)),
 		"cards_per_layer": gates.get("cards_per_layer", [cards.size()]),
 	}
@@ -1010,10 +1177,18 @@ static func _hash01(seed: int, x: int, y: int) -> float:
 func _lattice_moves() -> Array[Vector2i]:
 	return [Vector2i(2, 0), Vector2i(-2, 0), Vector2i(0, 2), Vector2i(0, -2)]
 
-# Adjacency used by the connectivity metrics (full-card and half-card neighbours).
+# Adjacency on the half-card raster (base compactness gates).
 func _moves() -> Array[Vector2i]:
 	return [Vector2i(2, 0), Vector2i(-2, 0), Vector2i(0, 2), Vector2i(0, -2),
 			Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1)]
+
+# Adjacency used by the connectivity metrics, in quarter-card steps (full-card and
+# half-card neighbours).
+func _moves_quarter() -> Array[Vector2i]:
+	var full := QUARTERS
+	var half := QUARTERS / 2
+	return [Vector2i(full, 0), Vector2i(-full, 0), Vector2i(0, full), Vector2i(0, -full),
+			Vector2i(half, half), Vector2i(half, -half), Vector2i(-half, half), Vector2i(-half, -half)]
 
 func _is_minimum_pyramid(spec: BoardSpec) -> bool:
 	return spec.layers > 1 and spec.card_count == spec.layers * (spec.layers + 1) / 2

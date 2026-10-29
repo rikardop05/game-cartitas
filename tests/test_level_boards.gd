@@ -23,6 +23,10 @@ func _check_resolved(label: String, level: Dictionary, profile: LevelConfig, req
 	Assert.is_true(problems.is_empty(), "%s board structure: %s" % [label, str(problems)])
 	var cards: Array = level["cards"]
 	Assert.equals(cards.size(), profile.board_cards(), "%s has the profile's board card count" % label)
+	if Checks.upper_cards(cards).size() >= 5:
+		var run_ratio := Checks.straight_run_ratio(cards, float(level["card_size"]))
+		Assert.is_true(run_ratio <= 0.5, "%s: %.2f of the upper cards sit in a straight run (scattered boards stay under 0.5)" % [label, run_ratio])
+		Assert.is_true(Checks.longest_run(cards, float(level["card_size"])) <= 3, "%s has no straight run of more than 3 cards" % label)
 	var counts := Checks.layer_counts(cards)
 	Assert.equals(counts.size(), profile.layers, "%s uses exactly the profile's layers" % label)
 	Assert.equals(counts, profile.layer_targets(), "%s splits the cards as the profile's pyramid" % label)

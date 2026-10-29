@@ -7,7 +7,8 @@ difficulty. Adding a level 12+ is just adding a row to `DifficultyProfile.LEVELS
 
 Boards for every parametric Level and every Endless round are built by
 `BoardPipeline` through `LevelBoardGenerator` (`scripts/core/level_board_generator.gd`):
-grid-aligned, pyramidal, one shared blocking rule. `LayoutGenerator` is legacy and
+full-card base, scattered quarter-card upper layers, pyramidal counts, one shared
+blocking rule. `LayoutGenerator` is legacy and
 only serves hand-written `layout` levels (no shipped level uses it).
 
 ## Level JSON format (shipped levels)
@@ -67,19 +68,19 @@ card = fitted to the envelope, never above `MAX_BOARD_CARD_PX = 40`):
 |---|---|---|---|---|---|---|
 | 1 | 3 | 9 | 4 × 2 | 7 / 2 | 5 | 40 / 40 |
 | 2 | 5 | 15 | 4 × 3 | 10 / 5 | 7 | 40 / 40 |
-| 3 | 7 | 21 | 5 × 3 | 12 / 6 / 3 | 7 | 40 / 40 |
-| 4 | 8 | 27 | 5 × 3 | 15 / 8 / 4 | 11 | 40 / 40 |
-| 5 | 8 | 33 | 6 × 3 | 18 / 10 / 5 | 14 | 40 / 40 |
+| 3 | 7 | 21 | 5 × 3 | 12 / 6 / 3 | 9 | 40 / 40 |
+| 4 | 8 | 27 | 5 × 3 | 15 / 8 / 4 | 9 | 40 / 40 |
+| 5 | 8 | 33 | 6 × 3 | 18 / 10 / 5 | 11 | 40 / 40 |
 | 6 | 9 | 39 | 7 × 3 | 21 / 12 / 6 | 13 | 40 / 40 |
-| 7 | 9 | 45 | 7 × 4 | 25 / 13 / 7 | 16 | 40 / 40 |
-| 8 | 9 | 48 | 7 × 4 | 26 / 13 / 6 / 3 | 15 | 40 / 40 |
-| 9 | 10 | 54 | 8 × 4 | 29 / 14 / 7 / 4 | 20 | 40 / 40 |
-| 10 | 10 | 57 | 8 × 4 | 30 / 15 / 8 / 4 | 21 | 40 / 40 |
-| 11 | 10 | 63 | 9 × 4 | 34 / 17 / 8 / 4 | 25 | 40 / 36.9 |
+| 7 | 9 | 45 | 7 × 4 | 25 / 13 / 7 | 14 | 40 / 40 |
+| 8 | 9 | 48 | 7 × 4 | 26 / 13 / 6 / 3 | 14 | 40 / 40 |
+| 9 | 10 | 54 | 8 × 4 | 29 / 14 / 7 / 4 | 16 | 40 / 40 |
+| 10 | 10 | 57 | 8 × 4 | 30 / 15 / 8 / 4 | 16 | 40 / 40 |
+| 11 | 10 | 63 | 9 × 4 | 34 / 17 / 8 / 4 | 20 | 40 / 36.9 |
 
-L5+ bases are 1.75-2.33 wide (`aspect_min` 1.6). Generation stays under ~100 ms per level
-at the fixed seeds (about 420 ms for all 11); a random seed costs a few solvability checks
-(L11 averages ~1.6 attempts, ~175 ms).
+L5+ bases are 1.75-2.33 wide (`aspect_min` 1.6). Generation stays under ~200 ms per level
+at the fixed seeds (about 600 ms for all 11, budget 1500 ms in `tests/probe_generation.gd`);
+a random seed costs a few solvability checks.
 
 Obsolete keys of the scattered generator (`occupancy_h/v`, `overlap*`, `pitch_ratio`,
 `slot_*`, `anchor_*`) were removed from `LevelConfig`; `LevelConfig.create` ignores
@@ -144,14 +145,27 @@ satisfy that.
 
 - **Base layer (0):** connected, on a full-card lattice (coordinates flush with the
   board's left/top edge), grown compactly inside `columns × rows`.
-- **Upper layers (k > 0):** pyramidal. Each card sits at the **exact midpoint of two
-  orthogonally adjacent supports** of layer k-1 (half-card offset on one axis), so it
-  never overhangs the layer below, and both supports are overlapped at or above the
-  shared blocking threshold. Slots are picked greedily: fewest lower cards newly
-  blocked first (contiguous blocks keep more cards free), then strongest support
-  overlap, then a seeded compact/noise score.
-- **No same-layer overlap:** cards of one layer never overlap (each card reserves a
-  2×2 half-cell footprint). No random coordinates anywhere.
+- **Upper layers (k > 0):** scattered, like the front cards of a shuffled pile. Every
+  card of the board stores its position in **quarter-card steps** (`grid_x` / `grid_y`;
+  base cards sit on multiples of 4, so `x = grid_x × card_size / 4`; at the 40 px render
+  cap a quarter card is exactly 10 px). Candidates are all quarter-card positions inside
+  the base footprint (its bounding box) where the card
+  - overlaps **at least two** cards of layer k-1 at or above the shared blocking threshold
+    (it rests on the pile; `support_ids` lists every card it rests on), and
+  - hides no card of layer k-1 by more than 75% (`LevelValidator.MAX_OVERLAP`).
+
+  Cards of one layer never overlap. A seeded greedy scatter takes the cheapest candidate
+  `layer_targets` times (pyramid counts are unchanged; higher layers may be sparser). Cost
+  grows with: a same-layer card exactly side by side on the same row/column (strong) or
+  merely in line within three cards; crowding by same-layer neighbours; the fractional x /
+  y offset (relative to the base grid) and the left/centre/right x top/bottom region
+  the layer already uses; and burying lower cards that are still free (a stack on cards the
+  layer already covers is cheaper, so starts stay fair). A layer too dense for the full
+  spacing relaxes the spread costs step by step (`SCATTER_RELAX`). Ten percent of every
+  big layer (8+ cards, below the top) is **reserved**: no card above may block those cards,
+  which are spread over the layer by farthest-point sampling, so no layer starts buried.
+- **No same-layer overlap:** cards of one layer never overlap (hard gate). No random
+  coordinates anywhere.
 
 ## Guardrails (explicit, enforced by `LevelConfig.validate`)
 
@@ -191,16 +205,21 @@ seed `config.seed + i`, up to `max_attempts`):
    `[aspect_min, aspect_max]` (pipeline defaults 1.15..2.25; shipped rows steer toward 2.0 and
    ask L3+ for 1.5-1.6 up to 2.4) (the shape
    gates are waived for tiny bases and for the triangular-minimum pyramid).
-3. **Upper layers** — midpoint slots over adjacent supports (above).
-4. **Layer gates** — no same-layer overlap, every upper card supported by exactly 2
-   cards below, blocking graph computed with `BoardSpatialRules`. `BoardPipeline`
-   itself tries up to `MAX_ATTEMPTS = 64` internal variants per geometry seed and
-   fails with `SPEC_INVALID`, `BUDGET_EXHAUSTED`, `COMPACTNESS_REJECTED` or
-   `UPPER_LAYER_REJECTED`.
+3. **Upper layers** — scattered on the quarter-card lattice over supports (above).
+4. **Layer and scatter gates** — no same-layer overlap, every upper card supported by at
+   least 2 cards below, blocking graph computed with `BoardSpatialRules`; and, for
+   layered boards, no tidy rows (at most 50% of the upper cards with a same-layer card
+   exactly side by side, no run of more than 3; layers of 5+ cards), varied offsets (a
+   layer of 5+ cards uses at least 2 distinct fractional x and y offsets, 8+ cards at
+   least 3), spread (a layer of 6+ cards has cards in all three horizontal thirds and both
+   vertical halves of the base footprint) and no starved layer (a reserved layer keeps at
+   least 7% of its cards free). `BoardPipeline` itself tries up to `MAX_ATTEMPTS = 64`
+   internal variants per geometry seed and fails with `SPEC_INVALID`,
+   `BUDGET_EXHAUSTED`, `COMPACTNESS_REJECTED` or `UPPER_LAYER_REJECTED`.
 5. **Symbols** — assigned only after all geometry gates pass (shuffled trios, seeded by
    `symbol_seed`).
-6. **Export** — cards cropped so the occupied box touches (0, 0) (whole half-card
-   shift, grid alignment kept); `board_width`/`board_height` = occupied size.
+6. **Export** — cards cropped so the occupied box touches (0, 0) (whole-card shift, the
+   quarter-card lattice is kept); `board_width`/`board_height` = occupied size.
 7. **Free-ratio band** — boards whose free share is inside
    `[free_ratio_min, free_ratio_max]` are returned immediately; otherwise the closest
    solvable board to `free_ratio` is kept as fallback (`free_ratio_ok = false`).
@@ -241,7 +260,8 @@ Built from `LevelConfig.metrics()`, then extended by `LevelBoardGenerator` and
   `symbol_seed_used`, `pipeline_attempts`, `free_ratio` (actual), `free_ratio_ok`,
   `free_cards`, `blocked_cards`, `cards_per_layer`, `layer_count`, `base_card_count`,
   `max_coverage`, `same_layer_overlaps`, `support_edge_count`, `blocking_edge_count`,
-  `occupied_width`, `occupied_height`.
+  `free_per_layer` (free cards per layer at the start, base first), `run_ratio` and
+  `longest_run` (straightness of the upper layers), `occupied_width`, `occupied_height`.
 - **Fit** (for the occupied board, not the largest allowed one): `fits_portrait`,
   `fits_landscape`, `min_card_px_portrait`, `min_card_px_landscape`; and, when a
   `board_size` is given, `available_board_size` and `fit_scale`.

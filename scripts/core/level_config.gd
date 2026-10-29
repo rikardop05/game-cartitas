@@ -76,7 +76,8 @@ func _init() -> void:
 		available_card_types.append(str(t))
 
 # Obsolete scatter-generator keys (occupancy_h/v, overlap*, pitch_ratio) in old
-# rows or JSON are ignored: BoardPipeline places cards on the half-card grid.
+# rows or JSON are ignored: BoardPipeline fills the base on the full-card lattice and
+# scatters the upper layers on a quarter-card lattice.
 static func create(params: Dictionary) -> LevelConfig:
 	var cfg := LevelConfig.new()
 	cfg.difficulty = int(params.get("difficulty", 1))
