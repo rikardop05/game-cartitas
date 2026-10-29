@@ -90,8 +90,8 @@ static func _resolve_from_difficulty(level: Dictionary, deck_pool: Array, board_
 	out.erase("difficulty")
 	out.erase("layout")
 	out["cards"] = result["cards"]
-	out["board_width"] = config.board_width()
-	out["board_height"] = config.board_height()
+	out["board_width"] = float(result["board_width"])
+	out["board_height"] = float(result["board_height"])
 	out["card_size"] = config.card_size
 	var metrics: Dictionary = result["metrics"]
 	metrics["generation_time_ms"] = elapsed_ms
@@ -120,22 +120,12 @@ static func _assign_shuffled_decks(level: Dictionary, pool: Array) -> void:
 	level["deck_b"] = p.slice(half)
 
 static func _assign_deterministic_decks(level: Dictionary, pool: Array, seed: int) -> void:
-	# Mirrors the deck split used by the generation pipeline (LayoutGenerator
-	# _instantiate_level) so the returned level matches the solvability check.
-	var p := pool.duplicate()
-	var rng := RandomNumberGenerator.new()
-	rng.seed = seed
-	_shuffle_seeded(p, rng)
-	var half := int(ceil(p.size() / 2.0))
-	level["deck_a"] = p.slice(0, half)
-	level["deck_b"] = p.slice(half)
+	# Same split LevelBoardGenerator used for the solvability check, so the
+	# returned level matches what was proven solvable.
+	var decks := LevelBoardGenerator.split_decks(pool, seed)
+	level["deck_a"] = decks["deck_a"]
+	level["deck_b"] = decks["deck_b"]
 
-static func _shuffle_seeded(arr: Array, rng: RandomNumberGenerator) -> void:
-	for i in range(arr.size() - 1, 0, -1):
-		var j := rng.randi_range(0, i)
-		var tmp = arr[i]
-		arr[i] = arr[j]
-		arr[j] = tmp
 
 static func _shuffle(arr: Array) -> void:
 	var rng := RandomNumberGenerator.new()

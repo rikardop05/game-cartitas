@@ -1,6 +1,12 @@
 class_name BoardManager
 extends RefCounted
 
+# The spatial blocking rule lives entirely in BoardSpatialRules, shared with
+# BoardPipeline so generated boards and runtime availability always agree. This
+# class only applies the state/location/layer guards and delegates the geometric
+# decision (AABB, threshold, quantization) to BoardSpatialRules — zero spatial
+# logic is duplicated here.
+
 var cards: Array[Card] = []
 
 func _init(p_cards: Array[Card] = []) -> void:
@@ -23,14 +29,14 @@ func remaining_count() -> int:
 	return active_cards().size()
 
 func is_blocked(card: Card) -> bool:
+	if card.is_removed() or card.location != Card.Location.BOARD:
+		return false
 	for other in cards:
 		if other == card:
 			continue
 		if other.location != Card.Location.BOARD or other.is_removed():
 			continue
-		if other.layer <= card.layer:
-			continue
-		if card.get_display_rect().intersects(other.get_display_rect()):
+		if BoardSpatialRules.blocks_with_layers(card.get_display_rect(), other.get_display_rect(), card.layer, other.layer):
 			return true
 	return false
 

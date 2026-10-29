@@ -4,6 +4,7 @@ extends SceneTree
 # and asserts: no load error, validator passes, solvable, and that total
 # generation stays under the 1.5s budget when possible.
 
+const BoardChecks = preload("res://tests/board_checks.gd")
 const LOAD_BUDGET_MS := 1500
 
 func _init() -> void:
@@ -33,14 +34,18 @@ func _init() -> void:
 			printerr("PROBE FAIL: level %s not solvable" % id)
 			quit(1)
 			return
-		print("L%s gen=%dms wall=%dms attempts=%d seed=%d free=%.2f(%s) maxcov=%.2f exp=%.2f occ=%.2fx%.2f portrait=%s scale=%.2f landscape=%s (card %.1f/%.1fpx)" % [
+		# Same structural bar as the suites: grid-aligned, supported, no overlap.
+		var problems := BoardChecks.problems(level)
+		if not problems.is_empty():
+			printerr("PROBE FAIL: level %s board structure: %s" % [id, str(problems)])
+			quit(1)
+			return
+		print("L%s gen=%dms wall=%dms attempts=%d seed=%d cards=%d layers=%s free=%d(%.2f,%s) board=%.0fx%.0f portrait=%s landscape=%s (card %.1f/%.1fpx)" % [
 			id, gen_ms, wall, int(metrics.get("attempts", 0)), int(metrics.get("seed_used", 0)),
-			float(metrics.get("free_ratio", 0)), str(metrics.get("free_ratio_ok", false)),
-			float(metrics.get("max_coverage", 0)), float(metrics.get("min_exposure", 0)),
-			float(metrics.get("anchor_occupancy_h", 0)), float(metrics.get("anchor_occupancy_v", 0)),
-			str(metrics.get("fits_portrait", false)),
-			float(metrics.get("min_card_px_portrait", 0)) / float(metrics.get("card_size", 48)),
-			str(metrics.get("fits_landscape", false)),
+			(level["cards"] as Array).size(), str(metrics.get("cards_per_layer", [])),
+			int(metrics.get("free_cards", 0)), float(metrics.get("free_ratio", 0)), str(metrics.get("free_ratio_ok", false)),
+			float(level["board_width"]), float(level["board_height"]),
+			str(metrics.get("fits_portrait", false)), str(metrics.get("fits_landscape", false)),
 			float(metrics.get("min_card_px_portrait", 0)), float(metrics.get("min_card_px_landscape", 0)),
 		])
 	var total_wall := Time.get_ticks_msec() - started_all

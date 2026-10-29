@@ -29,7 +29,7 @@ static func validate(level: Dictionary) -> Dictionary:
 		type_counts[type] = int(type_counts.get(type, 0)) + 1
 
 	_validate_spatial(level, cards, card_size, errors)
-	_validate_available(level, cards, card_size, errors)
+	_validate_available(level, errors)
 
 	for deck in ["deck_a", "deck_b"]:
 		var deck_arr = level.get(deck, [])
@@ -83,6 +83,18 @@ static func _validate_spatial(level: Dictionary, cards: Array, card_size: float,
 			errors.append("layer-0 cards stacked silently at %s" % key)
 		layer0_seen[key] = true
 
+	# Cards of one layer never overlap (the board is grid-aligned).
+	for i in cards.size():
+		var rect_i := _card_rect(cards[i], card_size)
+		for j in range(i + 1, cards.size()):
+			if int(cards[i].get("layer", 0)) != int(cards[j].get("layer", 0)):
+				continue
+			if _rects_overlap(rect_i, _card_rect(cards[j], card_size)):
+				errors.append("cards %s and %s overlap on layer %d" % [str(cards[i].get("id", "")), str(cards[j].get("id", "")), int(cards[i].get("layer", 0))])
+
+	# A card must stay recognisable under the layer right above it: no single
+	# card of the next layer may hide more than MAX_OVERLAP of it. (Layers two or
+	# more apart may line up exactly, as in a stacked pyramid.)
 	for i in cards.size():
 		var cdata = cards[i]
 		var rect := _card_rect(cdata, card_size)
@@ -91,13 +103,22 @@ static func _validate_spatial(level: Dictionary, cards: Array, card_size: float,
 			if i == j:
 				continue
 			var odata = cards[j]
-			if int(odata.get("layer", 0)) <= int(cdata.get("layer", 0)):
+			if int(odata.get("layer", 0)) != int(cdata.get("layer", 0)) + 1:
 				continue
-			cov = maxf(cov, _overlap_frac(rect, _card_rect(odata, card_size), card_size))
+			cov = maxf(cov, BoardSpatialRules.coverage(rect, _card_rect(odata, card_size)))
 		if cov > MAX_OVERLAP + OVERLAP_EPSILON:
 			errors.append("card %s overlaps a covering card by %.2f (max %.2f)" % [str(cdata.get("id", "")), cov, MAX_OVERLAP])
 
-static func _validate_available(level: Dictionary, cards: Array, card_size: float, errors: Array[String]) -> void:
+# Free cards are counted with the same blocking rule the runtime uses
+# (BoardSpatialRules, shared with BoardManager and BoardPipeline).
+static func _validate_available(level: Dictionary, errors: Array[String]) -> void:
+	if free_card_count(level) < 1:
+		errors.append("level has no available cards")
+
+# Cards not blocked at the start of the level (10%-area rule of BoardSpatialRules).
+static func free_card_count(level: Dictionary) -> int:
+	var cards: Array = level.get("cards", [])
+	var card_size := float(level.get("card_size", 48.0))
 	var available := 0
 	for i in cards.size():
 		var cdata = cards[i]
@@ -107,20 +128,17 @@ static func _validate_available(level: Dictionary, cards: Array, card_size: floa
 			if j == i:
 				continue
 			var odata = cards[j]
-			if int(odata.get("layer", 0)) <= int(cdata.get("layer", 0)):
-				continue
-			if c_rect.intersects(_card_rect(odata, card_size)):
+			if BoardSpatialRules.blocks_with_layers(c_rect, _card_rect(odata, card_size), int(cdata.get("layer", 0)), int(odata.get("layer", 0))):
 				blocked = true
 				break
 		if not blocked:
 			available += 1
-	if available < 1:
-		errors.append("level has no available cards")
+	return available
 
 static func _card_rect(cdata, card_size: float) -> Rect2:
 	return Rect2(Vector2(float(cdata.get("x", 0)), float(cdata.get("y", 0))), Vector2(card_size, card_size))
 
-static func _overlap_frac(a: Rect2, b: Rect2, card_size: float) -> float:
-	var ix := maxf(0.0, minf(a.end.x, b.end.x) - maxf(a.position.x, b.position.x))
-	var iy := maxf(0.0, minf(a.end.y, b.end.y) - maxf(a.position.y, b.position.y))
-	return (ix * iy) / maxf(1.0, card_size * card_size)
+# True overlap with positive area (touching edges do not count).
+static func _rects_overlap(a: Rect2, b: Rect2) -> bool:
+	return a.position.x + OVERLAP_EPSILON < b.end.x and b.position.x + OVERLAP_EPSILON < a.end.x \
+		and a.position.y + OVERLAP_EPSILON < b.end.y and b.position.y + OVERLAP_EPSILON < a.end.y
