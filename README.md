@@ -54,6 +54,7 @@ Esse runner inclui `test_level_boards.gd` (tabuleiros gerados de todos os Levels
 |---|---|
 | `smoke_level.gd`, `smoke_main_menu.gd` | as cenas abrem sem erro |
 | `smoke_endless.gd` | fluxo do Endless: rodada, pontos, rodada concluída, fim de partida e recorde |
+| `smoke_help.gd` | a ajuda (?) cabe na tela nas duas orientações e sempre fecha |
 | `regression_board_layout.gd` | posições das cartas de todos os Levels em todas as resoluções (retrato, paisagem e desktop) |
 | `probe_generation.gd` | tempo de geração e qualidade dos tabuleiros (validador, solucionável) |
 | `repro_hud_bounds.gd` | HUD inteiro dentro da tela em 6 views: campanha e Endless, retrato e paisagem, mais as views com o mascote desligado |

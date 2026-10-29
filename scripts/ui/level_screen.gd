@@ -211,6 +211,9 @@ func _on_resized() -> void:
 
 func _build_ui() -> void:
 	_is_landscape = _viewport_is_landscape()
+	# The rebuild frees the help overlay too, so undo the pause it applied.
+	if _help_shown and controller != null:
+		controller.resume()
 	_help_shown = false
 	power_buttons.clear()
 	_mascot_area = null
@@ -1252,47 +1255,75 @@ func _on_help() -> void:
 	_help_shown = true
 	if controller != null:
 		controller.pause()
+	if mascot != null:
+		mascot.hide_bubble()
 	var overlay := Control.new()
+	overlay.name = "HelpOverlay"
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.z_index = 900
 	add_child(overlay)
+	# Tapping the shade also closes, so the overlay can never trap the player.
 	var shade := ColorRect.new()
 	shade.color = Color(0, 0, 0, 0.6)
 	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
 	shade.mouse_filter = Control.MOUSE_FILTER_STOP
+	shade.gui_input.connect(func(event: InputEvent):
+		if event is InputEventMouseButton and event.pressed:
+			_close_help()
+	)
 	overlay.add_child(shade)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(center)
 	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.theme = UiHelpers.warm_theme()
 	var style := StyleBoxFlat.new()
-	style.bg_color = PANEL_BACKGROUND
+	style.bg_color = PANEL_BACKGROUND.darkened(0.25)
 	style.border_color = PANEL_BORDER
 	style.set_border_width_all(2)
 	style.set_corner_radius_all(12)
-	style.content_margin_left = 16
-	style.content_margin_top = 12
-	style.content_margin_right = 16
-	style.content_margin_bottom = 12
+	style.content_margin_left = 14
+	style.content_margin_top = 10
+	style.content_margin_right = 14
+	style.content_margin_bottom = 10
 	panel.add_theme_stylebox_override("panel", style)
-	overlay.add_child(panel)
+	center.add_child(panel)
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 10)
+	col.add_theme_constant_override("separation", 8)
 	panel.add_child(col)
+	# Width follows the viewport so the panel always fits, in both orientations.
+	var viewport_size := get_viewport_rect().size
+	var text_width := minf(400.0, viewport_size.x - 64.0)
 	var txt := Label.new()
 	txt.text = Localizer.t("help_text")
 	txt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	txt.custom_minimum_size = Vector2(240, 0)
+	txt.custom_minimum_size = Vector2(text_width, 0)
+	txt.add_theme_font_size_override("font_size", 10 if _is_landscape else 11)
 	txt.add_theme_color_override("font_color", TEXT_PRIMARY)
 	col.add_child(txt)
 	var close := Button.new()
+	close.name = "HelpClose"
 	close.text = Localizer.t("close")
-	close.custom_minimum_size = Vector2(0, 40)
-	close.pressed.connect(func():
-		overlay.queue_free()
-		_help_shown = false
-		if controller != null:
-			controller.resume()
-	)
+	close.custom_minimum_size = Vector2(120, 32)
+	close.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	close.pressed.connect(_close_help)
 	col.add_child(close)
+
+func _close_help() -> void:
+	var overlay := get_node_or_null("HelpOverlay")
+	if overlay == null:
+		return
+	overlay.name = "HelpOverlayClosing"
+	overlay.queue_free()
+	_help_shown = false
+	if controller != null:
+		controller.resume()
+
+func _unhandled_input(event: InputEvent) -> void:
+	if _help_shown and event.is_action_pressed("ui_cancel"):
+		_close_help()
+		get_viewport().set_input_as_handled()
 
 # --- Moves --------------------------------------------------------------------------------
 # A tap goes to the controller immediately, whatever is still animating: state is the source
