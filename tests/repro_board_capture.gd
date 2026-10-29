@@ -4,8 +4,8 @@ extends SceneTree
 const LEVEL_ID := "6"
 const EPSILON := 0.01
 const VIEWS := [
-	{"name": "portrait-360x640", "orientation": "portrait", "window": Vector2i(360, 640), "board": Vector2(332, 264)},
-	{"name": "landscape-640x360", "orientation": "landscape", "window": Vector2i(640, 360), "board": Vector2(466, 214)},
+	{"name": "portrait-360x640", "orientation": "portrait", "window": Vector2i(360, 640), "board": Vector2(338, 173)},
+	{"name": "landscape-640x360", "orientation": "landscape", "window": Vector2i(640, 360), "board": Vector2(450, 189)},
 ]
 
 var _errors: Array[String] = []

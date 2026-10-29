@@ -1,40 +1,76 @@
 extends Control
 
 const CARD_DISPLAY_SIZE := Card.DISPLAY_SIZE
-const RESERVE_COLUMNS := 2
-const WARM_BACKGROUND := Color("#c78454")
-const PANEL_BACKGROUND := Color(0.16, 0.10, 0.08, 0.78)
-const PANEL_BORDER := Color("#f3d28d")
+const RESERVE_MIN_CARD_PX := 18.0
 const TEXT_PRIMARY := Color("#fff1d2")
 const TEXT_MUTED := Color("#f0c98e")
 const INK := Color("#3a2410")
 const GOLD := Color("#ffe36e")
-# The Clearing Zone is the warm, highlighted bar of the screen.
-const ZONE_BAR := Color("#e98a35")
-const ZONE_BAR_BORDER := Color("#ffd18a")
 const BOARD_CARD_SCALE := 1.0
 const BOARD_X_COMPRESSION := 1.0
 const BOARD_Y_COMPRESSION := 1.0
-const PORTRAIT_BOARD_FRAME := Vector2(344.0, 272.0)
-# Landscape (640x360): HUD row on top, then [Ace + Reserve | board, decks, zone | powers].
-const LANDSCAPE_BOARD_FRAME := Vector2(478.0, 222.0)
-const LANDSCAPE_SIDE_WIDTH := 84.0
-const LANDSCAPE_POWERS_WIDTH := 62.0
-const HUD_CENTER_WIDTH := 84.0
-const LANDSCAPE_ZONE_CARD_SIZE := Vector2(32.0, 32.0)
-# 7 slots + 6 gaps of 3 px must fit the 328 px zone row in one line.
-const PORTRAIT_ZONE_CARD_SIZE := Vector2(44.0, 44.0)
+# The background inside the board window, darkened so the cards read.
+const BOARD_SHADE := Color(0.0, 0.0, 0.0, 0.5)
+# The cards sit this many px inside the window's drawn frame.
+const BOARD_PAD := 2.0
+# Endless uses the autumn background like the later Levels.
+const ENDLESS_BACKGROUND_LEVEL := 999
+# Frame thickness (source px) when a kit panel is 9-sliced: border plus its shadow line.
+const FRAME_MARGIN := 7
+
+# Layout, in logical px. Landscape (640x360) follows the owner's mockup; portrait (360x640)
+# stacks the same pieces. Every piece is a kit panel at an exact position, nothing reflows.
+const LAND_HUD_HEIGHT := 48.0
+const LAND_CHEVRON := Rect2(19, 11, 32, 30)
+const LAND_TITLE := Rect2(58, 12, 170, 28)
+const LAND_PILL_CLOCK := Vector2(241, 14)
+const LAND_PILL_SECOND := Vector2(322, 14)
+const LAND_HELP := Rect2(538, 14, 36, 32)
+const LAND_SOUND := Rect2(576, 5, 36, 36)
+const LAND_BOARD_FRAME := Rect2(96, 62, 464, 208)
+# Inside the frame art (its transparent centre), in frame-local px.
+const LAND_BOARD_INNER := Rect2(5, 6, 454, 193)
+const LAND_POWERS := Rect2(571, 62, 64, 128)
+const LAND_POWERS_INNER := Rect2(5, 6, 54, 115)
+const LAND_DECK_A := Rect2(18, 201, 64, 64)
+const LAND_DECK_B := Rect2(571, 201, 64, 64)
+const LAND_RESERVE := Rect2(18, 280, 148, 56)
+const LAND_ZONE := Rect2(172, 280, 464, 64)
+const LAND_MASCOT_AREA := Rect2(3, 48, 87, 147)
+const PORT_HUD_HEIGHT := 44.0
+const PORT_CHEVRON := Rect2(4, 7, 32, 30)
+const PORT_TITLE := Rect2(40, 6, 66, 32)
+const PORT_PILL_CLOCK := Vector2(108, 6)
+const PORT_PILL_SECOND := Vector2(188, 6)
+const PORT_HELP := Rect2(284, 6, 36, 32)
+const PORT_SOUND := Rect2(320, 4, 36, 36)
+const PORT_BOARD_FRAME := Rect2(4, 46, 352, 192)
+const PORT_BOARD_INNER := Rect2(5, 6, 342, 177)
+const PORT_POWERS := Rect2(4, 396, 352, 64)
+const PORT_POWERS_INNER := Rect2(7, 7, 338, 50)
+const PORT_DECK_A := Rect2(4, 248, 64, 64)
+const PORT_DECK_B := Rect2(292, 248, 64, 64)
+const PORT_RESERVE := Rect2(74, 248, 212, 64)
+const PORT_ZONE := Rect2(4, 322, 352, 64)
+const PORT_MASCOT_AREA := Rect2(0, 468, 360, 172)
+const PILL_SIZE := Vector2(64, 32)
+# The inside of a 64x64 slot (deck piles are centred in it).
+const SLOT_INNER := Rect2(5, 6, 54, 52)
+const ZONE_TITLE_X := 8.0
+const ZONE_TITLE_WIDTH := 66.0
+const POWER_BUTTON_LANDSCAPE := Vector2(54, 36)
+const POWER_BUTTON_PORTRAIT := Vector2(104, 46)
+const LANDSCAPE_ZONE_CARD_SIZE := Vector2(40.0, 40.0)
+# 7 slots + 6 gaps of 2 px must fit the zone row in one line.
+const PORTRAIT_ZONE_CARD_SIZE := Vector2(36.0, 36.0)
 const LANDSCAPE_RESERVE_CARD_SIZE := Vector2(30.0, 30.0)
-const PORTRAIT_RESERVE_CARD_SIZE := Vector2(40.0, 40.0)
-const LANDSCAPE_DECK_CARD_SIZE := Vector2(34.0, 34.0)
-const PORTRAIT_DECK_CARD_SIZE := Vector2(46.0, 46.0)
+const PORTRAIT_RESERVE_CARD_SIZE := Vector2(38.0, 38.0)
+const DECK_CARD_SIZE := Vector2(36.0, 36.0)
 # A Support Deck is a pile: one face-up card plus up to PILE_MAX_EDGES card edges.
 const PILE_EDGE_STEP := 3.0
-const PILE_MAX_EDGES := 6
-const POWER_ICON_LANDSCAPE := 32.0
-const POWER_ICON_PORTRAIT := 36.0
-const MASCOT_SCALE_LANDSCAPE := 1.4
-const MASCOT_SCALE_PORTRAIT := 1.2
+const PILE_MAX_EDGES := 5
+const MASCOT_SCALE_LANDSCAPE := 1.3
+const MASCOT_SCALE_PORTRAIT := 1.6
 const INSTRUCTION_SECONDS := 4.0
 # Card moves are applied to the controller the instant they are tapped; these timings only
 # drive the overlay visuals (flying ghost, match flash) that catch up with the state.
@@ -61,6 +97,9 @@ void fragment() {
 
 static var _dim_shader: Shader
 static var _dim_materials := {}
+static var _chevron_texture_cache: ImageTexture
+static var _portrait_frame_cache: ImageTexture
+static var _sound_icon_cache := {}
 
 # The three cards of one match, flashed together once the last of them has landed.
 class MatchGroup extends RefCounted:
@@ -94,7 +133,7 @@ var stars_label: Label
 var score_label: Label
 var level_label: Label
 var zone_header: Label
-var _board_panel: PanelContainer
+var _sound_icon: TextureRect
 var _mascot_area: Control
 var _instruction_bubble: PanelContainer
 var _is_landscape := true
@@ -132,7 +171,6 @@ func _ready() -> void:
 	while board_container != null and board_container.size.x <= 0.0 and attempts < 10:
 		await get_tree().process_frame
 		attempts += 1
-	_apply_board_panel_height()
 	var board_size := Vector2(280.0, 360.0)
 	if board_container != null and board_container.size.x > 0.0:
 		board_size = board_container.size
@@ -201,11 +239,9 @@ func _on_resized() -> void:
 		if landscape != _is_landscape:
 			_build_ui()
 			await get_tree().process_frame
-			_apply_board_panel_height()
 			await get_tree().process_frame
 			render()
 		else:
-			_apply_board_panel_height()
 			await get_tree().process_frame
 			render()
 
@@ -218,6 +254,7 @@ func _build_ui() -> void:
 	power_buttons.clear()
 	_mascot_area = null
 	_instruction_bubble = null
+	_sound_icon = null
 	# The rebuild frees every child, ghosts included; render() re-syncs the zone afterwards.
 	_fx_layer = null
 	_flights.clear()
@@ -230,69 +267,37 @@ func _build_ui() -> void:
 	_sfx_player = null
 	_layout_warning = null
 
-	var bg := ColorRect.new()
-	bg.color = WARM_BACKGROUND
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(bg)
-	add_child(_make_background_glow())
+	add_child(UiHelpers.make_background(_is_landscape, _background_level()))
 
-	var edge := 4 if _is_landscape else 6
-	var margin := MarginContainer.new()
-	margin.name = "ScreenMargin"
-	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	# Portrait keeps 8 px at the sides so the board area stays the 332 px reference width.
-	var side := 4 if _is_landscape else 8
-	margin.add_theme_constant_override("margin_left", side)
-	margin.add_theme_constant_override("margin_top", edge)
-	margin.add_theme_constant_override("margin_right", side)
-	margin.add_theme_constant_override("margin_bottom", edge)
-	add_child(margin)
-
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 3 if _is_landscape else 10)
-	margin.add_child(vbox)
-
-	vbox.add_child(_build_hud())
-	if _is_landscape:
-		var body := HBoxContainer.new()
-		body.name = "Body"
-		body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		body.add_theme_constant_override("separation", 4)
-		vbox.add_child(body)
-		body.add_child(_build_side_column())
-		body.add_child(_build_main_column())
-		var powers := _build_controls()
-		powers.custom_minimum_size = Vector2(LANDSCAPE_POWERS_WIDTH, 0)
-		powers.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		body.add_child(powers)
-	else:
-		vbox.add_child(_build_main_column())
+	# Every piece sits at its own kit position (logical px); the layout never reflows.
+	var layout := Control.new()
+	layout.name = "Layout"
+	layout.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layout.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(layout)
+	_build_hud(layout)
+	_build_board_frame(layout)
+	_build_deck_slot(layout, "a")
+	_build_deck_slot(layout, "b")
+	_build_reserve_panel(layout)
+	_build_zone_panel(layout)
+	_build_controls(layout)
+	# Ace's free space; it is a plain spacer so the mascot and bubble have a known area.
+	_mascot_area = Control.new()
+	_mascot_area.name = "MascotArea"
+	_mascot_area.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(_mascot_area, _pick(LAND_MASCOT_AREA, PORT_MASCOT_AREA))
+	layout.add_child(_mascot_area)
 	_build_mascot()
 	_fx()
 
-# A soft vertical glow over the flat warm background (darker top, lighter bottom).
-func _make_background_glow() -> TextureRect:
-	var gradient := Gradient.new()
-	gradient.offsets = PackedFloat32Array([0.0, 0.5, 1.0])
-	gradient.colors = PackedColorArray([Color(0.40, 0.18, 0.06, 0.30), Color(1.0, 0.66, 0.28, 0.0), Color(1.0, 0.72, 0.32, 0.32)])
-	var texture := GradientTexture2D.new()
-	texture.gradient = gradient
-	texture.fill_from = Vector2(0.0, 0.0)
-	texture.fill_to = Vector2(0.0, 1.0)
-	texture.width = 4
-	texture.height = 128
-	var glow := TextureRect.new()
-	glow.texture = texture
-	glow.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	glow.stretch_mode = TextureRect.STRETCH_SCALE
-	glow.set_anchors_preset(Control.PRESET_FULL_RECT)
-	glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return glow
+# Campaign Levels 1-3 use the meadow, later ones (and Endless) the autumn town.
+func _background_level() -> int:
+	return ENDLESS_BACKGROUND_LEVEL if _endless != null else _level_id.to_int()
 
-# Ace lives in the free space of the layout (MascotArea): the left column in landscape,
-# the middle of the deck row in portrait. It is a direct child of the screen (outside
-# ScreenMargin), so it never takes layout space.
+# Ace lives in the free space of the layout (MascotArea): above deck A in landscape, the
+# bottom of the screen in portrait. It is a direct child of the screen (outside Layout),
+# so it never takes layout space.
 func _build_mascot() -> void:
 	mascot = null
 	if not Game.mascot_enabled():
@@ -313,19 +318,19 @@ func _place_mascot() -> void:
 		return
 	mascot.size = Mascot.BASE_SIZE * (MASCOT_SCALE_LANDSCAPE if _is_landscape else MASCOT_SCALE_PORTRAIT)
 	if _is_landscape:
-		# Left column: Ace in the upper-middle, its bubble in the free band above it.
+		# Left column: Ace stands at the bottom of the free space, its bubble in the band above.
 		mascot.global_position = Vector2(
 			area.get_center().x - mascot.size.x * 0.5,
-			area.position.y + area.size.y * 0.46
+			area.end.y - mascot.size.y - 2.0
 		)
 		mascot.side_bubble_bounds = Rect2()
 		mascot.free_bounds = Rect2(area.position, Vector2(area.size.x, maxf(0.0, mascot.global_position.y - 4.0 - area.position.y)))
 	else:
-		# Deck row: Ace beside deck A, its bubble to the right inside the row's free middle.
-		mascot.global_position = Vector2(area.position.x + 2.0, area.get_center().y - mascot.size.y * 0.5)
+		# Bottom area: Ace on the left, its bubble to the right at head height.
+		mascot.global_position = Vector2(area.position.x + 36.0, area.get_center().y - mascot.size.y * 0.5)
 		mascot.free_bounds = Rect2()
 		var left := mascot.global_position.x + mascot.size.x
-		mascot.side_bubble_bounds = Rect2(left, area.position.y, area.end.x - left, area.size.y)
+		mascot.side_bubble_bounds = Rect2(left, mascot.global_position.y - 4.0, area.end.x - left - 8.0, mascot.size.y * 0.7)
 	mascot.visible = not _ended
 
 func _say(event: String, context: Dictionary = {}) -> void:
@@ -387,8 +392,6 @@ func _show_instruction_bubble(text: String) -> void:
 		return
 	bubble.reset_size()
 	var target := Vector2(area.get_center().x - bubble.size.x * 0.5, area.get_center().y - bubble.size.y * 0.5)
-	if _is_landscape:
-		target.y = area.position.y + area.size.y * 0.46 - bubble.size.y - 4.0
 	bubble.global_position = Vector2(
 		clampf(target.x, area.position.x, maxf(area.position.x, area.end.x - bubble.size.x)),
 		clampf(target.y, area.position.y, maxf(area.position.y, area.end.y - bubble.size.y))
@@ -399,321 +402,354 @@ func _show_instruction_bubble(text: String) -> void:
 	fade.tween_property(bubble, "modulate:a", 0.0, 0.3)
 	fade.tween_callback(bubble.queue_free)
 
-func _build_hud() -> PanelContainer:
-	var panel := _make_unframed_panel(2, 2)
-	panel.name = "Hud"
-	panel.custom_minimum_size = Vector2(0, 34 if _is_landscape else 44)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 4)
-	panel.add_child(row)
+func _pick(landscape_value, portrait_value):
+	return landscape_value if _is_landscape else portrait_value
 
-	# The Endless label ("Endless · Round 12") is wider than "Level 6": on the 360 px
-	# portrait HUD it only fits with a smaller font and button.
-	var compact := _endless != null and not _is_landscape
-	var left := HBoxContainer.new()
-	left.name = "HudLeft"
-	left.add_theme_constant_override("separation", 3 if compact else 5)
-	left.alignment = BoxContainer.ALIGNMENT_BEGIN
-	row.add_child(left)
+func _place(control: Control, rect: Rect2) -> void:
+	control.position = rect.position
+	control.size = rect.size
 
-	var back := _make_round_button("<", 26 if compact else 28, 16)
+# A plain decorative picture at an exact size (never takes input).
+func _make_art(node_name: String, texture: Texture2D, rect: Rect2) -> TextureRect:
+	var art := TextureRect.new()
+	art.name = node_name
+	art.texture = texture
+	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	art.stretch_mode = TextureRect.STRETCH_SCALE
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(art, rect)
+	return art
+
+# The pixel-art "<" of the back button: drawn here (the kit has no chevron) as a 16x15 image
+# shown at 2x with the project's nearest filter, so every pixel stays crisp.
+static func _chevron_texture() -> Texture2D:
+	if _chevron_texture_cache == null:
+		var outline := Color("#000000")
+		var light := Color("#8fd032")
+		var body := Color("#74bc50")
+		var dark := Color("#477238")
+		var image := Image.create(16, 15, false, Image.FORMAT_RGBA8)
+		image.fill(Color(0, 0, 0, 0))
+		var filled := {}
+		for y in range(1, 14):
+			var x0 := 2 + absi(y - 7)
+			for x in range(x0, x0 + 5):
+				filled[Vector2i(x, y)] = true
+				var shade := body
+				if x == x0:
+					shade = light
+				elif x == x0 + 4:
+					shade = dark
+				image.set_pixel(x, y, shade)
+		for cell: Vector2i in filled.keys():
+			for dy in range(-1, 2):
+				for dx in range(-1, 2):
+					var near := cell + Vector2i(dx, dy)
+					if not filled.has(near) and near.x >= 0 and near.y >= 0 and near.x < 16 and near.y < 15:
+						image.set_pixel(near.x, near.y, outline)
+		_chevron_texture_cache = ImageTexture.create_from_image(image)
+	return _chevron_texture_cache
+
+# panel_board_portrait is solid; the window needs the same transparent centre the landscape
+# frame has, so the darkened background shows through behind the cards.
+static func _portrait_frame_texture() -> Texture2D:
+	if _portrait_frame_cache == null:
+		var source := UiHelpers.kit_texture("panel_board_portrait")
+		if source == null:
+			return null
+		var image := source.get_image()
+		if image.is_compressed():
+			image.decompress()
+		image.convert(Image.FORMAT_RGBA8)
+		image.fill_rect(Rect2i(PORT_BOARD_INNER), Color(0, 0, 0, 0))
+		_portrait_frame_cache = ImageTexture.create_from_image(image)
+	return _portrait_frame_cache
+
+func _board_frame_texture() -> Texture2D:
+	return UiHelpers.kit_texture("panel_board_frame") if _is_landscape else _portrait_frame_texture()
+
+# A flat button showing a picture at an exact size; it nudges down one pixel while pressed
+# and brightens on hover.
+func _make_icon_button(node_name: String, texture: Texture2D, rect: Rect2) -> Button:
+	var btn := Button.new()
+	btn.name = node_name
+	btn.flat = true
+	btn.focus_mode = Control.FOCUS_NONE
+	_make_flat_button_compact(btn)
+	_place(btn, rect)
+	var icon := _make_art("Icon", texture, Rect2(Vector2.ZERO, rect.size))
+	btn.add_child(icon)
+	btn.button_down.connect(func(): icon.position.y = 1.0)
+	btn.button_up.connect(func(): icon.position.y = 0.0)
+	btn.mouse_entered.connect(func(): icon.modulate = Color(1.18, 1.18, 1.18))
+	btn.mouse_exited.connect(func(): icon.modulate = Color.WHITE)
+	return btn
+
+func _build_hud(parent: Control) -> void:
+	var hud := Control.new()
+	hud.name = "Hud"
+	hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(hud, Rect2(0.0, 0.0, get_viewport_rect().size.x, _pick(LAND_HUD_HEIGHT, PORT_HUD_HEIGHT)))
+	parent.add_child(hud)
+
+	var back := _make_icon_button("BackButton", _chevron_texture(), _pick(LAND_CHEVRON, PORT_CHEVRON))
 	back.pressed.connect(_on_back)
-	left.add_child(back)
+	hud.add_child(back)
 
+	# The Endless label ("Endless · Round 12") is wider than "Level 6": in the narrow portrait
+	# title slot it wraps onto two lines.
 	level_label = Label.new()
+	level_label.name = "Title"
 	if _endless != null:
 		level_label.text = Localizer.t("endless_round") % _endless.current_round
 	else:
 		level_label.text = "%s %s" % [Localizer.t("level"), _level_id]
-	level_label.add_theme_font_size_override("font_size", 11 if compact else 14)
+	level_label.add_theme_font_size_override("font_size", 14 if _is_landscape else 10)
 	level_label.add_theme_color_override("font_color", TEXT_PRIMARY)
+	UiHelpers.add_text_shadow(level_label)
 	level_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	left.add_child(level_label)
+	level_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if not _is_landscape:
+		level_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_place(level_label, _pick(LAND_TITLE, PORT_TITLE))
+	hud.add_child(level_label)
 
-	var help := _make_round_button("?", 24, 14)
+	_build_hud_pills(hud)
+
+	var help := Button.new()
+	help.name = "HelpButton"
+	help.text = "?"
+	help.focus_mode = Control.FOCUS_NONE
+	help.add_theme_font_size_override("font_size", 12)
+	help.add_theme_color_override("font_color", TEXT_PRIMARY)
+	help.add_theme_color_override("font_hover_color", Color.WHITE)
+	help.add_theme_color_override("font_pressed_color", TEXT_MUTED)
+	help.add_theme_color_override("font_outline_color", Color(0.14, 0.07, 0.03, 0.92))
+	help.add_theme_constant_override("outline_size", 2)
+	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
+		var style := UiHelpers.kit_stylebox("pill", 8, 0)
+		if state == "hover":
+			style.modulate_color = Color(1.14, 1.14, 1.14)
+		elif state == "pressed":
+			style.modulate_color = Color(0.82, 0.82, 0.82)
+		help.add_theme_stylebox_override(state, style)
 	help.pressed.connect(_on_help)
+	_place(help, _pick(LAND_HELP, PORT_HELP))
+	hud.add_child(help)
 
-	row.add_child(_build_hud_center())
+	_sound_icon = null
+	var sound := _make_icon_button("SoundButton", _sound_texture(), _pick(LAND_SOUND, PORT_SOUND))
+	_sound_icon = sound.get_node("Icon") as TextureRect
+	sound.pressed.connect(_on_sound_toggle)
+	hud.add_child(sound)
 
-	var right := HBoxContainer.new()
-	right.name = "HudRight"
-	right.alignment = BoxContainer.ALIGNMENT_END
-	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(right)
+# The kit's sound icons are pure black pixel art: they get a 1 px cream halo (so the image is
+# 18x18, drawn at 2x) to stay readable on the dark autumn background.
+func _sound_texture() -> Texture2D:
+	var icon_name := "icon_sound_on" if Game.sound_enabled() else "icon_sound_off"
+	if not _sound_icon_cache.has(icon_name):
+		var source := UiHelpers.kit_texture(icon_name)
+		if source == null:
+			return null
+		var icon := source.get_image()
+		if icon.is_compressed():
+			icon.decompress()
+		icon.convert(Image.FORMAT_RGBA8)
+		var halo := Color("#fff1d2")
+		var image := Image.create(icon.get_width() + 2, icon.get_height() + 2, false, Image.FORMAT_RGBA8)
+		image.fill(Color(0, 0, 0, 0))
+		for y in icon.get_height():
+			for x in icon.get_width():
+				if icon.get_pixel(x, y).a < 0.5:
+					continue
+				for dy in range(-1, 2):
+					for dx in range(-1, 2):
+						image.set_pixel(x + 1 + dx, y + 1 + dy, halo)
+		for y in icon.get_height():
+			for x in icon.get_width():
+				var pixel := icon.get_pixel(x, y)
+				if pixel.a >= 0.5:
+					image.set_pixel(x + 1, y + 1, pixel)
+		_sound_icon_cache[icon_name] = ImageTexture.create_from_image(image)
+	return _sound_icon_cache[icon_name]
 
-	if _is_landscape:
-		# "?" sits next to the title. The clock cluster is centred over the board column
-		# (the side columns differ in width), so the left section has a fixed width.
-		left.add_child(help)
-		var center_x := get_viewport_rect().size.x * 0.5 + (LANDSCAPE_SIDE_WIDTH - LANDSCAPE_POWERS_WIDTH) * 0.5
-		left.custom_minimum_size = Vector2(center_x - HUD_CENTER_WIDTH * 0.5 - 6.0, 0.0)
-	else:
-		# Portrait: equal left/right sections keep the clock exactly centred.
-		left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		left.size_flags_stretch_ratio = 1.0
-		right.size_flags_stretch_ratio = 1.0
-		right.add_child(help)
-	return panel
+func _on_sound_toggle() -> void:
+	Game.set_sound(not Game.sound_enabled())
+	if _sound_icon != null and is_instance_valid(_sound_icon):
+		_sound_icon.texture = _sound_texture()
 
-# Clock pill with the live stars right below it (Endless: the run score instead of stars).
-func _build_hud_center() -> VBoxContainer:
-	var center := VBoxContainer.new()
-	center.name = "HudCenter"
-	center.custom_minimum_size = Vector2(HUD_CENTER_WIDTH, 0)
-	center.add_theme_constant_override("separation", 0 if _is_landscape else 2)
+# One brown plate of the kit with a label centred on it (the plate itself is 64x32 and its
+# drawn body sits a little above the middle, so the label box is offset to match).
+func _make_pill(node_name: String, at: Vector2) -> TextureRect:
+	return _make_art(node_name, UiHelpers.kit_texture("pill"), Rect2(at, PILL_SIZE))
 
-	var clock_pill := _make_hud_pill(10)
-	clock_pill.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	timer_label = Label.new()
-	timer_label.text = "00:00"
-	timer_label.add_theme_font_size_override("font_size", 12 if _is_landscape else 14)
-	timer_label.add_theme_color_override("font_color", TEXT_PRIMARY)
-	timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	timer_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	timer_label.custom_minimum_size = Vector2(54, 17 if _is_landscape else 20)
-	clock_pill.add_child(timer_label)
-	center.add_child(clock_pill)
+func _make_pill_label(pill: TextureRect, text: String, font_size: int, color: Color, symbols: bool = false) -> Label:
+	var label := UiHelpers.symbol_label(text, font_size) if symbols else Label.new()
+	if not symbols:
+		label.text = text
+		label.add_theme_font_size_override("font_size", font_size)
+	label.add_theme_color_override("font_color", color)
+	UiHelpers.add_text_shadow(label, 2)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(label, Rect2(0.0, 4.0, PILL_SIZE.x, 24.0))
+	pill.add_child(label)
+	return label
 
+# Clock plate, then the live stars plate (Endless: the run score instead of stars).
+func _build_hud_pills(hud: Control) -> void:
+	var clock_pill := _make_pill("ClockPill", _pick(LAND_PILL_CLOCK, PORT_PILL_CLOCK))
+	hud.add_child(clock_pill)
+	timer_label = _make_pill_label(clock_pill, "00:00", 12, TEXT_PRIMARY)
+
+	var second := _make_pill("ScorePill" if _endless != null else "StarsPill", _pick(LAND_PILL_SECOND, PORT_PILL_SECOND))
+	hud.add_child(second)
 	if _endless != null:
 		stars_label = null
-		var score_pill := _make_hud_pill(8)
-		score_pill.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		score_label = UiHelpers.symbol_label(_score_text(), 12)
-		score_label.add_theme_color_override("font_color", GOLD)
-		score_label.custom_minimum_size = Vector2(48, 16 if _is_landscape else 18)
-		score_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		score_pill.add_child(score_label)
-		center.add_child(score_pill)
+		score_label = _make_pill_label(second, _score_text(), 11, GOLD, true)
 	else:
 		score_label = null
-		stars_label = UiHelpers.symbol_label("☆☆☆", 13 if _is_landscape else 17)
-		stars_label.add_theme_color_override("font_color", GOLD)
-		stars_label.add_theme_color_override("font_outline_color", Color(0.25, 0.12, 0.04, 0.9))
-		stars_label.add_theme_constant_override("outline_size", 3)
-		stars_label.custom_minimum_size = Vector2(0, 16 if _is_landscape else 20)
-		stars_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		stars_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		stars_label.pivot_offset = Vector2(HUD_CENTER_WIDTH * 0.5, 9.0)
-		center.add_child(stars_label)
-	return center
-
-func _make_round_button(text: String, diameter: float, font_size: int) -> Button:
-	var button := Button.new()
-	button.text = text
-	button.focus_mode = Control.FOCUS_NONE
-	button.custom_minimum_size = Vector2(diameter, diameter)
-	button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	button.add_theme_font_size_override("font_size", font_size)
-	button.add_theme_color_override("font_color", TEXT_PRIMARY)
-	button.add_theme_color_override("font_hover_color", Color.WHITE)
-	button.add_theme_color_override("font_pressed_color", TEXT_MUTED)
-	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
-		var style := StyleBoxFlat.new()
-		style.bg_color = PANEL_BACKGROUND
-		if state == "hover":
-			style.bg_color = PANEL_BACKGROUND.lightened(0.14)
-		elif state == "pressed":
-			style.bg_color = PANEL_BACKGROUND.darkened(0.2)
-		style.border_color = PANEL_BORDER
-		style.set_border_width_all(2)
-		style.set_corner_radius_all(int(diameter * 0.5))
-		style.content_margin_left = 0
-		style.content_margin_right = 0
-		style.content_margin_top = 0
-		style.content_margin_bottom = 0
-		button.add_theme_stylebox_override(state, style)
-	return button
+		stars_label = _make_pill_label(second, "☆☆☆", 13, GOLD, true)
+		stars_label.pivot_offset = stars_label.size * 0.5
 
 func _make_flat_button_compact(button: Button) -> void:
 	var empty := StyleBoxEmpty.new()
 	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
 		button.add_theme_stylebox_override(state, empty)
 
-func _make_hud_pill(h_padding: int = 12) -> PanelContainer:
-	var pill := PanelContainer.new()
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.30, 0.15, 0.06, 0.55)
-	style.border_color = Color(1.0, 0.85, 0.55, 0.65)
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(10)
-	style.content_margin_left = h_padding
-	style.content_margin_right = h_padding
-	style.content_margin_top = 0 if _is_landscape else 1
-	style.content_margin_bottom = 0 if _is_landscape else 1
-	pill.add_theme_stylebox_override("panel", style)
-	return pill
-
-# Landscape left column: Ace's free space on top, the Reserve box at the bottom.
-func _build_side_column() -> VBoxContainer:
-	var col := VBoxContainer.new()
-	col.name = "SideColumn"
-	col.custom_minimum_size = Vector2(LANDSCAPE_SIDE_WIDTH, 0)
-	col.add_theme_constant_override("separation", 4)
-	_mascot_area = Control.new()
-	_mascot_area.name = "MascotArea"
-	_mascot_area.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_mascot_area.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	col.add_child(_mascot_area)
-	col.add_child(_build_reserve_panel())
-	return col
-
-func _build_main_column() -> VBoxContainer:
-	var col := VBoxContainer.new()
-	col.name = "MainColumn"
-	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	col.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	col.add_theme_constant_override("separation", 3 if _is_landscape else 14)
-
-	var board_panel := _make_panel(Color(0.19, 0.12, 0.09, 0.22), Color(1, 0.88, 0.60, 0.32), 12)
-	board_panel.name = "BoardFrame"
-	_board_panel = board_panel
-	board_panel.custom_minimum_size = LANDSCAPE_BOARD_FRAME if _is_landscape else PORTRAIT_BOARD_FRAME
-	var board_layer := Control.new()
-	board_layer.name = "BoardLayer"
-	board_layer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	board_panel.add_child(board_layer)
+# The board window: a darkened copy of the background inside the kit frame, the cards on top.
+func _build_board_frame(parent: Control) -> void:
+	var rect: Rect2 = _pick(LAND_BOARD_FRAME, PORT_BOARD_FRAME)
+	var inner: Rect2 = _pick(LAND_BOARD_INNER, PORT_BOARD_INNER)
+	var frame := Control.new()
+	frame.name = "BoardFrame"
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(frame, rect)
+	parent.add_child(frame)
+	var shade := ColorRect.new()
+	shade.name = "BoardShade"
+	shade.color = BOARD_SHADE
+	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(shade, inner)
+	frame.add_child(shade)
+	frame.add_child(_make_art("BoardArt", _board_frame_texture(), Rect2(Vector2.ZERO, rect.size)))
 	board_container = Control.new()
 	board_container.name = "Board"
 	board_container.clip_contents = true
 	board_container.z_index = 1
-	board_container.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	board_layer.add_child(board_container)
-	col.add_child(board_panel)
+	_place(board_container, inner.grow(-BOARD_PAD))
+	frame.add_child(board_container)
 
-	col.add_child(_build_support_panel())
-	col.add_child(_build_zone_panel())
-	if not _is_landscape:
-		# Portrait bottom row: Reserve box on the left, power panel on the right.
-		var bottom := HBoxContainer.new()
-		bottom.name = "BottomRow"
-		bottom.add_theme_constant_override("separation", 6)
-		var reserve := _build_reserve_panel()
-		reserve.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		bottom.add_child(reserve)
-		var powers := _build_controls()
-		powers.size_flags_horizontal = Control.SIZE_SHRINK_END
-		bottom.add_child(powers)
-		col.add_child(bottom)
-	return col
+# A Support Deck is a pile drawn inside its kit slot: deck A fans its card edges to the left,
+# deck B to the right.
+func _build_deck_slot(parent: Control, deck_id: String) -> void:
+	var rect: Rect2 = _pick(LAND_DECK_A if deck_id == "a" else LAND_DECK_B, PORT_DECK_A if deck_id == "a" else PORT_DECK_B)
+	var slot := Control.new()
+	slot.name = "Deck%s" % deck_id.to_upper()
+	slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(slot, rect)
+	parent.add_child(slot)
+	slot.add_child(_make_art("SlotArt", UiHelpers.kit_texture("slot_64"), Rect2(Vector2.ZERO, rect.size)))
+	var btn := _make_deck_button(deck_id)
+	btn.position = (SLOT_INNER.position + (SLOT_INNER.size - _deck_pile_size()) * 0.5).floor()
+	slot.add_child(btn)
+	if deck_id == "a":
+		deck_a_btn = btn
+	else:
+		deck_b_btn = btn
 
-# The two Support Decks as piles right under the board: deck A under its left part with
-# its edges fanning left, deck B under the right part with its edges fanning right.
-func _build_support_panel() -> PanelContainer:
-	var panel := _make_unframed_panel(2, 12 if _is_landscape else 8)
-	panel.name = "Support"
-	panel.custom_minimum_size = Vector2(0, (LANDSCAPE_DECK_CARD_SIZE.y if _is_landscape else PORTRAIT_DECK_CARD_SIZE.y + 16.0) + 4.0)
-	var deck_row := HBoxContainer.new()
-	deck_row.add_theme_constant_override("separation", 4)
-	panel.add_child(deck_row)
-	deck_a_btn = _make_deck_button("a")
-	deck_b_btn = _make_deck_button("b")
-	deck_row.add_child(deck_a_btn)
-	var middle := Control.new()
-	middle.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	middle.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if not _is_landscape:
-		middle.name = "MascotArea"
-		_mascot_area = middle
-	deck_row.add_child(middle)
-	deck_row.add_child(deck_b_btn)
-	return panel
-
-func _build_reserve_panel() -> PanelContainer:
-	var reserve_panel := _make_panel(PANEL_BACKGROUND, PANEL_BORDER, 10)
-	reserve_panel.name = "Reserve"
-	reserve_panel.custom_minimum_size = Vector2(LANDSCAPE_SIDE_WIDTH if _is_landscape else 130.0, 66 if _is_landscape else 96)
-	var reserve_col := VBoxContainer.new()
-	reserve_col.add_theme_constant_override("separation", 2)
-	reserve_panel.add_child(reserve_col)
+# The Reserve box: the kit panel 9-sliced to the box, its title on top and the cards below.
+func _build_reserve_panel(parent: Control) -> void:
+	var rect: Rect2 = _pick(LAND_RESERVE, PORT_RESERVE)
+	var panel := Control.new()
+	panel.name = "Reserve"
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(panel, rect)
+	parent.add_child(panel)
+	var art := UiHelpers.kit_panel("panel_reserve", FRAME_MARGIN)
+	art.name = "ReserveArt"
+	_place(art, Rect2(Vector2.ZERO, rect.size))
+	panel.add_child(art)
 	reserve_header = Label.new()
+	reserve_header.name = "ReserveTitle"
 	reserve_header.add_theme_font_size_override("font_size", 8)
 	reserve_header.add_theme_color_override("font_color", TEXT_MUTED)
-	reserve_col.add_child(reserve_header)
+	reserve_header.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(reserve_header, Rect2(8.0, 6.0, rect.size.x - 16.0, 11.0))
+	panel.add_child(reserve_header)
 	reserve_container = Control.new()
-	reserve_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	reserve_container.custom_minimum_size = Vector2(0, LANDSCAPE_RESERVE_CARD_SIZE.y if _is_landscape else 48)
+	reserve_container.name = "ReserveCards"
 	reserve_container.clip_contents = true
-	reserve_col.add_child(reserve_container)
-	return reserve_panel
+	_place(reserve_container, Rect2(7.0, 18.0, rect.size.x - 14.0, rect.size.y - 18.0 - 8.0))
+	panel.add_child(reserve_container)
 
-# The Clearing Zone: a warm orange bar with 7 slots in one row.
-func _build_zone_panel() -> PanelContainer:
-	var zone_panel := PanelContainer.new()
-	zone_panel.name = "ClearingZone"
-	var style := StyleBoxFlat.new()
-	style.bg_color = ZONE_BAR
-	style.border_color = ZONE_BAR_BORDER
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(12)
-	style.shadow_color = Color(1.0, 0.55, 0.15, 0.45)
-	style.shadow_size = 4
-	style.content_margin_left = 8
-	style.content_margin_right = 8
-	style.content_margin_top = 4
-	style.content_margin_bottom = 4
-	zone_panel.add_theme_stylebox_override("panel", style)
-	zone_panel.custom_minimum_size = Vector2(0, 40 if _is_landscape else 66)
-	zone_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var inner: BoxContainer = HBoxContainer.new() if _is_landscape else VBoxContainer.new()
-	inner.add_theme_constant_override("separation", 4 if _is_landscape else 1)
-	zone_panel.add_child(inner)
+# The Clearing Zone: the kit bar with its title on the left and the 7 slots in one row.
+func _build_zone_panel(parent: Control) -> void:
+	var rect: Rect2 = _pick(LAND_ZONE, PORT_ZONE)
+	var zone := Control.new()
+	zone.name = "ClearingZone"
+	zone.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(zone, rect)
+	parent.add_child(zone)
+	zone.add_child(_make_art("ZoneArt", UiHelpers.kit_texture("bar_zone" if _is_landscape else "bar_zone_portrait"), Rect2(Vector2.ZERO, rect.size)))
 	zone_header = Label.new()
+	zone_header.name = "ZoneTitle"
 	zone_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	zone_header.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	zone_header.add_theme_font_size_override("font_size", 8)
-	zone_header.add_theme_color_override("font_color", INK)
+	zone_header.add_theme_color_override("font_color", TEXT_PRIMARY)
+	zone_header.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(zone_header, Rect2(ZONE_TITLE_X, 6.0, ZONE_TITLE_WIDTH, rect.size.y - 12.0))
+	zone.add_child(zone_header)
+	var card := _zone_card_size()
 	zone_container = HFlowContainer.new()
+	zone_container.name = "ZoneSlots"
 	zone_container.alignment = FlowContainer.ALIGNMENT_CENTER
-	zone_container.custom_minimum_size = _zone_card_size()
-	zone_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	zone_container.add_theme_constant_override("h_separation", 4 if _is_landscape else 3)
+	zone_container.custom_minimum_size = card
+	zone_container.add_theme_constant_override("h_separation", 8 if _is_landscape else 2)
 	zone_container.add_theme_constant_override("v_separation", 3)
-	inner.add_child(zone_header)
-	inner.add_child(zone_container)
-	if _is_landscape:
-		# Title on the left, an equal spacer on the right: the slots stay centred under the board.
-		zone_header.custom_minimum_size = Vector2(64, 0)
-		var balance := Control.new()
-		balance.custom_minimum_size = Vector2(64, 0)
-		balance.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		inner.add_child(balance)
-	return zone_panel
+	var slots_x := ZONE_TITLE_X + ZONE_TITLE_WIDTH + 4.0
+	_place(zone_container, Rect2(slots_x, floorf((rect.size.y - card.y) * 0.5) - 1.0, rect.size.x - slots_x - 8.0, card.y))
+	zone.add_child(zone_container)
 
-# The rounded power panel: landscape stacks the powers vertically on the right of the
-# board, portrait lays them out in a row next to the Reserve.
-func _build_controls() -> PanelContainer:
-	var panel := PanelContainer.new()
+# The power panel: landscape stacks the powers in the tall kit panel on the right of the
+# board, portrait lays them out in a strip (the same panel 9-sliced) under the Clearing Zone.
+func _build_controls(parent: Control) -> void:
+	var rect: Rect2 = _pick(LAND_POWERS, PORT_POWERS)
+	var panel := Control.new()
 	panel.name = "Powers"
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(1.0, 0.80, 0.52, 0.20)
-	style.border_color = Color(1.0, 0.88, 0.62, 0.55)
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(14)
-	style.content_margin_left = 5
-	style.content_margin_right = 5
-	style.content_margin_top = 6
-	style.content_margin_bottom = 6
-	panel.add_theme_stylebox_override("panel", style)
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(panel, rect)
+	parent.add_child(panel)
+	if _is_landscape:
+		panel.add_child(_make_art("PowersArt", UiHelpers.kit_texture("panel_powers"), Rect2(Vector2.ZERO, rect.size)))
+	else:
+		var art := UiHelpers.kit_panel("panel_powers", FRAME_MARGIN)
+		art.name = "PowersArt"
+		_place(art, Rect2(Vector2.ZERO, rect.size))
+		panel.add_child(art)
 	var box: BoxContainer = VBoxContainer.new() if _is_landscape else HBoxContainer.new()
+	box.name = "PowerButtons"
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
-	box.add_theme_constant_override("separation", 6 if _is_landscape else 4)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_theme_constant_override("separation", 2 if _is_landscape else 8)
+	_place(box, _pick(LAND_POWERS_INNER, PORT_POWERS_INNER))
 	panel.add_child(box)
 	for p in PowerManager.POWERS:
 		box.add_child(_make_power_button(p))
-	return panel
 
-# One power: its name above, a round icon, and a small badge with the stock ("xN").
+# One power: its icon and the "xN" stock side by side (portrait adds the name below). The
+# full name stays in the tooltip.
 func _make_power_button(p: String) -> Button:
-	var icon_size := POWER_ICON_LANDSCAPE if _is_landscape else POWER_ICON_PORTRAIT
-	var holder_width := icon_size + 16.0
 	var btn := Button.new()
-	btn.custom_minimum_size = Vector2(holder_width + 2.0, icon_size + 16.0)
+	btn.name = "Power_%s" % p
+	btn.custom_minimum_size = _pick(POWER_BUTTON_LANDSCAPE, POWER_BUTTON_PORTRAIT)
 	btn.focus_mode = Control.FOCUS_NONE
 	btn.tooltip_text = _power_name(p)
 	var hover := StyleBoxFlat.new()
-	hover.bg_color = Color(1, 1, 1, 0.10)
-	hover.set_corner_radius_all(8)
+	hover.bg_color = Color(1, 1, 1, 0.12)
+	hover.set_corner_radius_all(4)
 	for state in ["normal", "pressed", "focus", "disabled"]:
 		btn.add_theme_stylebox_override(state, StyleBoxEmpty.new())
 	btn.add_theme_stylebox_override("hover", hover)
@@ -724,69 +760,45 @@ func _make_power_button(p: String) -> Button:
 	var col := VBoxContainer.new()
 	col.set_anchors_preset(Control.PRESET_FULL_RECT)
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	col.add_theme_constant_override("separation", 2)
+	col.add_theme_constant_override("separation", 0)
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	btn.add_child(col)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 3)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(row)
 
-	var name_lbl := Label.new()
-	name_lbl.text = _power_name(p)
-	name_lbl.add_theme_font_size_override("font_size", 9)
-	name_lbl.add_theme_color_override("font_color", TEXT_PRIMARY)
-	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	col.add_child(name_lbl)
-
-	var holder := Control.new()
-	holder.custom_minimum_size = Vector2(holder_width, icon_size)
-	holder.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	col.add_child(holder)
-	var circle := Panel.new()
-	circle.position = Vector2(8.0, 0.0)
-	circle.size = Vector2(icon_size, icon_size)
-	circle.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var circle_style := StyleBoxFlat.new()
-	circle_style.bg_color = Color(0.19, 0.11, 0.07, 0.62)
-	circle_style.border_color = Color(1.0, 0.88, 0.62, 0.70)
-	circle_style.set_border_width_all(2)
-	circle_style.set_corner_radius_all(int(icon_size * 0.5))
-	circle.add_theme_stylebox_override("panel", circle_style)
-	holder.add_child(circle)
 	var icon := Label.new()
 	icon.text = _power_icon(p)
 	icon.add_theme_font_override("font", UiHelpers.symbol_font())
-	icon.add_theme_font_size_override("font_size", int(icon_size * 0.5))
-	icon.position = circle.position
-	icon.size = circle.size
-	icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	icon.add_theme_font_size_override("font_size", 17 if _is_landscape else 22)
 	icon.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	holder.add_child(icon)
-	var badge := Panel.new()
-	badge.size = Vector2(22.0, 13.0)
-	badge.position = Vector2(holder_width - badge.size.x, icon_size - badge.size.y)
-	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var badge_style := StyleBoxFlat.new()
-	badge_style.bg_color = INK
-	badge_style.border_color = GOLD
-	badge_style.set_border_width_all(1)
-	badge_style.set_corner_radius_all(7)
-	badge.add_theme_stylebox_override("panel", badge_style)
-	holder.add_child(badge)
+	row.add_child(icon)
 	var count_lbl := Label.new()
 	count_lbl.text = "x0"
-	count_lbl.add_theme_font_size_override("font_size", 9)
+	count_lbl.add_theme_font_size_override("font_size", 10 if _is_landscape else 12)
 	count_lbl.add_theme_color_override("font_color", GOLD)
-	count_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	UiHelpers.add_text_shadow(count_lbl, 3)
 	count_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	count_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
 	count_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	badge.add_child(count_lbl)
+	row.add_child(count_lbl)
 	btn.set_meta("count_label", count_lbl)
+	if not _is_landscape:
+		var name_lbl := Label.new()
+		name_lbl.text = _power_name(p)
+		name_lbl.add_theme_font_size_override("font_size", 8)
+		name_lbl.add_theme_color_override("font_color", TEXT_PRIMARY)
+		UiHelpers.add_text_shadow(name_lbl, 2)
+		name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		col.add_child(name_lbl)
 	return btn
 
 func _make_deck_button(deck_id: String) -> Button:
 	var btn := Button.new()
+	btn.name = "Deck%sButton" % deck_id.to_upper()
 	btn.flat = true
 	btn.focus_mode = Control.FOCUS_NONE
 	btn.custom_minimum_size = _deck_pile_size()
@@ -797,7 +809,7 @@ func _make_deck_button(deck_id: String) -> Button:
 	return btn
 
 func _deck_card_size() -> Vector2:
-	return LANDSCAPE_DECK_CARD_SIZE if _is_landscape else PORTRAIT_DECK_CARD_SIZE
+	return DECK_CARD_SIZE
 
 # The button covers the face card plus the room the pile's edges can take.
 func _deck_pile_size() -> Vector2:
@@ -835,10 +847,7 @@ func render() -> void:
 		node.z_index = card.layer
 		board_container.add_child(node)
 
-	if _is_landscape:
-		zone_header.text = "%s\n%d/%d" % [Localizer.t("clearing_zone"), controller.zone.size(), controller.clearing_capacity]
-	else:
-		zone_header.text = "%s  %d/%d" % [Localizer.t("clearing_zone"), controller.zone.size(), controller.clearing_capacity]
+	zone_header.text = "%s\n%d/%d" % [Localizer.t("clearing_zone"), controller.zone.size(), controller.clearing_capacity]
 	var zone_card_size := _zone_card_size()
 	for i in controller.clearing_capacity:
 		if i < controller.zone.cards.size():
@@ -854,22 +863,15 @@ func render() -> void:
 	zone_container.notification(Container.NOTIFICATION_SORT_CHILDREN)
 
 	reserve_header.text = "%s  %d" % [Localizer.t("reserve"), controller.reserve.size()]
-	var reserve_size := _reserve_card_size()
-	var reserve_step := _reserve_card_step(reserve_size)
-	var reserve_column_width := reserve_container.size.x / float(RESERVE_COLUMNS)
+	# Any Reserve card can go back to the zone, so every one is a button laid out where it
+	# can be seen and tapped (returning only the last one could soft-lock a level).
+	var reserve_layout := _reserve_layout(controller.reserve.size())
+	var reserve_size: Vector2 = reserve_layout["size"]
+	var reserve_positions: Array = reserve_layout["positions"]
 	for i in controller.reserve.size():
 		var card: Card = controller.reserve[i]
-		var node: Control
-		if i == controller.reserve.size() - 1:
-			node = _make_card_button(card, 0, _on_reserve_return.bind(card.id), reserve_size)
-		else:
-			node = _make_card_rect(card.type, 0, reserve_size)
-		var column := i % RESERVE_COLUMNS
-		var row := floori(float(i) / float(RESERVE_COLUMNS))
-		node.position = Vector2(
-			column * reserve_column_width + (reserve_column_width - reserve_size.x) / 2.0,
-			row * reserve_step
-		)
+		var node := _make_card_button(card, 0, _on_reserve_return.bind(card.id), reserve_size)
+		node.position = reserve_positions[i]
 		node.z_index = i
 		reserve_container.add_child(node)
 
@@ -917,36 +919,36 @@ func _blocked_depths() -> Dictionary:
 func _reserve_max_card_size() -> Vector2:
 	return LANDSCAPE_RESERVE_CARD_SIZE if _is_landscape else PORTRAIT_RESERVE_CARD_SIZE
 
-func _reserve_card_size() -> Vector2:
-	var count := controller.reserve.size()
-	var max_card_size := _reserve_max_card_size().y
-	if count <= 0:
-		return _reserve_max_card_size()
-	var available_height := maxf(max_card_size, reserve_container.size.y)
-	var tab := 6.0
-	var rows := ceili(float(count) / float(RESERVE_COLUMNS))
-	var side := minf(max_card_size, maxf(28.0, available_height - tab * maxi(0, rows - 1)))
-	var available_width := maxf(28.0, reserve_container.size.x / float(RESERVE_COLUMNS) - 2.0)
-	side = minf(side, available_width)
-	return Vector2(side, side)
+# Grid for the Reserve cards: the largest card size (down to RESERVE_MIN_CARD_PX) at which
+# every card fits the box without overlap; only past that are rows overlapped, keeping a
+# tappable strip of each card.
+func _reserve_layout(count: int) -> Dictionary:
+	var box := reserve_container.size
+	var max_size := _reserve_max_card_size()
+	if count <= 0 or box.x <= 0.0 or box.y <= 0.0:
+		return {"size": max_size, "positions": []}
+	var gap := 3.0
+	var side := minf(max_size.x, box.y)
+	var cols := 1
+	var rows := count
+	while true:
+		cols = maxi(1, floori((box.x + gap) / (side + gap)))
+		rows = ceili(float(count) / float(cols))
+		if rows * side + (rows - 1) * gap <= box.y or side <= RESERVE_MIN_CARD_PX:
+			break
+		side -= 1.0
+	var step_y := side + gap
+	if rows > 1 and rows * side + (rows - 1) * gap > box.y:
+		step_y = maxf(side * 0.4, (box.y - side) / float(rows - 1))
+	var used_cols := mini(cols, count)
+	var x0 := maxf(0.0, (box.x - (used_cols * side + (used_cols - 1) * gap)) / 2.0)
+	var positions: Array = []
+	for i in count:
+		positions.append(Vector2(x0 + (i % cols) * (side + gap), floori(float(i) / float(cols)) * step_y))
+	return {"size": Vector2(side, side), "positions": positions}
 
 func _zone_card_size() -> Vector2:
 	return LANDSCAPE_ZONE_CARD_SIZE if _is_landscape else PORTRAIT_ZONE_CARD_SIZE
-
-func _apply_board_panel_height() -> void:
-	if _board_panel == null or board_container == null:
-		return
-	_board_panel.custom_minimum_size = LANDSCAPE_BOARD_FRAME if _is_landscape else PORTRAIT_BOARD_FRAME
-
-func _reserve_card_step(card_size: Vector2) -> float:
-	var count := controller.reserve.size()
-	if count <= 1:
-		return 0.0
-	var available_height := maxf(card_size.y, reserve_container.size.y)
-	var rows := ceili(float(count) / float(RESERVE_COLUMNS))
-	if rows <= 1:
-		return 0.0
-	return minf(6.0, maxf(2.0, (available_height - card_size.y) / float(rows - 1)))
 
 func _board_layout() -> Dictionary:
 	# Keep the original board frame so removing cards does not collapse the layout.
@@ -1017,7 +1019,7 @@ func _show_layout_warning_if_needed() -> void:
 	_layout_warning.text = msg
 	_layout_warning.visible = true
 	_layout_warning.reset_size()
-	_layout_warning.position = Vector2(get_viewport_rect().size.x - _layout_warning.size.x - 8, 6)
+	_layout_warning.position = Vector2(get_viewport_rect().size.x - _layout_warning.size.x - 8, _pick(LAND_HUD_HEIGHT, PORT_HUD_HEIGHT))
 
 # `depth` > 0 marks a blocked board card: it is dimmed by the DEPTH_* tables (see
 # _dim_material). `shadow` adds the soft drop shadow board cards use so stacked layers read.
@@ -1203,30 +1205,14 @@ func _fade_out_deck(btn: Button) -> void:
 	t.tween_property(btn, "scale", Vector2(0.7, 0.7), 0.3)
 	t.chain().tween_callback(func(): btn.visible = false)
 
-func _make_unframed_panel(vertical_margin: float = 4.0, horizontal_margin: float = 6.0) -> PanelContainer:
+# A PanelContainer in the kit's brown window style (help and end panels).
+func _make_kit_panel(margin_x: int, margin_top: int, margin_bottom: int) -> PanelContainer:
 	var panel := PanelContainer.new()
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0, 0, 0, 0)
-	style.border_color = Color(0, 0, 0, 0)
-	style.set_border_width_all(0)
-	style.content_margin_left = horizontal_margin
-	style.content_margin_top = vertical_margin
-	style.content_margin_right = horizontal_margin
-	style.content_margin_bottom = vertical_margin
-	panel.add_theme_stylebox_override("panel", style)
-	return panel
-
-func _make_panel(background: Color, border: Color, radius: int) -> PanelContainer:
-	var panel := PanelContainer.new()
-	var style := StyleBoxFlat.new()
-	style.bg_color = background
-	style.border_color = border
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(radius)
-	style.content_margin_left = 6
-	style.content_margin_top = 4
-	style.content_margin_right = 6
-	style.content_margin_bottom = 4
+	var style := UiHelpers.kit_stylebox("panel_board", FRAME_MARGIN, 0)
+	style.content_margin_left = margin_x
+	style.content_margin_right = margin_x
+	style.content_margin_top = margin_top
+	style.content_margin_bottom = margin_bottom
 	panel.add_theme_stylebox_override("panel", style)
 	return panel
 
@@ -1276,18 +1262,8 @@ func _on_help() -> void:
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(center)
-	var panel := PanelContainer.new()
+	var panel := _make_kit_panel(18, 14, 16)
 	panel.theme = UiHelpers.warm_theme()
-	var style := StyleBoxFlat.new()
-	style.bg_color = PANEL_BACKGROUND.darkened(0.25)
-	style.border_color = PANEL_BORDER
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(12)
-	style.content_margin_left = 14
-	style.content_margin_top = 10
-	style.content_margin_right = 14
-	style.content_margin_bottom = 10
-	panel.add_theme_stylebox_override("panel", style)
 	center.add_child(panel)
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
@@ -1329,6 +1305,14 @@ func _unhandled_input(event: InputEvent) -> void:
 # A tap goes to the controller immediately, whatever is still animating: state is the source
 # of truth and the visuals (ghost flights, match flash) catch up on top of it.
 
+func _flash_zone_full() -> void:
+	var panel := find_child("ClearingZone", true, false) as Control
+	if panel == null:
+		return
+	var t := panel.create_tween()
+	t.tween_property(panel, "modulate", Color(1.0, 0.55, 0.5), 0.08)
+	t.tween_property(panel, "modulate", Color.WHITE, 0.3)
+
 func _accepts_taps() -> bool:
 	return controller != null and controller.status == GameController.Status.PLAYING
 
@@ -1368,6 +1352,10 @@ func _on_reserve_return(card_id: String) -> void:
 # for a deck draw (the controller makes the card up). `snap` is the zone before the move.
 func _apply_move(card_type: String, card_id: String, source_rect: Rect2, snap: Dictionary, result: Dictionary) -> void:
 	if not bool(result["ok"]):
+		# A refused tap must never look like a frozen game: say why when the zone is full.
+		if controller.status == GameController.Status.PLAYING and controller.zone.is_full():
+			_flash_zone_full()
+			_say("zone_warning")
 		_check_end()
 		return
 	_play_sfx("select")
@@ -1694,6 +1682,8 @@ func _play_card_impact(center: Vector2) -> void:
 	tween.chain().tween_callback(impact.queue_free)
 
 func _play_sfx(kind: String) -> void:
+	if not Game.sound_enabled():
+		return
 	if _sfx_player == null or not is_instance_valid(_sfx_player):
 		_sfx_player = AudioStreamPlayer.new()
 		_sfx_player.name = "PlaceholderSfx"
@@ -1875,13 +1865,7 @@ func _open_end_panel() -> VBoxContainer:
 	center.z_index = 1001
 	add_child(center)
 
-	var panel := _make_panel(PANEL_BACKGROUND.darkened(0.25), PANEL_BORDER, 14)
-	var panel_style := panel.get_theme_stylebox("panel") as StyleBoxFlat
-	panel_style.bg_color.a = 0.96
-	panel_style.content_margin_left = 18
-	panel_style.content_margin_right = 18
-	panel_style.content_margin_top = 12
-	panel_style.content_margin_bottom = 14
+	var panel := _make_kit_panel(22, 16, 18)
 	panel.custom_minimum_size = Vector2(240, 0)
 	panel.theme = UiHelpers.warm_theme()
 	center.add_child(panel)

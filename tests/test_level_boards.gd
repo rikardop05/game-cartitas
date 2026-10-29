@@ -5,7 +5,7 @@ extends RefCounted
 # pyramidal, solvable with their Support Decks and powers, and blocked by one rule.
 
 const Checks = preload("res://tests/board_checks.gd")
-const BOARD_SIZE := Vector2(332, 264)
+const BOARD_SIZE := LevelConfig.PORTRAIT_BOARD_ENVELOPE
 const METRIC_KEYS := ["seed_used", "attempts", "fits_landscape", "fits_portrait", "free_cards", "blocked_cards",
 		"free_ratio", "free_ratio_ok", "cards_per_layer", "solvable", "status", "generation_time_ms", "clearing_capacity"]
 
@@ -75,7 +75,7 @@ func test_fixed_seed_levels_are_deterministic() -> void:
 	LevelLoader.deterministic = true
 	for id in LevelLoader.load_all_level_ids():
 		var a := LevelLoader.load_level(id, BOARD_SIZE)
-		var b := LevelLoader.load_level(id, Vector2(466, 214))
+		var b := LevelLoader.load_level(id, LevelConfig.LANDSCAPE_BOARD_ENVELOPE)
 		Assert.equals(Checks.signature(a), Checks.signature(b), "level %s: same seed gives the same board whatever the board area" % id)
 		Assert.equals(a["deck_a"], b["deck_a"], "level %s: same deck_a" % id)
 		Assert.equals(a["deck_b"], b["deck_b"], "level %s: same deck_b" % id)

@@ -5,21 +5,37 @@ extends SceneTree
 # Endless round 1 (seeded by the round number under LevelLoader.deterministic),
 # and verifies the save file is byte-identical before/after the run.
 #
-# Layout contract (see LevelScreen): landscape = Hud row on top, then Body =
-# [SideColumn (MascotArea + Reserve) | MainColumn (BoardFrame, Support, ClearingZone) | Powers];
-# portrait = Hud, then MainColumn = BoardFrame, Support (decks + MascotArea),
-# ClearingZone, BottomRow (Reserve + Powers). The main regions never overlap, blocked
+# Layout contract (see LevelScreen): the screen is a "Layout" of kit pieces at fixed
+# positions: Hud (back chevron, title, clock and stars plates, help, sound toggle),
+# BoardFrame (darkened window + Board), DeckA / DeckB (kit slots), Reserve, ClearingZone and
+# Powers, plus MascotArea (a spacer). Landscape follows the owner's mockup (positions are
+# asserted below), portrait stacks the same pieces. The regions never overlap, blocked
 # cards are dimmed by depth, and the instruction bubble (Ace's, or the standalone one
 # when the mascot is off) stays clear of the cards and the controls.
 
 const LEVEL_ID := "6"
 const EPSILON := 0.01
-const COMMON_REQUIRED := ["ScreenMargin", "Hud", "MainColumn", "BoardFrame", "Support", "Reserve", "ClearingZone", "Powers", "MascotArea"]
-const LANDSCAPE_EXTRA := ["Body", "SideColumn"]
-const PORTRAIT_EXTRA := ["BottomRow"]
-# Regions that must never overlap each other (MascotArea is a spacer inside SideColumn/Support).
-const DISJOINT_REGIONS := ["Hud", "BoardFrame", "Support", "ClearingZone", "Reserve", "Powers"]
+const COMMON_REQUIRED := ["Layout", "Hud", "BoardFrame", "DeckA", "DeckB", "Reserve", "ClearingZone", "Powers", "MascotArea", "BackButton", "HelpButton", "SoundButton", "ClockPill"]
+const LANDSCAPE_EXTRA := []
+const PORTRAIT_EXTRA := []
+# Regions that must never overlap each other (MascotArea is a spacer; the mascot has its own checks).
+const DISJOINT_REGIONS := ["Hud", "BoardFrame", "DeckA", "DeckB", "ClearingZone", "Reserve", "Powers"]
+# Where each kit piece sits (global px): the owner's mockup in landscape, the stacked layout in portrait.
+const EXPECTED_RECTS := {
+	"landscape": {
+		"BoardFrame": Rect2(96, 62, 464, 208), "Powers": Rect2(571, 62, 64, 128),
+		"DeckA": Rect2(18, 201, 64, 64), "DeckB": Rect2(571, 201, 64, 64),
+		"Reserve": Rect2(18, 280, 148, 56), "ClearingZone": Rect2(172, 280, 464, 64),
+		"ClockPill": Rect2(241, 14, 64, 32), "BackButton": Rect2(19, 11, 32, 30),
+	},
+	"portrait": {
+		"BoardFrame": Rect2(4, 46, 352, 192), "Powers": Rect2(4, 396, 352, 64),
+		"DeckA": Rect2(4, 248, 64, 64), "DeckB": Rect2(292, 248, 64, 64),
+		"Reserve": Rect2(74, 248, 212, 64), "ClearingZone": Rect2(4, 322, 352, 64),
+	},
+}
 const BUBBLE_WAIT_MS := 3500
+const THROWAWAY_SAVE := "user://repro_hud_bounds_save.json"
 const VIEWS := [
 	{"name": "landscape-640x360", "orientation": "landscape", "window": Vector2i(640, 360), "extra": LANDSCAPE_EXTRA, "endless": false, "mascot": true},
 	{"name": "portrait-360x640", "orientation": "portrait", "window": Vector2i(360, 640), "extra": PORTRAIT_EXTRA, "endless": false, "mascot": true},
@@ -47,10 +63,18 @@ func _run() -> void:
 		_finish()
 		return
 	var mascot_before: bool = bool(game.settings.get("mascot", true))
+	var sound_before: bool = bool(game.settings.get("sound", true))
+	var save_path_before: String = game.save_path
+	# Powers and the sound toggle persist through Game.save_path: keep them off the real save.
+	game.save_path = THROWAWAY_SAVE
 	for view in VIEWS:
 		await _run_view(game, view)
 	# In-memory only (never set_mascot(), which would persist to the user save).
 	game.settings["mascot"] = mascot_before
+	game.settings["sound"] = sound_before
+	game.save_path = save_path_before
+	if FileAccess.file_exists(THROWAWAY_SAVE):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(THROWAWAY_SAVE))
 	_finish()
 
 func _run_view(game, view: Dictionary) -> void:
@@ -96,39 +120,27 @@ func _run_view(game, view: Dictionary) -> void:
 		_view_name, "endless-1" if endless else LEVEL_ID, str(viewport_bounds), stable_frames,
 	])
 
-	# Exact hierarchy contracts for the main HUD regions.
-	_assert_inside(nodes["Hud"], nodes["ScreenMargin"].get_global_rect(), "container:Hud-in-ScreenMargin")
-	var area_owner := "SideColumn" if landscape else "Support"
-	_assert_inside(nodes["MascotArea"], nodes[area_owner].get_global_rect(), "container:MascotArea-in-%s" % area_owner)
-	if landscape:
-		_assert_inside(nodes["Body"], nodes["ScreenMargin"].get_global_rect(), "container:Body-in-ScreenMargin")
-		for child_name in ["MainColumn", "SideColumn", "Powers"]:
-			_assert_inside(nodes[child_name], nodes["Body"].get_global_rect(), "container:%s-in-Body" % child_name)
-		_assert_inside(nodes["Reserve"], nodes["SideColumn"].get_global_rect(), "container:Reserve-in-SideColumn")
-		for child_name in ["BoardFrame", "Support", "ClearingZone"]:
-			_assert_inside(nodes[child_name], nodes["MainColumn"].get_global_rect(), "container:%s-in-MainColumn" % child_name)
-		# The Hud row sits above the Body; the side columns and the main column share its rows.
-		if nodes["Hud"].get_global_rect().end.y > nodes["Body"].get_global_rect().position.y + EPSILON:
-			_fail("container:Hud-above-Body", "hud=%s body=%s" % [str(nodes["Hud"].get_global_rect()), str(nodes["Body"].get_global_rect())])
-		# SideColumn and MainColumn and every visible descendant must remain inside Body, even
-		# when a child's theme/content minimum silently grows beyond its nominal size.
-		_audit_subtree_against(nodes["SideColumn"], nodes["Body"].get_global_rect(), "side-vs-body", scene, true)
-		_audit_subtree_against(nodes["MainColumn"], nodes["Body"].get_global_rect(), "main-vs-body", scene, true)
-	else:
-		_assert_inside(nodes["MainColumn"], nodes["ScreenMargin"].get_global_rect(), "container:MainColumn-in-ScreenMargin")
-		for child_name in ["Support", "ClearingZone", "BottomRow", "BoardFrame"]:
-			_assert_inside(nodes[child_name], nodes["MainColumn"].get_global_rect(), "container:%s-in-MainColumn" % child_name)
-		for child_name in ["Reserve", "Powers"]:
-			_assert_inside(nodes[child_name], nodes["BottomRow"].get_global_rect(), "container:%s-in-BottomRow" % child_name)
+	# Exact hierarchy contracts: every piece sits inside the Layout, the Board inside its window.
+	for node_name in required:
+		if node_name != "Layout":
+			_assert_inside(nodes[node_name], nodes["Layout"].get_global_rect(), "container:%s-in-Layout" % node_name)
+	_assert_inside(board, nodes["BoardFrame"].get_global_rect(), "container:Board-in-BoardFrame")
+	for node_name in EXPECTED_RECTS[view["orientation"]]:
+		var expected: Rect2 = EXPECTED_RECTS[view["orientation"]][node_name]
+		var actual: Rect2 = nodes[node_name].get_global_rect()
+		if not actual.position.is_equal_approx(expected.position) or not actual.size.is_equal_approx(expected.size):
+			_fail("position:%s" % node_name, "rect=%s expected=%s" % [str(actual), str(expected)])
 	_assert_regions_disjoint(nodes)
+	_assert_top_bar(nodes, landscape)
+	_assert_sound_toggle(game, scene, nodes["SoundButton"])
 
 	# Every visible Control under the HUD must stay inside the viewport. This is
 	# the user-visible bottom-clipping invariant, independent of parent layout.
-	_audit_viewport_descendants(nodes["ScreenMargin"], viewport_bounds, scene)
-	_audit_clip_ancestors(nodes["ScreenMargin"], scene)
+	_audit_viewport_descendants(nodes["Layout"], viewport_bounds, scene)
+	_audit_clip_ancestors(nodes["Layout"], scene)
 
 	# Relevant visual groups must also contain their own descendants.
-	for owner_name in ["BoardFrame", "Support", "Reserve", "ClearingZone", "Powers"]:
+	for owner_name in ["BoardFrame", "DeckA", "DeckB", "Reserve", "ClearingZone", "Powers", "Hud"]:
 		var owner: Control = nodes[owner_name]
 		_audit_subtree_against(owner, owner.get_global_rect(), "visual-vs-%s" % owner_name, scene, false)
 
@@ -138,12 +150,69 @@ func _run_view(game, view: Dictionary) -> void:
 
 	var zone := scene.get("zone_container") as Control
 	_assert_zone_single_row(zone, scene)
-	_assert_action_button(scene.get("deck_a_btn") as Button, "deck_a_btn", viewport_bounds, nodes["ScreenMargin"], scene)
-	_assert_action_button(scene.get("deck_b_btn") as Button, "deck_b_btn", viewport_bounds, nodes["ScreenMargin"], scene)
+	_assert_action_button(scene.get("deck_a_btn") as Button, "deck_a_btn", viewport_bounds, nodes["Layout"], scene)
+	_assert_action_button(scene.get("deck_b_btn") as Button, "deck_b_btn", viewport_bounds, nodes["Layout"], scene)
 	var power_buttons: Dictionary = scene.get("power_buttons")
 	for power_name in PowerManager.POWERS:
-		_assert_action_button(power_buttons.get(power_name) as Button, "power:%s" % power_name, viewport_bounds, nodes["ScreenMargin"], scene)
+		_assert_action_button(power_buttons.get(power_name) as Button, "power:%s" % power_name, viewport_bounds, nodes["Layout"], scene)
 	await _assert_instruction_bubble(scene, nodes, bool(view["mascot"]), viewport_bounds)
+
+# The top bar: chevron at the left, the clock and stars/score plates, the help button and the
+# sound toggle, all inside the Hud, in order and without touching each other.
+func _assert_top_bar(nodes: Dictionary, landscape: bool) -> void:
+	var hud: Rect2 = nodes["Hud"].get_global_rect()
+	var back: Rect2 = nodes["BackButton"].get_global_rect()
+	var clock: Rect2 = nodes["ClockPill"].get_global_rect()
+	var help: Rect2 = nodes["HelpButton"].get_global_rect()
+	var sound: Rect2 = nodes["SoundButton"].get_global_rect()
+	var second := nodes["Hud"].find_child("StarsPill", true, false) as Control
+	if second == null:
+		second = nodes["Hud"].find_child("ScorePill", true, false) as Control
+	if second == null:
+		_fail("hud", "second plate (StarsPill/ScorePill) missing")
+		return
+	var plate: Rect2 = second.get_global_rect()
+	var row := [["back", back], ["clock", clock], ["second plate", plate], ["help", help], ["sound", sound]]
+	for item in row:
+		if _max_overflow(_overflow(item[1], hud)) > EPSILON:
+			_fail("hud-in-bar", "%s %s is outside the Hud %s" % [item[0], str(item[1]), str(hud)])
+	for i in row.size() - 1:
+		if row[i][1].end.x > row[i + 1][1].position.x + EPSILON:
+			_fail("hud-order", "%s %s overlaps or follows %s %s" % [row[i][0], str(row[i][1]), row[i + 1][0], str(row[i + 1][1])])
+	# The two plates sit side by side in the middle of the bar.
+	var middle := (clock.position.x + plate.end.x) * 0.5
+	var viewport_middle := hud.size.x * 0.5
+	if absf(middle - viewport_middle) > (16.0 if landscape else 2.0):
+		_fail("hud-centre", "plates are centred on x=%.1f, the screen on x=%.1f" % [middle, viewport_middle])
+
+# The sound toggle flips Game.sound_enabled() and its icon, and no sound is made while it is off.
+func _assert_sound_toggle(game, scene, button: Button) -> void:
+	if button.get_signal_connection_list(&"pressed").is_empty():
+		_fail("sound", "SoundButton has no pressed connection")
+		return
+	var icon := button.get_node_or_null("Icon") as TextureRect
+	if icon == null:
+		_fail("sound", "SoundButton has no Icon")
+		return
+	var was_on: bool = game.sound_enabled()
+	var texture_before := icon.texture
+	button.pressed.emit()
+	if game.sound_enabled() == was_on:
+		_fail("sound", "pressing the toggle did not change Game.sound_enabled()")
+	if icon.texture == texture_before:
+		_fail("sound", "the icon did not change with the toggle")
+	game.set_sound(false)
+	scene.set("_sfx_player", null)
+	scene.call("_play_sfx", "select")
+	if scene.get("_sfx_player") != null:
+		_fail("sound", "_play_sfx played with the sound off")
+	game.set_sound(true)
+	scene.call("_play_sfx", "select")
+	if scene.get("_sfx_player") == null:
+		_fail("sound", "_play_sfx did not play with the sound on")
+	# The view starts with the sound as it found it.
+	game.set_sound(was_on)
+	icon.texture = scene.call("_sound_texture")
 
 # The main layout regions are laid side by side or stacked: no two may share any area.
 func _assert_regions_disjoint(nodes: Dictionary) -> void:
@@ -255,9 +324,9 @@ func _wait_for_level_scene():
 		if scene == null or scene.name != "LevelScreen":
 			continue
 		var controller = scene.get("controller")
-		var screen_margin := scene.find_child("ScreenMargin", true, false) as Control
-		var column := scene.find_child("MainColumn", true, false) as Control
-		if controller != null and screen_margin != null and column != null and column.size.x > 0.0:
+		var layout := scene.find_child("Layout", true, false) as Control
+		var frame := scene.find_child("BoardFrame", true, false) as Control
+		if controller != null and layout != null and frame != null and frame.size.x > 0.0:
 			return scene
 	return null
 

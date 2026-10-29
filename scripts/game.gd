@@ -53,6 +53,13 @@ func set_mascot(enabled: bool) -> void:
 	settings["mascot"] = enabled
 	save_progress()
 
+func sound_enabled() -> bool:
+	return bool(settings.get("sound", true))
+
+func set_sound(enabled: bool) -> void:
+	settings["sound"] = enabled
+	save_progress()
+
 func mascot_lines() -> MascotLines:
 	if _mascot_lines == null:
 		_mascot_lines = MascotLines.new()

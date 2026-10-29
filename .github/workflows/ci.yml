@@ -35,6 +35,9 @@ jobs:
       - name: Smoke help overlay (tests/smoke_help.gd)
         run: ./godot --headless --script res://tests/smoke_help.gd
 
+      - name: Smoke Reserve taps (tests/smoke_reserve.gd)
+        run: ./godot --headless --script res://tests/smoke_reserve.gd
+
       - name: Board layout regression (tests/regression_board_layout.gd)
         run: ./godot --headless --script res://tests/regression_board_layout.gd
 

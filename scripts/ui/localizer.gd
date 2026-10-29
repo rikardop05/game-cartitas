@@ -9,7 +9,7 @@ const STRINGS := {
 	"play": {"en": "Play", "pt": "Jogar"},
 	"play_tip": {"en": "Open the level selection", "pt": "Abrir a seleção de levels"},
 	"options": {"en": "Options", "pt": "Opções"},
-	"options_tip": {"en": "Language, orientation and progress settings", "pt": "Idioma, orientação e configurações de progresso"},
+	"options_tip": {"en": "Language, orientation, sound and progress settings", "pt": "Idioma, orientação, som e configurações de progresso"},
 	"quit": {"en": "Quit", "pt": "Sair"},
 	"quit_tip": {"en": "Close the game", "pt": "Fechar o jogo"},
 	"back": {"en": "Back", "pt": "Voltar"},
@@ -67,6 +67,9 @@ const STRINGS := {
 	"mascot_label": {"en": "Mascot", "pt": "Mascote"},
 	"option_on": {"en": "On", "pt": "Ligado"},
 	"option_off": {"en": "Off", "pt": "Desligado"},
+	"sound_label": {"en": "Sound", "pt": "Som"},
+	"confirm": {"en": "Confirm", "pt": "Confirmar"},
+	"cancel": {"en": "Cancel", "pt": "Cancelar"},
 	# Mascot "Ace" lines (MascotLines picks the key, text lives here).
 	"mascot_intro_1": {"en": "Hi, I'm Ace! Let's clear this board.", "pt": "Oi, eu sou o Ás! Bora limpar esse tabuleiro."},
 	"mascot_intro_2": {"en": "Ace of Cartitas, at your service.", "pt": "Ás das Cartitas, às suas ordens."},
