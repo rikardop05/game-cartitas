@@ -23,6 +23,7 @@ const SUITE_PATHS := [
 	"res://tests/test_endless.gd",
 	"res://tests/test_mascot_lines.gd",
 	"res://tests/test_card_art.gd",
+	"res://tests/test_star_thresholds.gd",
 ]
 
 func _init() -> void:

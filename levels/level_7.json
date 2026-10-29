@@ -3,6 +3,6 @@
   "difficulty": 7,
   "clearing_capacity": 7,
   "deck": ["crystal", "crystal", "crystal", "moon", "moon", "moon", "leaf", "leaf", "leaf", "gem", "gem", "gem", "heart", "heart", "heart"],
-  "time_thresholds": { "three_stars": 240, "two_stars": 480 },
+  "time_thresholds": { "three_stars": 90, "two_stars": 160 },
   "rewards": [{ "type": "hold", "quantity": 1 }]
 }
