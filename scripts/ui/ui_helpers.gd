@@ -17,14 +17,36 @@ static func symbol_font() -> SystemFont:
 		_font_cache.font_names = PackedStringArray(["Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", "Arial"])
 	return _font_cache
 
+# Card art standard: assets/cards/card_<type>.png, square, high resolution (>= 512 px, ideally
+# a multiple of 64 such as 960, frame included). The UI is drawn at the PHYSICAL screen size
+# (stretch mode canvas_items), so a 40 px logical card is 80+ real pixels; the art is kept at
+# full resolution with mipmaps and drawn with trilinear filtering, letting the GPU scale it to
+# whatever size the screen needs instead of pre-shrinking it to logical pixels (which blurred
+# and pixelated it once the window upscaled the result). Mipmaps are built here, so any
+# delivered PNG works without import tweaks. Cached per type.
 static func card_texture(type: String) -> Texture2D:
 	if not _card_texture_cache.has(type):
 		var path := "res://assets/cards/card_%s.png" % type
+		var texture: Texture2D = null
 		if ResourceLoader.exists(path):
-			_card_texture_cache[type] = load(path) as Texture2D
-		else:
-			_card_texture_cache[type] = null
+			var source := load(path) as Texture2D
+			var image := source.get_image() if source != null else null
+			if image != null:
+				image = image.duplicate()
+				if image.is_compressed():
+					image.decompress()
+				if not image.has_mipmaps():
+					image.generate_mipmaps()
+				texture = ImageTexture.create_from_image(image)
+			else:
+				texture = source
+		_card_texture_cache[type] = texture
 	return _card_texture_cache[type]
+
+# True when `type` has a painted card face (assets/cards/card_<type>.png); the others keep the
+# emoji placeholder.
+static func has_card_art(type: String) -> bool:
+	return card_texture(type) != null
 
 static func warm_theme() -> Theme:
 	var t := Theme.new()
@@ -135,7 +157,10 @@ static func add_text_shadow(label: Label, outline := 4) -> void:
 	label.add_theme_constant_override("shadow_offset_y", 1)
 
 static func total_stars_text() -> String:
-	return "★ %d/%d" % [Game.progress.total_stars(), LevelLoader.load_all_level_ids().size() * 3]
+	# Looked up at call time: naming the `Game` autoload here would stop this script compiling
+	# in the headless test runner (autoloads are not registered while it loads suites).
+	var game: Node = (Engine.get_main_loop() as SceneTree).root.get_node("Game")
+	return "★ %d/%d" % [game.progress.total_stars(), LevelLoader.load_all_level_ids().size() * 3]
 
 static func symbol_label(text: String, size: int) -> Label:
 	var label := Label.new()

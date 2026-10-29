@@ -85,6 +85,11 @@ const END_WAIT_MAX_MSEC := 1200
 # available card, 2 = under a blocked card, 3+ = deeper still. Index 0 (available) is untouched.
 const DEPTH_BRIGHTNESS := [1.0, 0.45, 0.32, 0.22]
 const DEPTH_SATURATION := [1.0, 0.80, 0.68, 0.58]
+# Painted card faces are busier than a flat placeholder, so blocked ones are dimmed less to
+# stay recognisable. Never brighter than 0.5 and still strictly darker with depth, which
+# repro_hud_bounds checks.
+const ART_DEPTH_BRIGHTNESS := [1.0, 0.5, 0.38, 0.28]
+const ART_DEPTH_SATURATION := [1.0, 0.9, 0.8, 0.7]
 const DIM_SHADER_CODE := """
 shader_type canvas_item;
 uniform float brightness = 1.0;
@@ -1023,16 +1028,25 @@ func _show_layout_warning_if_needed() -> void:
 
 # `depth` > 0 marks a blocked board card: it is dimmed by the DEPTH_* tables (see
 # _dim_material). `shadow` adds the soft drop shadow board cards use so stacked layers read.
+# A type with art is drawn as that art alone (it already carries its own frame); the others
+# get the coloured panel with the emoji placeholder.
 func _make_card_rect(type: String, depth: int, card_size: Vector2, shadow: bool = false) -> Control:
 	var root := Panel.new()
 	root.custom_minimum_size = card_size
 	root.size = card_size
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var card_style := StyleBoxFlat.new()
+	# bg_color always names the type (smoke_rapid_taps reads it back from the zone slots).
 	card_style.bg_color = CardTypeRegistry.color(type)
-	card_style.border_color = Color("#fff2d5")
-	card_style.set_border_width_all(2)
-	card_style.set_corner_radius_all(5)
+	if UiHelpers.has_card_art(type):
+		# Painted face: the fill is not drawn and there is no border or rounding, only the
+		# soft shadow behind the art.
+		card_style.draw_center = false
+		card_style.set_corner_radius_all(0)
+	else:
+		card_style.border_color = Color("#fff2d5")
+		card_style.set_border_width_all(2)
+		card_style.set_corner_radius_all(5)
 	if shadow:
 		card_style.shadow_color = Color(0.0, 0.0, 0.0, 0.34)
 		card_style.shadow_size = 3
@@ -1041,31 +1055,39 @@ func _make_card_rect(type: String, depth: int, card_size: Vector2, shadow: bool 
 	var art := _make_card_art(type, card_size)
 	root.add_child(art)
 	if depth > 0:
-		root.material = _dim_material(depth)
+		root.material = _dim_material(depth, UiHelpers.has_card_art(type))
 		art.use_parent_material = true
 	return root
 
-# One shared material per depth: brightness and saturation come from the DEPTH_* tables.
-func _dim_material(depth: int) -> ShaderMaterial:
-	var index := clampi(depth, 0, DEPTH_BRIGHTNESS.size() - 1)
-	if not _dim_materials.has(index):
+# One shared material per depth (and per art/placeholder kind): brightness and saturation
+# come from the DEPTH_* tables.
+func _dim_material(depth: int, art: bool = false) -> ShaderMaterial:
+	var brightness: Array = ART_DEPTH_BRIGHTNESS if art else DEPTH_BRIGHTNESS
+	var saturation: Array = ART_DEPTH_SATURATION if art else DEPTH_SATURATION
+	var index := clampi(depth, 0, brightness.size() - 1)
+	var key := index + (100 if art else 0)
+	if not _dim_materials.has(key):
 		if _dim_shader == null:
 			_dim_shader = Shader.new()
 			_dim_shader.code = DIM_SHADER_CODE
 		var material := ShaderMaterial.new()
 		material.shader = _dim_shader
-		material.set_shader_parameter("brightness", float(DEPTH_BRIGHTNESS[index]))
-		material.set_shader_parameter("saturation", float(DEPTH_SATURATION[index]))
-		_dim_materials[index] = material
-	return _dim_materials[index]
+		material.set_shader_parameter("brightness", float(brightness[index]))
+		material.set_shader_parameter("saturation", float(saturation[index]))
+		_dim_materials[key] = material
+	return _dim_materials[key]
 
+# Art cards draw the full-resolution face (UiHelpers.card_texture) at the card's size; the GPU
+# picks the right mipmap for the physical screen size, so it stays sharp at any window scale.
 func _make_card_art(type: String, card_size: Vector2) -> Control:
 	var texture := UiHelpers.card_texture(type)
 	if texture != null:
 		var art := TextureRect.new()
 		art.texture = texture
 		art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		art.stretch_mode = TextureRect.STRETCH_SCALE
+		# Full-resolution art scaled by the GPU to the real on-screen size (see card_texture).
+		art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 		art.position = Vector2.ZERO
 		art.size = card_size
 		art.mouse_filter = Control.MOUSE_FILTER_IGNORE

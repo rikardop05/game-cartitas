@@ -10,32 +10,32 @@ A versão didática para enviar ao artista é o PDF [`ART-DELIVERY-PT.pdf`](ART-
 - Formato: **PNG 32 bits (RGBA 8 bits por canal)**, sRGB, sem entrelaçamento.
 - Toda arte é desenhada em **1 pixel de arte = 1 pixel lógico** do jogo. O jogo amplia/reduz por código; não entregue versões ampliadas como arquivo de produção.
 
-## 2. Tamanhos
+## 2. Tamanhos (padrão de arte das cartas)
 
-O tamanho exibido da carta é `Card.DISPLAY_SIZE` = **48×48 px lógicos** (`scripts/core/card.gd`). Por isso a face da carta é desenhada em **48×48**: no tamanho padrão do tabuleiro ela aparece exatamente em 2× na janela 1280×720, sem pixels deformados.
+A face da carta é entregue em **alta resolução** e o jogo a reduz na hora certa: **PNG quadrado de 960×960 px** (mínimo 512; prefira múltiplos de 64 — 960 = 64 × 15, o que mantém a moldura em pixel art alinhada). Os arquivos atuais do Pack A têm 480–960 px.
 
-Tamanhos em que a mesma imagem aparece hoje (o código redimensiona o PNG para caber):
+Por quê: a interface é calculada em 640×360 (paisagem) / 360×640 (retrato) **lógicos**, mas desenhada na **resolução física da tela** (`stretch mode = canvas_items`). Uma carta de 40 px lógicos ocupa 80 px reais numa janela 1280×720, 120 px em tela cheia 1080p, e mais em telas maiores. O jogo gera **mipmaps** ao carregar a arte e a desenha com filtro **trilinear** (`UiHelpers.card_texture` + `_make_card_art`), então a placa de vídeo reduz direto do original para o tamanho real — nítido em qualquer resolução, sem reprocessar a arte.
 
-| Onde | Tamanho exibido (px lógicos) | Origem no código |
-|------|------------------------------|------------------|
-| Tabuleiro (padrão) | 48×48 | `LevelConfig.DEFAULT_CARD_SIZE` |
-| Tabuleiro (ajuste ao espaço) | 41–120 (escala 0,85–2,5) | `BoardLayout.compute`, `MIN_CARD_SCALE` |
-| Support Decks | ~38×38 (48 × 0,8) | `LevelConfig.RESERVE_CARD_SCALE` |
-| Clearing Zone — paisagem | 31×31 | `LANDSCAPE_ZONE_CARD_SIZE` |
-| Clearing Zone — retrato | 48×48 | `CARD_DISPLAY_SIZE` |
-| Reserve — paisagem | 28–30, duas colunas | `LANDSCAPE_RESERVE_CARD_SIZE` |
-| Reserve — retrato | 28–38, duas colunas | `_reserve_card_size()` |
+Tamanhos em que a carta aparece (px lógicos; multiplique pela escala da janela para pixels reais):
 
-Consequência para a arte: o símbolo precisa ser **legível a ~30 px** (silhueta forte, poucos detalhes finos de 1 px), porque nas áreas pequenas a imagem é reduzida.
+| Onde | Tamanho exibido |
+|------|-----------------|
+| Tabuleiro | até 40 (`LevelConfig.MAX_BOARD_CARD_PX`), menor em tabuleiros grandes |
+| Clearing Zone | 40 (paisagem) / 36 (retrato) |
+| Reserve | 18–40, em grade que cabe na caixa |
+| Support Decks | carta do topo dentro do quadrado 64 |
+
+Consequência para a arte: o símbolo precisa ser **legível a ~30 px lógicos** (silhueta forte, contorno escuro, poucos detalhes muito finos).
 
 ## 3. Anatomia da carta
 
-O PNG da carta é desenhado **por cima da carta inteira** (um `TextureRect` do tamanho da carta, em `_make_card_art` de `scripts/ui/level_screen.gd`). A moldura e a cor de fundo do placeholder só aparecem onde o PNG for transparente. Portanto:
+O PNG é desenhado **como a face inteira da carta** (sem fundo ou borda extra do jogo). Siga o modelo do Pack A (`assets/cards/card_dog.png`):
 
-- Entregue a **face completa**: moldura + fundo + símbolo, dentro de 48×48.
-- Os cantos podem ser arredondados com pixels **totalmente transparentes** (o placeholder usa raio ~5 px).
-- Use a cor base do tipo (tabela abaixo) como cor dominante do fundo ou do símbolo, para o jogador reconhecer o tipo.
-- Alpha só **0 ou 255** (sem semitransparência nem anti-aliasing nas bordas).
+- **Moldura** de madeira em pixel art ocupando a borda (no 960 px, cada "pixel" da moldura tem 15 px), com a sombra inferior inclusa.
+- **Área interna** clara (branco com filete lilás) e a **ilustração centralizada**, com contorno escuro e respiro de ~15% até a moldura.
+- Fundo fora da moldura **transparente**; cantos podem ter pixels totalmente transparentes.
+- Mesmo enquadramento e mesma luz em todas as cartas, para o conjunto parecer uma família.
+- Cartas bloqueadas são escurecidas pelo jogo; não entregue versões escuras.
 
 ## 4. Paleta
 
@@ -68,7 +68,7 @@ Entregue um `palette/palette.png` com todas as cores usadas (um quadrado 8×8 po
 
 | Arquivo | Tamanho | Descrição |
 |---------|---------|-----------|
-| `assets/cards/card_<tipo>.png` | 48×48 | 12 faces de carta, uma por tipo |
+| `assets/cards/card_<tipo>.png` | 960×960 (mín. 512, quadrado) | 12 faces de carta, uma por tipo (moldura inclusa) |
 
 `UiHelpers.card_texture()` procura `res://assets/cards/card_<tipo>.png`; sem o arquivo, o jogo usa o placeholder (cor + emoji). Os 12 tipos: `cat, dog, bird, fish, flower, moon, star, sun, leaf, heart, gem, crystal`.
 
@@ -120,10 +120,8 @@ cartitas_arte_v01_AAAA-MM-DD.zip
 
 ## 9. Importação no Godot (feito por quem integra)
 
-Ao entrar no projeto, cada PNG em `assets/` deve ter no painel *Import*:
-
-- **Filter:** Nearest (o padrão do projeto já é nearest — `default_texture_filter=0`)
-- **Mipmaps:** desligados
-- **Compress:** Lossless
+- **Cartas** (`assets/cards/`): basta copiar o PNG com o nome `card_<tipo>.png`. O jogo gera os mipmaps e usa filtro trilinear sozinho; não precisa mexer no painel *Import*. Artes antigas ficam em `assets/cards/legacy/` (pasta ignorada pelo Godot).
+- **Kit de UI e ícones em pixel art** (`assets/ui/kit/`): Filter **Nearest** (padrão do projeto), Mipmaps **desligados**, Compress **Lossless**, desenhados em 1× ou múltiplos inteiros.
+- **Fundos pintados** (`assets/ui/`): o jogo aplica filtro linear e o shader de suavização.
 
 Nenhuma regra de jogo depende da arte; a arte é puramente apresentação.

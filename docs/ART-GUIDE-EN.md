@@ -10,32 +10,32 @@ The illustrated version to send to the artist is the PDF [`ART-DELIVERY-PT.pdf`]
 - Format: **32-bit PNG (RGBA, 8 bits per channel)**, sRGB, non-interlaced.
 - All art is drawn at **1 art pixel = 1 logical game pixel**. The game scales by code; do not deliver upscaled files as production assets.
 
-## 2. Sizes
+## 2. Sizes (card art standard)
 
-The displayed card size is `Card.DISPLAY_SIZE` = **48×48 logical px** (`scripts/core/card.gd`). The card face is therefore drawn at **48×48**: at the default board size it shows at exactly 2× in the 1280×720 window, with no distorted pixels.
+Card faces are delivered at **high resolution** and the game scales them at draw time: **square 960×960 px PNG** (minimum 512; prefer multiples of 64 — 960 = 64 × 15 keeps the pixel-art frame aligned). The current Pack A files are 480–960 px.
 
-Where the same image currently appears (the code resizes the PNG to fit):
+Why: the UI is laid out at 640×360 (landscape) / 360×640 (portrait) **logical** px but drawn at the **physical screen resolution** (`stretch mode = canvas_items`). A 40 px logical card is 80 real px in a 1280×720 window, 120 px in 1080p fullscreen, and more on bigger screens. The game builds **mipmaps** when it loads the art and draws it with **trilinear** filtering (`UiHelpers.card_texture` + `_make_card_art`), so the GPU scales straight from the original to the real size — sharp at any resolution, no re-export needed.
 
-| Where | Displayed size (logical px) | Source in code |
-|-------|-----------------------------|----------------|
-| Board (default) | 48×48 | `LevelConfig.DEFAULT_CARD_SIZE` |
-| Board (fit to space) | 41–120 (scale 0.85–2.5) | `BoardLayout.compute`, `MIN_CARD_SCALE` |
-| Support Decks | ~38×38 (48 × 0.8) | `LevelConfig.RESERVE_CARD_SCALE` |
-| Clearing Zone — landscape | 31×31 | `LANDSCAPE_ZONE_CARD_SIZE` |
-| Clearing Zone — portrait | 48×48 | `CARD_DISPLAY_SIZE` |
-| Reserve — landscape | 28–30, two columns | `LANDSCAPE_RESERVE_CARD_SIZE` |
-| Reserve — portrait | 28–38, two columns | `_reserve_card_size()` |
+Sizes where a card appears (logical px; multiply by the window scale for real pixels):
 
-Consequence: the symbol must be **readable at ~30 px** (strong silhouette, few thin 1 px details), because the image is shrunk in the small areas.
+| Where | Displayed size |
+|-------|----------------|
+| Board | up to 40 (`LevelConfig.MAX_BOARD_CARD_PX`), smaller on big boards |
+| Clearing Zone | 40 (landscape) / 36 (portrait) |
+| Reserve | 18–40, in a grid that fits the box |
+| Support Decks | top card inside the 64 px slot |
+
+Consequence for the art: the subject must read at **~30 logical px** (strong silhouette, dark outline, few very thin details).
 
 ## 3. Card anatomy
 
-The card PNG is drawn **over the whole card** (a card-sized `TextureRect`, see `_make_card_art` in `scripts/ui/level_screen.gd`). The placeholder frame and background color only show where the PNG is transparent. Therefore:
+The PNG is drawn **as the whole card face** (no extra background or border from the game). Follow the Pack A template (`assets/cards/card_dog.png`):
 
-- Deliver the **complete face**: frame + background + symbol, within 48×48.
-- Corners may be rounded using **fully transparent** pixels (the placeholder uses a ~5 px radius).
-- Use the type's base color (table below) as the dominant background or symbol color so players recognize the type.
-- Alpha **0 or 255 only** (no semi-transparency or anti-aliased edges).
+- A pixel-art wooden **frame** around the edge (at 960 px each frame "pixel" is 15 px), bottom shadow included.
+- A light **inner area** (white with a lilac rim) with the **illustration centred**, dark outline, ~15% breathing room to the frame.
+- **Transparent** outside the frame; corners may use fully transparent pixels.
+- Same framing and lighting on every card so the set reads as one family.
+- Blocked cards are darkened by the game; do not deliver dark variants.
 
 ## 4. Palette
 
@@ -68,7 +68,7 @@ Deliver a `palette/palette.png` with every color used (one 8×8 square per color
 
 | File | Size | Description |
 |------|------|-------------|
-| `assets/cards/card_<type>.png` | 48×48 | 12 card faces, one per type |
+| `assets/cards/card_<type>.png` | 960×960 (min. 512, square) | 12 card faces, one per type (frame included) |
 
 `UiHelpers.card_texture()` looks for `res://assets/cards/card_<type>.png`; without the file, the game uses the placeholder (color + emoji). The 12 types: `cat, dog, bird, fish, flower, moon, star, sun, leaf, heart, gem, crystal`.
 
@@ -120,10 +120,8 @@ cartitas_arte_v01_YYYY-MM-DD.zip
 
 ## 9. Godot import (done by the integrator)
 
-Once in the project, each PNG under `assets/` should have in the *Import* panel:
-
-- **Filter:** Nearest (the project default is already nearest — `default_texture_filter=0`)
-- **Mipmaps:** off
-- **Compress:** Lossless
+- **Cards** (`assets/cards/`): just copy the PNG as `card_<type>.png`. The game builds the mipmaps and uses trilinear filtering on its own; no *Import* panel changes needed. Older art lives in `assets/cards/legacy/` (a folder Godot ignores).
+- **Pixel-art UI kit and icons** (`assets/ui/kit/`): Filter **Nearest** (project default), Mipmaps **off**, Compress **Lossless**, drawn at 1x or whole multiples.
+- **Painted backgrounds** (`assets/ui/`): the game applies linear filtering and the softening shader.
 
 No game rule depends on the art; art is presentation only.
