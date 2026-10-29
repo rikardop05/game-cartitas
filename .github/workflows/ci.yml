@@ -26,6 +26,12 @@ jobs:
       - name: Smoke main menu (tests/smoke_main_menu.gd)
         run: ./godot --headless --script res://tests/smoke_main_menu.gd
 
+      - name: Smoke Endless Mode (tests/smoke_endless.gd)
+        run: ./godot --headless --script res://tests/smoke_endless.gd
+
+      - name: Smoke rapid taps (tests/smoke_rapid_taps.gd)
+        run: ./godot --headless --script res://tests/smoke_rapid_taps.gd
+
       - name: Board layout regression (tests/regression_board_layout.gd)
         run: ./godot --headless --script res://tests/regression_board_layout.gd
 

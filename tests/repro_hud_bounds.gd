@@ -1,15 +1,33 @@
 extends SceneTree
 
 # Deterministic full-scene repro for HUD/container overflow in both canonical
-# mobile viewports. Read-only: loads Level 6 with its fixed profile seed and
-# verifies the save file is byte-identical before/after the run.
+# mobile viewports. Read-only: loads Level 6 with its fixed profile seed, then
+# Endless round 1 (seeded by the round number under LevelLoader.deterministic),
+# and verifies the save file is byte-identical before/after the run.
+#
+# Layout contract (see LevelScreen): landscape = Hud row on top, then Body =
+# [SideColumn (MascotArea + Reserve) | MainColumn (BoardFrame, Support, ClearingZone) | Powers];
+# portrait = Hud, then MainColumn = BoardFrame, Support (decks + MascotArea),
+# ClearingZone, BottomRow (Reserve + Powers). The main regions never overlap, blocked
+# cards are dimmed by depth, and the instruction bubble (Ace's, or the standalone one
+# when the mascot is off) stays clear of the cards and the controls.
 
 const LEVEL_ID := "6"
 const EPSILON := 0.01
-const COMMON_REQUIRED := ["ScreenMargin", "MainColumn", "BoardFrame", "Support", "Reserve", "ClearingZone", "Powers"]
+const COMMON_REQUIRED := ["ScreenMargin", "Hud", "MainColumn", "BoardFrame", "Support", "Reserve", "ClearingZone", "Powers", "MascotArea"]
+const LANDSCAPE_EXTRA := ["Body", "SideColumn"]
+const PORTRAIT_EXTRA := ["BottomRow"]
+# Regions that must never overlap each other (MascotArea is a spacer inside SideColumn/Support).
+const DISJOINT_REGIONS := ["Hud", "BoardFrame", "Support", "ClearingZone", "Reserve", "Powers"]
+const BUBBLE_WAIT_MS := 3500
 const VIEWS := [
-	{"name": "landscape-640x360", "orientation": "landscape", "window": Vector2i(640, 360), "extra": ["Body", "LowerStrip"]},
-	{"name": "portrait-360x640", "orientation": "portrait", "window": Vector2i(360, 640), "extra": []},
+	{"name": "landscape-640x360", "orientation": "landscape", "window": Vector2i(640, 360), "extra": LANDSCAPE_EXTRA, "endless": false, "mascot": true},
+	{"name": "portrait-360x640", "orientation": "portrait", "window": Vector2i(360, 640), "extra": PORTRAIT_EXTRA, "endless": false, "mascot": true},
+	{"name": "endless-landscape-640x360", "orientation": "landscape", "window": Vector2i(640, 360), "extra": LANDSCAPE_EXTRA, "endless": true, "mascot": true},
+	{"name": "endless-portrait-360x640", "orientation": "portrait", "window": Vector2i(360, 640), "extra": PORTRAIT_EXTRA, "endless": true, "mascot": true},
+	# Mascot off in Options: a standalone bubble takes Ace's place.
+	{"name": "nomascot-landscape-640x360", "orientation": "landscape", "window": Vector2i(640, 360), "extra": LANDSCAPE_EXTRA, "endless": false, "mascot": false},
+	{"name": "nomascot-portrait-360x640", "orientation": "portrait", "window": Vector2i(360, 640), "extra": PORTRAIT_EXTRA, "endless": false, "mascot": false},
 ]
 
 var _failures: Array[String] = []
@@ -28,8 +46,11 @@ func _run() -> void:
 		_fail("infrastructure", "Game autoload missing")
 		_finish()
 		return
+	var mascot_before: bool = bool(game.settings.get("mascot", true))
 	for view in VIEWS:
 		await _run_view(game, view)
+	# In-memory only (never set_mascot(), which would persist to the user save).
+	game.settings["mascot"] = mascot_before
 	_finish()
 
 func _run_view(game, view: Dictionary) -> void:
@@ -38,13 +59,19 @@ func _run_view(game, view: Dictionary) -> void:
 	var landscape: bool = view["orientation"] == "landscape"
 	# Do not call Game.set_orientation(): it persists settings to the user save.
 	game.settings["orientation"] = view["orientation"]
+	game.settings["mascot"] = bool(view["mascot"])
 	game.apply_orientation()
 	root.size = view["window"]
 	for i in 3:
 		await process_frame
 
-	game.current_level_id = LEVEL_ID
-	change_scene_to_file("res://scenes/level.tscn")
+	var endless: bool = view["endless"]
+	if endless:
+		game.start_endless()
+	else:
+		game.endless_run = null
+		game.current_level_id = LEVEL_ID
+		change_scene_to_file("res://scenes/level.tscn")
 	var scene = await _wait_for_level_scene()
 	if scene == null:
 		_fail("infrastructure", "LevelScreen did not become ready")
@@ -60,28 +87,40 @@ func _run_view(game, view: Dictionary) -> void:
 	var viewport_bounds := Rect2(Vector2.ZERO, scene.get_viewport_rect().size)
 	var controller = scene.get("controller")
 	var board := scene.find_child("Board", true, false) as Control
-	_verify_deterministic_seed(controller, board)
+	if endless:
+		_verify_endless_round(game, scene, controller, board)
+	else:
+		_verify_deterministic_seed(controller, board)
 
 	print("HUD BOUNDS REPRO view=%s level=%s viewport=%s stable_frames=%d" % [
-		_view_name, LEVEL_ID, str(viewport_bounds), stable_frames,
+		_view_name, "endless-1" if endless else LEVEL_ID, str(viewport_bounds), stable_frames,
 	])
 
 	# Exact hierarchy contracts for the main HUD regions.
+	_assert_inside(nodes["Hud"], nodes["ScreenMargin"].get_global_rect(), "container:Hud-in-ScreenMargin")
+	var area_owner := "SideColumn" if landscape else "Support"
+	_assert_inside(nodes["MascotArea"], nodes[area_owner].get_global_rect(), "container:MascotArea-in-%s" % area_owner)
 	if landscape:
 		_assert_inside(nodes["Body"], nodes["ScreenMargin"].get_global_rect(), "container:Body-in-ScreenMargin")
-		_assert_inside(nodes["MainColumn"], nodes["Body"].get_global_rect(), "container:MainColumn-in-Body")
-		_assert_inside(nodes["Powers"], nodes["Body"].get_global_rect(), "container:Powers-in-Body")
-		_assert_inside(nodes["LowerStrip"], nodes["MainColumn"].get_global_rect(), "container:LowerStrip-in-MainColumn")
-		for child_name in ["Support", "Reserve", "ClearingZone"]:
-			_assert_inside(nodes[child_name], nodes["LowerStrip"].get_global_rect(), "container:%s-in-LowerStrip" % child_name)
-		# LowerStrip and every visible descendant must remain inside Body, even when
-		# a child's theme/content minimum silently grows beyond the nominal 56 px.
-		_audit_subtree_against(nodes["LowerStrip"], nodes["Body"].get_global_rect(), "lower-vs-body", scene, true)
+		for child_name in ["MainColumn", "SideColumn", "Powers"]:
+			_assert_inside(nodes[child_name], nodes["Body"].get_global_rect(), "container:%s-in-Body" % child_name)
+		_assert_inside(nodes["Reserve"], nodes["SideColumn"].get_global_rect(), "container:Reserve-in-SideColumn")
+		for child_name in ["BoardFrame", "Support", "ClearingZone"]:
+			_assert_inside(nodes[child_name], nodes["MainColumn"].get_global_rect(), "container:%s-in-MainColumn" % child_name)
+		# The Hud row sits above the Body; the side columns and the main column share its rows.
+		if nodes["Hud"].get_global_rect().end.y > nodes["Body"].get_global_rect().position.y + EPSILON:
+			_fail("container:Hud-above-Body", "hud=%s body=%s" % [str(nodes["Hud"].get_global_rect()), str(nodes["Body"].get_global_rect())])
+		# SideColumn and MainColumn and every visible descendant must remain inside Body, even
+		# when a child's theme/content minimum silently grows beyond its nominal size.
+		_audit_subtree_against(nodes["SideColumn"], nodes["Body"].get_global_rect(), "side-vs-body", scene, true)
+		_audit_subtree_against(nodes["MainColumn"], nodes["Body"].get_global_rect(), "main-vs-body", scene, true)
 	else:
 		_assert_inside(nodes["MainColumn"], nodes["ScreenMargin"].get_global_rect(), "container:MainColumn-in-ScreenMargin")
-		for child_name in ["Powers", "Support", "ClearingZone", "Reserve"]:
+		for child_name in ["Support", "ClearingZone", "BottomRow", "BoardFrame"]:
 			_assert_inside(nodes[child_name], nodes["MainColumn"].get_global_rect(), "container:%s-in-MainColumn" % child_name)
-	_assert_inside(nodes["BoardFrame"], nodes["MainColumn"].get_global_rect(), "container:BoardFrame-in-MainColumn")
+		for child_name in ["Reserve", "Powers"]:
+			_assert_inside(nodes[child_name], nodes["BottomRow"].get_global_rect(), "container:%s-in-BottomRow" % child_name)
+	_assert_regions_disjoint(nodes)
 
 	# Every visible Control under the HUD must stay inside the viewport. This is
 	# the user-visible bottom-clipping invariant, independent of parent layout.
@@ -93,6 +132,10 @@ func _run_view(game, view: Dictionary) -> void:
 		var owner: Control = nodes[owner_name]
 		_audit_subtree_against(owner, owner.get_global_rect(), "visual-vs-%s" % owner_name, scene, false)
 
+	if scene.find_child("InstructionOverlay", true, false) != null:
+		_fail("instruction", "the instruction strip over the cards (InstructionOverlay) is back")
+	_assert_blocked_cards_dimmed(scene, controller)
+
 	var zone := scene.get("zone_container") as Control
 	_assert_zone_single_row(zone, scene)
 	_assert_action_button(scene.get("deck_a_btn") as Button, "deck_a_btn", viewport_bounds, nodes["ScreenMargin"], scene)
@@ -100,6 +143,110 @@ func _run_view(game, view: Dictionary) -> void:
 	var power_buttons: Dictionary = scene.get("power_buttons")
 	for power_name in PowerManager.POWERS:
 		_assert_action_button(power_buttons.get(power_name) as Button, "power:%s" % power_name, viewport_bounds, nodes["ScreenMargin"], scene)
+	await _assert_instruction_bubble(scene, nodes, bool(view["mascot"]), viewport_bounds)
+
+# The main layout regions are laid side by side or stacked: no two may share any area.
+func _assert_regions_disjoint(nodes: Dictionary) -> void:
+	for i in DISJOINT_REGIONS.size():
+		for j in range(i + 1, DISJOINT_REGIONS.size()):
+			var a: Rect2 = nodes[DISJOINT_REGIONS[i]].get_global_rect()
+			var b: Rect2 = nodes[DISJOINT_REGIONS[j]].get_global_rect()
+			if a.grow(-EPSILON).intersects(b.grow(-EPSILON)):
+				_fail("overlap", "%s %s overlaps %s %s" % [DISJOINT_REGIONS[i], str(a), DISJOINT_REGIONS[j], str(b)])
+
+# Blocked cards are dimmed (shader material) and darker the deeper they sit; available
+# cards are untouched. Depth comes from the screen itself, the brightness from its table.
+func _assert_blocked_cards_dimmed(scene, controller) -> void:
+	var board := scene.find_child("Board", true, false) as Control
+	if board == null or controller == null:
+		return
+	var depths: Dictionary = scene.call("_blocked_depths")
+	var cards: Array = []
+	for card in controller.board.cards:
+		if not card.is_removed() and card.location == Card.Location.BOARD:
+			cards.append(card)
+	cards.sort_custom(func(a, b): return a.layer < b.layer)
+	if cards.size() != board.get_child_count():
+		_fail("dim", "board has %d nodes for %d cards" % [board.get_child_count(), cards.size()])
+		return
+	var brightness_by_depth := {}
+	var blocked := 0
+	for i in cards.size():
+		var node := board.get_child(i) as Button
+		var face := node.get_child(0) as Control
+		var depth: int = int(depths.get(cards[i].id, 0))
+		var available: bool = cards[i].state == Card.State.AVAILABLE
+		if available != (depth == 0):
+			_fail("dim", "card %s available=%s but depth=%d" % [cards[i].id, str(available), depth])
+		if depth == 0:
+			if face.material != null or node.disabled:
+				_fail("dim", "available card %s is dimmed or disabled" % cards[i].id)
+			continue
+		blocked += 1
+		if not node.disabled:
+			_fail("dim", "blocked card %s is clickable" % cards[i].id)
+		var material := face.material as ShaderMaterial
+		if material == null:
+			_fail("dim", "blocked card %s (depth %d) has no dim material" % [cards[i].id, depth])
+			continue
+		brightness_by_depth[depth] = float(material.get_shader_parameter("brightness"))
+	var previous := 1.0
+	var depth_keys: Array = brightness_by_depth.keys()
+	depth_keys.sort()
+	for depth in depth_keys:
+		var brightness: float = brightness_by_depth[depth]
+		if brightness >= previous or brightness > 0.5:
+			_fail("dim", "depth %d brightness %.2f is not darker than the shallower depths (%.2f)" % [depth, brightness, previous])
+		previous = brightness
+	print("  dim check: %d blocked card(s), brightness by depth %s" % [blocked, str(brightness_by_depth)])
+
+# Instruction line at level/round start: Ace's bubble (or the standalone one with the mascot
+# off) must show up, stay inside the viewport and keep clear of the board, the powers, the
+# decks, the Reserve, the Clearing Zone, the HUD and Ace itself.
+func _assert_instruction_bubble(scene, nodes: Dictionary, mascot_on: bool, viewport_bounds: Rect2) -> void:
+	var mascot = scene.get("mascot")
+	if mascot_on != (mascot != null):
+		_fail("mascot", "mascot presence %s does not follow the Options toggle (%s)" % [str(mascot != null), str(mascot_on)])
+		return
+	var bubble := Rect2()
+	var start := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - start < BUBBLE_WAIT_MS:
+		await process_frame
+		var rect := Rect2()
+		if mascot != null:
+			rect = mascot.bubble_global_rect()
+		else:
+			var standalone := scene.find_child("InstructionBubble", true, false) as Control
+			if standalone != null and standalone.modulate.a >= 0.99:
+				rect = standalone.get_global_rect()
+		if rect.has_area() and rect.size.y > 14.0:
+			bubble = rect
+			await process_frame
+			break
+	if not bubble.has_area():
+		_fail("bubble", "the instruction bubble never appeared")
+		return
+	var inner := viewport_bounds.grow(-2.0)
+	if _max_overflow(_overflow(bubble, inner)) > EPSILON:
+		_fail("bubble-viewport", "bubble=%s viewport=%s" % [str(bubble), str(viewport_bounds)])
+	var avoid := {}
+	for region in ["Hud", "BoardFrame", "Powers", "Reserve", "ClearingZone"]:
+		avoid[region] = nodes[region].get_global_rect()
+	avoid["deck_a"] = (scene.get("deck_a_btn") as Control).get_global_rect()
+	avoid["deck_b"] = (scene.get("deck_b_btn") as Control).get_global_rect()
+	if mascot != null:
+		avoid["mascot"] = Rect2(mascot.global_position, mascot.size)
+	for key in avoid:
+		if bubble.intersects(avoid[key]):
+			_fail("bubble-overlap", "bubble %s overlaps %s %s" % [str(bubble), key, str(avoid[key])])
+	if mascot != null:
+		var ace := Rect2(mascot.global_position, mascot.size)
+		for key in ["BoardFrame", "Powers", "Reserve", "ClearingZone", "Hud"]:
+			if ace.intersects(nodes[key].get_global_rect()):
+				_fail("mascot-overlap", "mascot %s overlaps %s %s" % [str(ace), key, str(nodes[key].get_global_rect())])
+		for deck in ["deck_a_btn", "deck_b_btn"]:
+			if ace.intersects((scene.get(deck) as Control).get_global_rect()):
+				_fail("mascot-overlap", "mascot %s overlaps %s" % [str(ace), deck])
 
 func _wait_for_level_scene():
 	for i in 60:
@@ -166,6 +313,23 @@ func _verify_deterministic_seed(controller, board: Control) -> void:
 		_fail("infrastructure", "non-deterministic seed: %d vs %d" % [seed_used, seed_again])
 	if not _same_board(resolved["cards"], controller.board.cards):
 		_fail("infrastructure", "scene board differs from fixed-seed LevelLoader output")
+
+# Endless round 1 is seeded by its round number, so a fresh run at the same board
+# size must reproduce the scene's board. Also checks the score pill replaced the stars.
+func _verify_endless_round(game, scene, controller, board: Control) -> void:
+	if controller == null or board == null:
+		_fail("infrastructure", "controller or Board missing")
+		return
+	if game.endless_run == null:
+		_fail("infrastructure", "Game.endless_run missing in an endless view")
+		return
+	var resolved: Dictionary = EndlessRun.new().build_round_level(board.size)
+	if resolved.has("error"):
+		_fail("infrastructure", "endless round build failed: %s" % str(resolved["error"]))
+	elif not _same_board(resolved["cards"], controller.board.cards):
+		_fail("infrastructure", "scene board differs from deterministic endless round 1")
+	if scene.get("score_label") == null or scene.get("stars_label") != null:
+		_fail("endless-hud", "expected a score pill instead of the live stars")
 
 func _same_board(resolved_cards: Array, runtime_cards: Array) -> bool:
 	if resolved_cards.size() != runtime_cards.size():

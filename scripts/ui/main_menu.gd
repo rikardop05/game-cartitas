@@ -115,6 +115,7 @@ func _build_levels() -> void:
 	total_stars.add_theme_color_override("font_color", GOLD)
 	vbox.add_child(total_stars)
 
+	vbox.add_child(_make_endless_button())
 	for id in ids:
 		vbox.add_child(_make_level_button(str(id)))
 
@@ -165,6 +166,13 @@ func _build_options() -> void:
 	orient_btn.pressed.connect(_on_toggle_orientation)
 	vbox.add_child(orient_btn)
 
+	var mascot_btn := Button.new()
+	mascot_btn.text = _mascot_label()
+	mascot_btn.custom_minimum_size = Vector2(220, 44)
+	mascot_btn.tooltip_text = Localizer.t("mascot_label")
+	mascot_btn.pressed.connect(_on_toggle_mascot)
+	vbox.add_child(mascot_btn)
+
 	var reset := Button.new()
 	reset.text = Localizer.t("reset_confirm") if _reset_armed else Localizer.t("reset")
 	reset.custom_minimum_size = Vector2(220, 44)
@@ -199,6 +207,24 @@ func _make_level_button(id: String) -> Button:
 		btn.disabled = true
 	return btn
 
+# Endless entry, styled like a level button: best score once the last Level is beaten.
+func _make_endless_button() -> Button:
+	var btn := Button.new()
+	btn.name = "EndlessButton"
+	btn.custom_minimum_size = Vector2(220, 48)
+	btn.add_theme_font_override("font", UiHelpers.symbol_font())
+	if Game.progress.is_endless_unlocked():
+		btn.text = Localizer.t("endless")
+		if Game.progress.endless_best > 0:
+			btn.text += "   ★ %s" % (Localizer.t("endless_best") % Game.progress.endless_best)
+		btn.add_theme_color_override("font_color", GOLD)
+		btn.tooltip_text = Localizer.t("endless_tip")
+		btn.pressed.connect(_on_endless)
+	else:
+		btn.text = "%s   %s" % [Localizer.t("endless"), Localizer.t("endless_locked") % ProgressManager.endless_unlock_level()]
+		btn.disabled = true
+	return btn
+
 func _on_play() -> void:
 	_screen = Screen.LEVELS
 	_build()
@@ -217,6 +243,9 @@ func _on_back() -> void:
 
 func _on_level(level_id: String) -> void:
 	Game.start_level(level_id)
+
+func _on_endless() -> void:
+	Game.start_endless()
 
 # Erasing progress is irreversible, so the first tap only arms the button.
 func _on_reset() -> void:
@@ -241,4 +270,11 @@ func _orientation_label() -> String:
 func _on_toggle_orientation() -> void:
 	var landscape := str(Game.settings.get("orientation", "portrait")) != "landscape"
 	Game.set_orientation(landscape)
+	_build()
+
+func _mascot_label() -> String:
+	return "%s: %s" % [Localizer.t("mascot_label"), Localizer.t("option_on" if Game.mascot_enabled() else "option_off")]
+
+func _on_toggle_mascot() -> void:
+	Game.set_mascot(not Game.mascot_enabled())
 	_build()

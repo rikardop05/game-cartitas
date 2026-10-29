@@ -9,12 +9,18 @@ const SUITE_PATHS := [
 	"res://tests/test_move_result.gd",
 	"res://tests/test_level_snapshot.gd",
 	"res://tests/test_progress.gd",
-"res://tests/test_level.gd",
+	"res://tests/test_level.gd",
 	"res://tests/test_integration.gd",
 	"res://tests/test_layout.gd",
 	"res://tests/test_difficulty_profile.gd",
 	"res://tests/test_progression.gd",
 	"res://tests/test_envelope.gd",
+	"res://tests/test_level_boards.gd",
+	"res://tests/test_board_pipeline.gd",
+	"res://tests/test_board_seed_split.gd",
+	"res://tests/test_board_solvability_solver.gd",
+	"res://tests/test_endless.gd",
+	"res://tests/test_mascot_lines.gd",
 ]
 
 func _init() -> void:
