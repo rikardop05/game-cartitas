@@ -37,6 +37,10 @@ The PNG is drawn **as the whole card face** (no extra background or border from 
 - Same framing and lighting on every card so the set reads as one family.
 - Blocked cards are darkened by the game; do not deliver dark variants.
 
+## 3b. Painted HUD art
+
+Painted plaques and icons (stars, stopwatch, gear) live in `assets/ui/hud/` and follow the card standard: transparent high-resolution PNGs (icons >= 512 px; star plaques ~1024 px wide, one image per state `stars_1/2/3.png`), drawn with mipmaps and trilinear filtering.
+
 ## 4. Palette
 
 Use a **shared limited palette** (~32 colors). Base colors per type live in `scripts/core/card_type_registry.gd`:

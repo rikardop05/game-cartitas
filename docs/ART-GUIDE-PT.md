@@ -37,6 +37,10 @@ O PNG é desenhado **como a face inteira da carta** (sem fundo ou borda extra do
 - Mesmo enquadramento e mesma luz em todas as cartas, para o conjunto parecer uma família.
 - Cartas bloqueadas são escurecidas pelo jogo; não entregue versões escuras.
 
+## 3b. Arte pintada do HUD
+
+Placas e ícones pintados (estrelas, cronômetro, engrenagem) ficam em `assets/ui/hud/` e seguem o mesmo padrão das cartas: PNG com fundo transparente em alta resolução (ícones ≥ 512 px; placas de estrelas ~1024 px de largura, uma imagem por estado `stars_1/2/3.png`), desenhados com mipmaps e filtro trilinear.
+
 ## 4. Paleta
 
 Usar uma **paleta limitada compartilhada** (~32 cores). As cores base por tipo estão em `scripts/core/card_type_registry.gd`:
