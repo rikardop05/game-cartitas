@@ -21,6 +21,10 @@ const FALLBACK_HERO := HeroRoster.FALLBACK_HERO
 const DEFAULT_CHARACTER := HeroRoster.DEFAULT_HERO
 const HERO_DIR := HeroRoster.HERO_DIR
 const BUNNY_LEVEL := HeroRoster.BUNNY_LEVEL
+# Rigged idle for the bunny (L8 and the Endless rounds that draw her): a 2D
+# skeleton scene played over the portrait, hidden while an expression frame runs.
+const RIG_CHARACTER := "bunny"
+const RIG_SCENE := "res://assets/ui/heroes/bunny_idle.tscn"
 const INK := Color("#3a2410")
 const CARD_FACE := Color("#fff1d2")
 # Common heroes show mood with a subtle tint only; the character never moves.
@@ -79,6 +83,8 @@ var _endless := false
 var frame_id := ""
 var _texture_ready := false
 var _texture: Texture2D
+var _rig: Node2D
+var _rig_active := false
 var _bubble_root: Control
 var _bubble: PanelContainer
 var _bubble_label: Label
@@ -124,6 +130,7 @@ func _init() -> void:
 func _ready() -> void:
 	_build_bubble()
 	_arm_tip_timer()
+	resized.connect(_place_rig)
 
 # Shows the line for an event and sets the matching mood. Returns the Localizer
 # key that was shown, or "" when nothing was said (unknown event, cooldown,
@@ -231,6 +238,7 @@ func _apply_mood_look() -> void:
 			self_modulate = SAD_TINT
 		_:
 			self_modulate = Color.WHITE
+	_sync_rig()
 	queue_redraw()
 
 # ---------------------------------------------------------------- speech bubble
@@ -354,6 +362,8 @@ func _draw() -> void:
 		var a := TAU * float(i) / 16.0
 		shadow.append(shadow_center + Vector2(cos(a) * 13.0 * s.x, sin(a) * 2.2 * s.y))
 	draw_colored_polygon(shadow, Color(0, 0, 0, 0.22))
+	if _rig_active:
+		return
 	var rect := _sprite_rect()
 	if _texture != null:
 		draw_texture_rect(_texture, rect, false)
@@ -386,6 +396,64 @@ func _load_texture() -> void:
 			frame_id = name
 			break
 	queue_redraw()
+	_sync_rig()
+
+# The bunny idle rig replaces the still portrait whenever no expression frame is
+# showing (L8 idle and the Endless rounds). Expressions keep the painted frames.
+func _rig_wanted() -> bool:
+	return character == RIG_CHARACTER and not (_is_bunny_level8() and mood != Mood.IDLE)
+
+func _sync_rig() -> void:
+	var want := _rig_wanted() and _texture != null and ResourceLoader.exists(RIG_SCENE)
+	if not want:
+		if _rig != null:
+			_rig.visible = false
+			_rig.queue_free()
+			_rig = null
+		_rig_active = false
+		queue_redraw()
+		return
+	if _rig == null:
+		var scene := load(RIG_SCENE) as PackedScene
+		if scene == null:
+			_rig_active = false
+			return
+		var node := scene.instantiate()
+		_rig = node as Node2D
+		if _rig == null:
+			node.queue_free()
+			_rig_active = false
+			return
+		_rig.name = "IdleRig"
+		add_child(_rig)
+	_rig.visible = true
+	_rig.self_modulate = self_modulate
+	_rig_active = true
+	_place_rig()
+	queue_redraw()
+
+# Fits the rig's drawn bounds (polygon + its own transform) inside _sprite_rect(),
+# bottom-aligned and centred, so the idle lines up with the static portraits.
+func _place_rig() -> void:
+	if _rig == null or not _rig_active:
+		return
+	var poly := _rig.get_node_or_null("39Eeba9f37974366B3f87Ccb5Fb44Ab5") as Polygon2D
+	if poly == null or poly.polygon.is_empty():
+		return
+	var xf := poly.transform
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for p in poly.polygon:
+		var q := xf * p
+		lo = lo.min(q)
+		hi = hi.max(q)
+	var box := Rect2(lo, hi - lo)
+	if box.size.y <= 0.0 or box.size.x <= 0.0:
+		return
+	var rect := _sprite_rect()
+	var k := rect.size.y / box.size.y
+	_rig.scale = Vector2(k, k)
+	_rig.position = Vector2(rect.get_center().x - box.get_center().x * k, rect.end.y - box.end.y * k)
 
 # Last resort when no hero portrait exists: a simple silhouette, still visible.
 func _draw_placeholder(rect: Rect2) -> void:

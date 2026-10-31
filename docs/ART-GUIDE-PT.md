@@ -72,6 +72,8 @@ A fase 8 (coelha) tem ainda quatro expressões, com o mesmo tamanho e enquadrame
 
 O herói do menu é `assets/ui/heroes/hero_menu_wolf.png` (lobo cavaleiro de costas). O logo do jogo fica em `assets/ui/branding/logo_claw_and_crown.png` (transparente, 1748×866).
 
+A coelha também tem um idle com rig: `assets/ui/heroes/bunny_idle.tscn` (ossos 2D + `AnimationPlayer`, loop `new_animation`, 4 s) sobre `bunny_idle_atlas.png` (1024×1536, a mesma arte pintada, com mipmaps). Ele toca onde a coelha é a mascote (idle do L8 e rodadas do Endless) e some enquanto uma das quatro expressões pintadas está em cena.
+
 ## 3d. FX de combinação
 
 Os efeitos de combinação ficam em `assets/ui/fx/`: `match_burst.png` (explosão azul, ao fechar um trio) e `match_smoke.png` (nuvens de fumaça azul + gotas). Ambos são PNG RGBA com fundo transparente e mantêm o brilho suave (não corte o alpha, só a borda vazia).
