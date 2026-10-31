@@ -94,15 +94,17 @@ func end_run(progress: ProgressManager = null) -> Dictionary:
 	_result = {"score": score, "rounds_cleared": rounds_cleared, "new_best": new_best}
 	return _result.duplicate()
 
-# Distinct types first (shuffled), repeating only if the profile has fewer types than trios.
+# Support deck, never self-sufficient: one card per type in turn (shuffled order), so
+# no type ever appears 3+ times (the board must complete every trio). The profile
+# always has enough types for its deck sizes (at most 2 copies of each).
 func _build_deck(board_types: Array[String], card_count: int) -> Array:
 	var pool: Array = board_types.duplicate()
 	_shuffle(pool)
 	var deck: Array = []
-	for i in card_count / 3:
-		var t: String = pool[i % pool.size()]
-		for k in 3:
-			deck.append(t)
+	if pool.is_empty():
+		return deck
+	for i in card_count:
+		deck.append(String(pool[i % pool.size()]))
 	return deck
 
 func _shuffle(arr: Array) -> void:

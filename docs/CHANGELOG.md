@@ -1,5 +1,18 @@
 # Changelog — Cartitas Infinity
 
+## Rodada de cartas e decks (Nexus) — 2026-10-30
+
+### Jogo
+- **Totais por Level (tabuleiro+decks):** L1 27, L2 42, L3 48, L4 57, L5 78, L6 87, L7 105, L8 105, L9 150, L10 156, L11 168.
+- **Decks de apoio:** 12 cartas em L1–L4, 18 em L5–L6 e 24 em L7–L11; teto de **24 = 2 por tipo**. Todo tipo do deck aparece no tabuleiro e board+deck por tipo é múltiplo de 3, então o deck nunca fecha trio sozinho.
+- **Estrelas:** limites recalculados a **1,5 s/carta (3★)** e **2,6 s/carta (2★)** sobre o novo total; `time_limit` de **900 s no L10** e **1080 s no L11**.
+- **Guardrails:** `MAX_COLUMNS 13`, `MAX_ROWS 7`, `MAX_BOARD_CARDS 144`, `MIN_CARD_SIZE_PX 24` (e `MAX_BOARD_CARD_PX 46`). L9–L11 renderizam **28,0–29,5 px** no retrato, acima do mínimo.
+- **Geração:** orçamento do probe passou a **4000 ms**; os 11 Levels geram em 1 tentativa cada (~3,3–3,5 s no total, L11 ~1,0 s).
+
+### Ferramentas e qualidade
+- Suíte completa: **255 testes, 0 falhas** (Nexus).
+- `test_difficulty_profile` cobre a regra do deck (≤2 por tipo, tipos no board, board+deck múltiplo de 3); `test_star_thresholds` recalcula os limites; `test_progression` valida 60 seeds por Level.
+
 ## Layout do retrato da tela do Level — 2026-10-30 (spec da Luna)
 
 ### Jogo
@@ -38,7 +51,7 @@
 ### Ferramentas e qualidade
 - Novos testes unitários: `test_audio.gd`, `test_backgrounds.gd`, `test_mascot_heroes.gd` e a atualização de `test_mascot_lines.gd`; suíte **250/250** neste checkpoint (**251** após o layout do retrato).
 - Smokes atualizados: `smoke_main_menu.gd` cobre menu PT/EN (arte pronta × texto), logo/herói, layout da placa e parallax; `smoke_mascot_heroes.gd` cobre herói por fase, expressões do L8 e fala neutra. Utilitário `qa_visual_capture.gd` para captura visual.
-- `probe_generation.gd` confirma os 11 Levels dentro do envelope e do orçamento (553 ms de geração no total, limite 1500 ms).
+- `probe_generation.gd` confirma os 11 Levels dentro do envelope e do orçamento (naquela rodada: 553 ms de geração no total, limite 1500 ms).
 
 ### Pendente
 - Arte final de `crystal` (ainda placeholder).

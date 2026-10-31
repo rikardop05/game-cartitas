@@ -912,11 +912,16 @@ func _assign_symbols(cards: Array, spec: BoardSpec) -> void:
 	if spec.card_types.is_empty():
 		return
 	var assignments: Array[String] = []
-	var trio_count := spec.card_count / 3
-	for trio_index in trio_count:
-		var card_type := spec.card_types[trio_index % spec.card_types.size()]
-		for copy_index in 3:
-			assignments.append(card_type)
+	if not spec.type_counts.is_empty():
+		for card_type in spec.card_types:
+			for _copy_index in int(spec.type_counts.get(card_type, 0)):
+				assignments.append(card_type)
+	else:
+		var trio_count := spec.card_count / 3
+		for trio_index in trio_count:
+			var card_type := spec.card_types[trio_index % spec.card_types.size()]
+			for _copy_index in 3:
+				assignments.append(card_type)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = spec.symbol_seed
 	for i in range(assignments.size() - 1, 0, -1):
@@ -941,8 +946,12 @@ func _card_type_metrics(cards: Array, spec: BoardSpec) -> Dictionary:
 			return {"counts": counts, "valid": false}
 		counts[card_type] = int(counts[card_type]) + 1
 	var valid := cards.size() == spec.card_count
-	for count in counts.values():
-		valid = valid and int(count) % 3 == 0
+	if not spec.type_counts.is_empty():
+		for card_type in spec.card_types:
+			valid = valid and int(counts.get(card_type, 0)) == int(spec.type_counts.get(card_type, 0))
+	else:
+		for count in counts.values():
+			valid = valid and int(count) % 3 == 0
 	return {"counts": counts, "valid": valid}
 
 func _metrics_from(cards: Array, spec: BoardSpec, step_x: float, step_y: float, gates: Dictionary = {}, attempts: int = 1, rejection_counts: Dictionary = {}) -> Dictionary:

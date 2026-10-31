@@ -67,19 +67,37 @@ static func generate(config: LevelConfig, board_size: Vector2 = Vector2.ZERO) ->
 static func symbol_seed_for(seed_used: int) -> int:
 	return (seed_used * SYMBOL_SEED_MIX + SYMBOL_SEED_ADD) & 0x7FFFFFFF
 
-# Deterministic Support Deck split: seeded shuffle of the pool, first half to A.
-# Single implementation shared by the solvability check here and LevelLoader.
+# Deterministic Support Deck split: the copies of one type stay together in a single
+# deck (so its pair can be drawn back to back to complete a trio with one board card),
+# and whole type groups are dealt to the deck that is currently smaller. Seeded, so the
+# generator's solvability check and LevelLoader always agree.
 static func split_decks(pool: Array, seed_used: int) -> Dictionary:
-	var shuffled := pool.duplicate()
+	var counts := {}
+	var types: Array = []
+	for raw in pool:
+		var t := str(raw)
+		if not counts.has(t):
+			types.append(t)
+			counts[t] = 0
+		counts[t] = int(counts[t]) + 1
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_used
-	for i in range(shuffled.size() - 1, 0, -1):
+	for i in range(types.size() - 1, 0, -1):
 		var j := rng.randi_range(0, i)
-		var tmp = shuffled[i]
-		shuffled[i] = shuffled[j]
-		shuffled[j] = tmp
-	var half := int(ceil(shuffled.size() / 2.0))
-	return {"deck_a": shuffled.slice(0, half), "deck_b": shuffled.slice(half)}
+		var tmp = types[i]
+		types[i] = types[j]
+		types[j] = tmp
+	var deck_a: Array = []
+	var deck_b: Array = []
+	for t in types:
+		var group: Array = []
+		for _k in int(counts[t]):
+			group.append(t)
+		if deck_a.size() <= deck_b.size():
+			deck_a.append_array(group)
+		else:
+			deck_b.append_array(group)
+	return {"deck_a": deck_a, "deck_b": deck_b}
 
 static func instantiate_level(config: LevelConfig, cards: Array, seed_used: int) -> Dictionary:
 	var decks := split_decks(config.deck_types, seed_used)

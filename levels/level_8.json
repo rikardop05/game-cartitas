@@ -2,7 +2,7 @@
   "id": "8",
   "difficulty": 8,
   "clearing_capacity": 7,
-  "deck": ["cat", "cat", "cat", "wolf", "wolf", "wolf", "boar", "boar", "boar", "duck", "duck", "duck"],
-  "time_thresholds": { "three_stars": 90, "two_stars": 160 },
+  "deck": ["cat", "cat", "wolf", "wolf", "owl", "owl", "whale", "whale", "mouse", "mouse", "frog", "frog", "boar", "boar", "duck", "duck", "leaf", "leaf", "heart", "heart", "gem", "gem", "crystal", "crystal"],
+  "time_thresholds": { "three_stars": 160, "two_stars": 275 },
   "rewards": [{ "type": "undo", "quantity": 1 }]
 }

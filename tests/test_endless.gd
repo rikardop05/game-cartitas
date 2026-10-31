@@ -47,9 +47,14 @@ func _check_round(round_number: int) -> void:
 	for t in level["deck_a"] + level["deck_b"]:
 		counts[t] = int(counts.get(t, 0)) + 1
 	var profile := DifficultyProfile.for_level(EndlessRun.difficulty_for_round(round_number))
+	var board_counts := {}
+	for c in level["cards"]:
+		board_counts[str(c["type"])] = int(board_counts.get(str(c["type"]), 0)) + 1
 	for t in counts:
-		Assert.equals(int(counts[t]) % 3, 0, "round %d deck type %s is a multiple of 3" % [round_number, t])
+		Assert.is_true(int(counts[t]) <= 2, "round %d deck has at most 2 cards of %s (got %d)" % [round_number, t, int(counts[t])])
 		Assert.is_true(profile.board_types.has(t), "round %d deck type %s comes from the profile" % [round_number, t])
+		Assert.equals((int(board_counts.get(t, 0)) + int(counts[t])) % 3, 0,
+			"round %d type %s board+deck is a multiple of 3" % [round_number, t])
 
 func test_round_levels_valid_and_solvable() -> void:
 	LevelLoader.deterministic = true

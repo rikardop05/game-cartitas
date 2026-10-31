@@ -69,7 +69,7 @@ func test_decks_are_mixed() -> void:
 	for t in level["deck_b"]:
 		types[t] = true
 	Assert.is_true(types.size() >= 2, "level 1 decks use more than one type")
-	Assert.equals(level["deck_a"].size() + level["deck_b"].size(), 6, "level 1 deck size 6")
+	Assert.equals(level["deck_a"].size() + level["deck_b"].size(), 12, "level 1 deck size 12")
 
 func _level_with_layout(randomize: bool, seed: int) -> Dictionary:
 	return {

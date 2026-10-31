@@ -25,6 +25,9 @@ var seed: int = 0
 var geometry_seed: int = 0
 var symbol_seed: int = 0
 var card_types: Array[String] = []
+# Optional per-type symbol counts (type -> copies on the board). Empty = the board
+# total is dealt as whole trios to card_types in turn.
+var type_counts: Dictionary = {}
 
 static func create(params: Dictionary) -> BoardSpec:
 	var spec := BoardSpec.new()
@@ -43,6 +46,10 @@ static func create(params: Dictionary) -> BoardSpec:
 	spec.symbol_seed = int(params.get("symbol_seed", 0))
 	for raw_type in params.get("card_types", []):
 		spec.card_types.append(String(raw_type).strip_edges())
+	var raw_counts = params.get("type_counts", {})
+	if raw_counts is Dictionary:
+		for key in raw_counts:
+			spec.type_counts[String(key).strip_edges()] = int(raw_counts[key])
 	return spec
 
 func validate() -> Dictionary:
@@ -75,6 +82,24 @@ func validate() -> Dictionary:
 				errors.append("card_types must be unique: %s" % card_type)
 			else:
 				seen_types[card_type] = true
+	if not type_counts.is_empty():
+		if card_types.is_empty():
+			errors.append("type_counts requires card_types")
+		else:
+			var counted := 0
+			for card_type in card_types:
+				if not type_counts.has(card_type):
+					errors.append("type_counts is missing '%s'" % card_type)
+					continue
+				var n := int(type_counts[card_type])
+				if n < 0:
+					errors.append("type_counts for '%s' must be >= 0" % card_type)
+				counted += n
+			for key in type_counts:
+				if not card_types.has(str(key)):
+					errors.append("type_counts has unknown type '%s'" % str(key))
+			if counted != card_count:
+				errors.append("type_counts add up to %d, not card_count %d" % [counted, card_count])
 	if errors.is_empty():
 		# The base layer sits on the full-card lattice of the board; the upper
 		# layers are scattered over it on a quarter-card lattice inside its footprint.

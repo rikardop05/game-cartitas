@@ -36,6 +36,8 @@ func is_blocked(card: Card) -> bool:
 			continue
 		if other.location != Card.Location.BOARD or other.is_removed():
 			continue
+		if other.layer <= card.layer:
+			continue
 		if BoardSpatialRules.blocks_with_layers(card.get_display_rect(), other.get_display_rect(), card.layer, other.layer):
 			return true
 	return false

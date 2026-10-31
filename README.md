@@ -30,22 +30,40 @@ Pronto! O jogo abre no menu. Escolha um level e jogue.
 - Clique/tocar nas cartas **disponíveis** (coloridas) para enviá-las à **Clearing Zone**.
 - Junte **3 cartas iguais** para removê-las automaticamente. A zona não tem título: as cartas ficam centralizadas dentro da madeira da barra comprida e os slots vazios não mostram placas quadradas.
 - Cartas **escuras** estão bloqueadas por outras cartas em cima (quanto mais fundo na pilha, mais escuras).
-- Use os dois **decks** (pilhas de cartas embaixo do tabuleiro) quando não houver jogada; as placas quadradas de madeira são a mesa de cada deck, com a carta por cima.
+- Use os dois **decks** (pilhas de cartas embaixo do tabuleiro) quando não houver jogada; as placas quadradas de madeira são a mesa de cada deck, com a carta por cima. Cada tipo aparece no máximo 2 vezes nos decks, então um deck nunca fecha trio sozinho.
 - Poderes (painel vertical de madeira, com um ícone por poder e o estoque "xN"):
   - **Hold** — guarda as 3 cartas mais antigas (da esquerda) na **Reserve**, liberando espaço. **Qualquer** carta da Reserve volta para a zona com um toque; com a zona cheia, ela pisca em vermelho e o herói avisa.
   - **Undo** — devolve a última carta ao tabuleiro/deck.
   - **Refresh** — reembaralha o tabuleiro e os decks.
 - Vença limpando **todas** as cartas antes de encher a Clearing Zone. Se a zona encher e você não tiver Hold nem Undo para liberar espaço, o Level termina na hora.
-- São **11 Levels** (33★ no total). Cada tentativa gera um tabuleiro novo: a base preenche um grid e as camadas de cima ficam espalhadas em posições irregulares (sem fileiras), sempre com cartas livres e garantidamente solucionável com os decks e os poderes.
+- São **11 Levels** (33★ no total), com **27 a 168 cartas** no total (tabuleiro+decks). Cada tentativa gera um tabuleiro novo: a base preenche um grid e as camadas de cima ficam espalhadas em posições irregulares (sem fileiras), sempre com cartas livres e garantidamente solucionável com os decks e os poderes.
 - A recompensa de um Level (ex.: +1 Hold) vem só na **primeira** vitória; rejogar serve para melhorar as estrelas.
 - **Endless Mode** (libera ao vencer o último Level, hoje o 11, no topo da lista de Levels): rodadas seguidas com dificuldade crescente, sem tempo limite. Cada carta combinada vale 10 pontos e cada rodada limpa dá um bônus de 100 × rodada. A partida usa um estoque de poderes próprio (2 Hold, 2 Undo, 1 Refresh, +1 poder a cada 3 rodadas) e não gasta o seu inventário. Seu recorde fica salvo.
 - **Herói da fase:** em vez de um mascote único, cada Level tem um retrato de corpo inteiro — **L1** gato, **L2** lobo patrulheiro, **L3** javali, **L4** rato, **L5** coruja, **L6** sapo, **L7** cavaleiro, **L8** coelha, **L9** lobo cavaleiro; **L10/L11** usam o lobo cavaleiro do menu como fallback. No Endless, os 9 heróis se revezam a cada rodada. O **L8** troca o retrato conforme o humor (4 expressões: pensando, sequência/feliz, escolha errada/preocupado e derrota/triste); os outros heróis mantêm um retrato e variam só por tinta/deslocamento. A voz é sempre neutra ("hero"), sem nomes próprios.
 - O herói diz a instrução no início de cada Level/rodada, dá dicas e reage às jogadas; dá para desligá-lo em **Opções** (a instrução aparece então num balão avulso).
 - **Estrelas ao vivo:** no topo, uma placa com 3 estrelas; a estrela "da vez" vai virando **pedra** conforme o tempo passa e, quando o tempo dela acaba, faz um **pluff** e fica de pedra; a primeira estrela fica sempre dourada (vencer vale ao menos 1★). A tela de resultado mostra a mesma placa com as estrelas conquistadas. Os limites seguem o tamanho do Level: **3★ até ~1,5 s por carta** e **2★ até ~2,6 s por carta** (tabuleiro + decks), contados em segundos inteiros como no relógio.
-- Os Levels 10 e 11 têm **tempo limite** (contagem regressiva); nos demais o cronômetro só conta para cima. O cronômetro pausa enquanto a ajuda (?) está aberta ou o jogo está em segundo plano.
+- Os Levels 10 e 11 têm **tempo limite** de **900 s** e **1080 s** (contagem regressiva); nos demais o cronômetro só conta para cima. O cronômetro pausa enquanto a ajuda (?) está aberta ou o jogo está em segundo plano.
 - **Combinação:** ao fechar um trio, as três cartas piscam, somem e cada uma dispara seu próprio **burst + fumaça** pintados; as cartas da zona deslizam/pulam para os slots livres e têm sombra 3D sobre a madeira.
 - **Som e música:** menu toca *Beyond the Walls*; campanha e Endless tocam *Castle Eudora*. As duas faixas fazem loop e trocam com crossfade. Volume nas **Opções** (−, barra arrastável, +; o ícone vira "mudo" em zero) e, na tela de jogo, o ícone para silenciar/voltar ao último volume.
 - **Configurações na partida:** a **engrenagem** ao lado do som pausa o relógio e abre idioma, orientação da tela, herói/mascote e volume, sem perder a partida.
+
+## Levels e cartas
+
+| Level | Tabuleiro | Decks | Total | 3★ | 2★ | Limite |
+|---|---|---|---|---|---|---|
+| 1 | 15 | 12 | 27 | 45 s | 75 s | — |
+| 2 | 30 | 12 | 42 | 65 s | 110 s | — |
+| 3 | 36 | 12 | 48 | 75 s | 125 s | — |
+| 4 | 45 | 12 | 57 | 90 s | 150 s | — |
+| 5 | 60 | 18 | 78 | 120 s | 205 s | — |
+| 6 | 69 | 18 | 87 | 135 s | 230 s | — |
+| 7 | 81 | 24 | 105 | 160 s | 275 s | — |
+| 8 | 81 | 24 | 105 | 160 s | 275 s | — |
+| 9 | 126 | 24 | 150 | 225 s | 390 s | — |
+| 10 | 132 | 24 | 156 | 235 s | 410 s | 900 s |
+| 11 | 144 | 24 | 168 | 235 s | 440 s | 1080 s |
+
+Os decks de apoio têm no máximo **2 cartas de cada tipo**; todo tipo do deck também aparece no tabuleiro e o total board+deck por tipo é múltiplo de 3, então um deck nunca fecha trio sozinho. O tabuleiro vai de 15 a 144 cartas (grade até **13×7**, 4 camadas); os Levels 9–11 renderizam **28–29,5 px** no retrato (mínimo de 24 px). O probe de geração usa orçamento de **4000 ms** (~3,5 s no total).
 
 ## Cartas
 
@@ -76,7 +94,7 @@ Abra o terminal (PowerShell) na pasta do projeto e rode os testes unitários:
 & "C:\caminho\para\Godot_v4.7-stable_win64_console.exe" --headless --path "E:\Cartitas" --script "res://tests/run_tests.gd"
 ```
 
-O runner roda 251 testes unitários, incluindo `test_level_boards.gd` e `test_board_scatter.gd` (tabuleiros gerados de todos os Levels e rodadas do Endless, incluindo o espalhamento das camadas de cima), `test_card_art.gd` (arte das cartas em alta resolução com mipmaps), `test_star_thresholds.gd` (limites de estrelas por carta), `test_audio.gd` (faixas e mixagem), `test_backgrounds.gd` (fundos por Level/orientação), `test_mascot_heroes.gd` (heróis por fase e expressões do L8) e `test_mascot_lines.gd`. Troque o caminho pelo executável `_console.exe` do seu Godot. O CI (`.github/workflows/ci.yml`) roda também estes scripts, do mesmo jeito (`--script res://tests/<nome>.gd`); o `smoke_mascot_heroes.gd` por enquanto é local:
+O runner roda 255 testes unitários, incluindo `test_level_boards.gd` e `test_board_scatter.gd` (tabuleiros gerados de todos os Levels e rodadas do Endless, incluindo o espalhamento das camadas de cima), `test_card_art.gd` (arte das cartas em alta resolução com mipmaps), `test_star_thresholds.gd` (limites de estrelas por carta), `test_audio.gd` (faixas e mixagem), `test_backgrounds.gd` (fundos por Level/orientação), `test_mascot_heroes.gd` (heróis por fase e expressões do L8) e `test_mascot_lines.gd`. Troque o caminho pelo executável `_console.exe` do seu Godot. O CI (`.github/workflows/ci.yml`) roda também estes scripts, do mesmo jeito (`--script res://tests/<nome>.gd`); o `smoke_mascot_heroes.gd` por enquanto é local:
 
 | Script | O que verifica |
 |---|---|
@@ -89,7 +107,7 @@ O runner roda 251 testes unitários, incluindo `test_level_boards.gd` e `test_bo
 | `smoke_settings.gd` | a engrenagem pausa o jogo e muda idioma, orientação, mascote e volume sem perder a partida |
 | `smoke_mascot_heroes.gd` | herói por fase, expressões do L8 e fala neutra no balão |
 | `regression_board_layout.gd` | posições das cartas de todos os Levels em todas as resoluções (retrato, paisagem e desktop) |
-| `probe_generation.gd` | tempo de geração e qualidade dos tabuleiros (validador, solucionável) |
+| `probe_generation.gd` | tempo de geração e qualidade dos tabuleiros (validador, solucionável; orçamento 4000 ms) |
 | `repro_hud_bounds.gd` | HUD inteiro dentro da tela em 6 views: campanha e Endless, retrato e paisagem, mais as views com o mascote desligado; no retrato confere o HUD de tela cheia, o rodapé e o logo |
 | `repro_board_capture.gd` | tabuleiro da cena igual ao do gerador, em retrato (336×177) e paisagem (448×193) |
 

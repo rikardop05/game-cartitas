@@ -3,7 +3,7 @@ extends RefCounted
 const PORTRAIT_AVAIL := LevelConfig.PORTRAIT_BOARD_ENVELOPE
 const LANDSCAPE_AVAIL := LevelConfig.LANDSCAPE_BOARD_ENVELOPE
 # Smallest board card that is still a comfortable touch target.
-const TOUCH_MIN_CARD_PX := 30.0
+const TOUCH_MIN_CARD_PX := LevelConfig.MIN_CARD_SIZE_PX
 
 # Rendered card size (px) of a board of the given logical size in an envelope: fitted, never above the UI cap.
 func _rendered_card(card_size: float, board: Vector2, avail: Vector2) -> float:
@@ -47,7 +47,7 @@ func test_envelope_rejects_out_of_envelope_with_diagnostics() -> void:
 	Assert.is_true(_errors_mention(deep.validate()["errors"], "layers"), "diagnostic names layers")
 	# too many board cards
 	var tall := LevelConfig.create({
-		"difficulty": 11, "board_types": ["cat", "wolf", "owl", "whale", "mouse", "frog", "boar", "duck", "leaf", "heart", "gem", "crystal"], "board_cards": 75,
+		"difficulty": 11, "board_types": ["cat", "wolf", "owl", "whale", "mouse", "frog", "boar", "duck", "leaf", "heart", "gem", "crystal"], "board_cards": 147,
 		"columns": 9, "rows": 5, "layers": 4, "seed": 1,
 	})
 	Assert.is_true(_errors_mention(tall.validate()["errors"], "board cards"), "diagnostic names board cards")
@@ -114,11 +114,11 @@ func test_no_silent_fallback_as_success() -> void:
 func test_safe_config_50_loads_no_fallback_all_solvable() -> void:
 	var cfg := LevelConfig.create({
 		"difficulty": 11, "board_types": ["cat", "wolf", "owl", "whale", "mouse", "frog", "boar", "duck", "leaf", "heart", "gem", "crystal"],
-		"count_per_type": 3, "columns": 7, "rows": 5, "layers": 4,
+		"count_per_type": 3, "board_cards": 36, "columns": 7, "rows": 5, "layers": 4,
 		"free_ratio": 0.35, "free_ratio_min": 0.20, "free_ratio_max": 0.50, "seed": 11001, "max_attempts": 80,
 	})
 	Assert.is_true(cfg.validate()["valid"], "safe config validates")
-	cfg.with_deck(["cat", "cat", "cat", "wolf", "wolf", "wolf", "owl", "owl", "owl"])
+	cfg.with_deck(["cat", "cat", "wolf", "wolf", "owl", "owl", "whale", "whale", "mouse", "mouse", "frog", "frog"])
 	Assert.is_true(cfg.validate()["valid"], "safe config with deck validates")
 	Assert.is_true(cfg.fits_portrait(), "safe config fits portrait envelope")
 	var solved := 0
