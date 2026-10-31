@@ -89,8 +89,8 @@ func select_card_typed(card_id: String) -> MoveResultType:
 		_lose()
 		return _make_result(false, MoveResult.Reason.ZONE_OVERFLOW, true)
 	_record_action({"type": "SELECT_CARD", "card_id": card_id})
-	zone.add(card)
-	return _resolve_and_check(card.type)
+	var zone_index: int = zone.add(card)
+	return _resolve_and_check(card.type, zone_index)
 
 func use_deck(deck_id: String) -> Dictionary:
 	return use_deck_typed(deck_id).to_dict()
@@ -113,8 +113,8 @@ func use_deck_typed(deck_id: String) -> MoveResultType:
 	card.location = Card.Location.CLEARING_ZONE
 	card.state = Card.State.SELECTED
 	_record_action({"type": "SELECT_DECK_CARD", "deck": deck_id})
-	zone.add(card)
-	return _resolve_and_check(drawn)
+	var zone_index: int = zone.add(card)
+	return _resolve_and_check(drawn, zone_index)
 
 func use_hold() -> Dictionary:
 	return use_hold_typed().to_dict()
@@ -152,8 +152,8 @@ func return_from_reserve_typed(card_id: String) -> MoveResultType:
 		return _make_result(false, MoveResult.Reason.ZONE_FULL)
 	reserve.remove_at(idx)
 	_record_action({"type": "RETURN_FROM_RESERVE", "card_id": card_id})
-	zone.add(card)
-	return _resolve_and_check(card.type)
+	var zone_index: int = zone.add(card)
+	return _resolve_and_check(card.type, zone_index)
 
 func use_undo() -> Dictionary:
 	return use_undo_typed().to_dict()
@@ -167,7 +167,7 @@ func use_undo_typed() -> MoveResultType:
 		return _make_result(false, MoveResult.Reason.NOTHING_TO_UNDO)
 	powers.consume("undo")
 	_record_action({"type": "USE_UNDO"})
-	var card: Card = zone.remove_last()
+	var card: Card = zone.remove_most_recent()
 	if card.source == Card.Source.BOARD:
 		card.location = Card.Location.BOARD
 		card.state = Card.State.HIDDEN
@@ -324,11 +324,13 @@ func get_legal_actions() -> Array:
 func _would_overflow(_card_type: String) -> bool:
 	return zone.is_full()
 
-func _resolve_and_check(card_type: String) -> MoveResultType:
+func _resolve_and_check(card_type: String, zone_index: int = -1) -> MoveResultType:
 	var matched: Array[Card] = zone.resolve_matches(card_type)
 	board.recalculate_availability()
 	_check_end()
-	return _make_result(true, MoveResult.Reason.OK, false, matched.map(_card_id))
+	var result := _make_result(true, MoveResult.Reason.OK, false, matched.map(_card_id))
+	result.zone_index = zone_index
+	return result
 
 func _card_id(c: Card) -> String:
 	return c.id

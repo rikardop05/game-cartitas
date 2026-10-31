@@ -2,7 +2,7 @@
   "id": "1",
   "difficulty": 1,
   "clearing_capacity": 7,
-  "deck": ["cat", "cat", "cat", "dog", "dog", "dog"],
+  "deck": ["cat", "cat", "cat", "wolf", "wolf", "wolf"],
   "time_thresholds": { "three_stars": 25, "two_stars": 40 },
   "rewards": [{ "type": "hold", "quantity": 1 }]
 }

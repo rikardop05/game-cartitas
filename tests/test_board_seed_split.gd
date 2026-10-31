@@ -5,12 +5,12 @@ const BOARD_WIDTH := 360.0
 const BOARD_HEIGHT := 280.0
 const CARD_COUNT := 24
 const GEOMETRY_SEED := 1001
-const CARD_TYPES := ["cat", "dog", "owl"]
+const CARD_TYPES := ["cat", "wolf", "owl"]
 
 func test_round_robin_trios_produce_multiple_of_three_counts() -> void:
 	var result := BoardPipeline.generate(_symbol_spec(GEOMETRY_SEED, 71))
 	Assert.is_true(result.ok, "symbol board generates")
-	var expected := {"cat": 9, "dog": 9, "owl": 6}
+	var expected := {"cat": 9, "wolf": 9, "owl": 6}
 	Assert.equals(_card_type_counts(result.cards), expected,
 		"8 trios are distributed round-robin as 9/9/6")
 	for count in _card_type_counts(result.cards).values():

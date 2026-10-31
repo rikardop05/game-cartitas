@@ -146,14 +146,14 @@ func test_same_layer_cards_are_a_full_card_apart() -> void:
 
 func test_explicit_board_cards_are_dealt_as_whole_trios() -> void:
 	# A board total that is not types x 3 gives some types one trio more.
-	var cfg := LevelConfig.create({"board_types": ["cat", "dog", "bird", "fish"], "board_cards": 18, "columns": 5, "rows": 3, "layers": 2})
+	var cfg := LevelConfig.create({"board_types": ["cat", "wolf", "owl", "whale"], "board_cards": 18, "columns": 5, "rows": 3, "layers": 2})
 	Assert.equals(cfg.board_cards(), 18, "explicit board card total")
 	var total := 0
 	for t in cfg.board_types:
 		Assert.equals(cfg.board_count(t) % 3, 0, "%s count is a multiple of 3" % t)
 		total += cfg.board_count(t)
 	Assert.equals(total, 18, "per-type counts add up to the board total")
-	Assert.equals([cfg.board_count("cat"), cfg.board_count("fish")], [6, 3], "the first types take the extra trios")
+	Assert.equals([cfg.board_count("cat"), cfg.board_count("whale")], [6, 3], "the first types take the extra trios")
 	var generated := cfg.generate()
 	Assert.is_true(generated["ok"], "explicit board total generates")
 	var counts := {}

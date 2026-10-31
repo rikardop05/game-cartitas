@@ -1,6 +1,8 @@
-# Cartitas Infinity
+# Claw & Crown
 
 Jogo de puzzle de cartas (combine 3 iguais) feito em Godot.
+
+**Claw & Crown** é a marca exibida no menu: um logo pintado substitui o título em texto. O nome interno do projeto continua **Cartitas Infinity** (`project.godot`, assembly `CartitasInfinity` e o executável de build).
 
 ## Como rodar o jogo
 
@@ -26,22 +28,45 @@ Pronto! O jogo abre no menu. Escolha um level e jogue.
 ## Como jogar (resumo rápido)
 
 - Clique/tocar nas cartas **disponíveis** (coloridas) para enviá-las à **Clearing Zone**.
-- Junte **3 cartas iguais** para removê-las automaticamente.
+- Junte **3 cartas iguais** para removê-las automaticamente. A zona não tem título: as cartas ficam centralizadas dentro da madeira da barra comprida e os slots vazios não mostram placas quadradas.
 - Cartas **escuras** estão bloqueadas por outras cartas em cima (quanto mais fundo na pilha, mais escuras).
-- Use os dois **decks** (pilhas de cartas embaixo do tabuleiro) quando não houver jogada.
-- Poderes:
-  - **Hold** — guarda as 3 cartas mais antigas (da esquerda) na **Reserve**, liberando espaço. **Qualquer** carta da Reserve volta para a zona com um toque; com a zona cheia, ela pisca em vermelho e o Ás avisa.
+- Use os dois **decks** (pilhas de cartas embaixo do tabuleiro) quando não houver jogada; as placas quadradas de madeira são a mesa de cada deck, com a carta por cima.
+- Poderes (painel vertical de madeira, com um ícone por poder e o estoque "xN"):
+  - **Hold** — guarda as 3 cartas mais antigas (da esquerda) na **Reserve**, liberando espaço. **Qualquer** carta da Reserve volta para a zona com um toque; com a zona cheia, ela pisca em vermelho e o herói avisa.
   - **Undo** — devolve a última carta ao tabuleiro/deck.
   - **Refresh** — reembaralha o tabuleiro e os decks.
 - Vença limpando **todas** as cartas antes de encher a Clearing Zone. Se a zona encher e você não tiver Hold nem Undo para liberar espaço, o Level termina na hora.
 - São **11 Levels** (33★ no total). Cada tentativa gera um tabuleiro novo: a base preenche um grid e as camadas de cima ficam espalhadas em posições irregulares (sem fileiras), sempre com cartas livres e garantidamente solucionável com os decks e os poderes.
 - A recompensa de um Level (ex.: +1 Hold) vem só na **primeira** vitória; rejogar serve para melhorar as estrelas.
 - **Endless Mode** (libera ao vencer o último Level, hoje o 11, no topo da lista de Levels): rodadas seguidas com dificuldade crescente, sem tempo limite. Cada carta combinada vale 10 pontos e cada rodada limpa dá um bônus de 100 × rodada. A partida usa um estoque de poderes próprio (2 Hold, 2 Undo, 1 Refresh, +1 poder a cada 3 rodadas) e não gasta o seu inventário. Seu recorde fica salvo.
-- O mascote **Ás** diz a instrução no início de cada Level/rodada, dá dicas e reage às jogadas; dá para desligá-lo em **Opções** (a instrução aparece então num balão avulso).
+- **Herói da fase:** em vez de um mascote único, cada Level tem um retrato de corpo inteiro — **L1** gato, **L2** lobo patrulheiro, **L3** javali, **L4** rato, **L5** coruja, **L6** sapo, **L7** cavaleiro, **L8** coelha, **L9** lobo cavaleiro; **L10/L11** usam o lobo cavaleiro do menu como fallback. No Endless, os 9 heróis se revezam a cada rodada. O **L8** troca o retrato conforme o humor (4 expressões: pensando, sequência/feliz, escolha errada/preocupado e derrota/triste); os outros heróis mantêm um retrato e variam só por tinta/deslocamento. A voz é sempre neutra ("hero"), sem nomes próprios.
+- O herói diz a instrução no início de cada Level/rodada, dá dicas e reage às jogadas; dá para desligá-lo em **Opções** (a instrução aparece então num balão avulso).
 - **Estrelas ao vivo:** no topo, uma placa com 3 estrelas; a estrela "da vez" vai virando **pedra** conforme o tempo passa e, quando o tempo dela acaba, faz um **pluff** e fica de pedra; a primeira estrela fica sempre dourada (vencer vale ao menos 1★). A tela de resultado mostra a mesma placa com as estrelas conquistadas. Os limites seguem o tamanho do Level: **3★ até ~1,5 s por carta** e **2★ até ~2,6 s por carta** (tabuleiro + decks), contados em segundos inteiros como no relógio.
 - Os Levels 10 e 11 têm **tempo limite** (contagem regressiva); nos demais o cronômetro só conta para cima. O cronômetro pausa enquanto a ajuda (?) está aberta ou o jogo está em segundo plano.
-- **Som:** volume nas **Opções** (−, barra arrastável, +; o ícone vira "mudo" em zero) e, na tela de jogo, o ícone para silenciar/voltar.
-- **Configurações na partida:** a **engrenagem** ao lado do som pausa o relógio e abre idioma, orientação da tela, mascote e volume, sem perder a partida.
+- **Combinação:** ao fechar um trio, as três cartas piscam, somem e cada uma dispara seu próprio **burst + fumaça** pintados; as cartas da zona deslizam/pulam para os slots livres e têm sombra 3D sobre a madeira.
+- **Som e música:** menu toca *Beyond the Walls*; campanha e Endless tocam *Castle Eudora*. As duas faixas fazem loop e trocam com crossfade. Volume nas **Opções** (−, barra arrastável, +; o ícone vira "mudo" em zero) e, na tela de jogo, o ícone para silenciar/voltar ao último volume.
+- **Configurações na partida:** a **engrenagem** ao lado do som pausa o relógio e abre idioma, orientação da tela, herói/mascote e volume, sem perder a partida.
+
+## Cartas
+
+São **12 tipos** (`CardTypeRegistry`): `cat`, `mouse`, `boar`, `owl`, `wolf`, `duck`, `frog`, `whale`, `leaf`, `heart`, `gem`, `crystal`.
+
+- Oito personagens têm **arte nova**: gato, rato, javali, coruja, lobo, pato, sapo e baleia.
+- `leaf`, `heart` e `gem` também ganharam arte nova (elfa/arqueira, coelha paladina e coelha cavaleira).
+- `crystal` ainda usa o **placeholder** (cor + emoji) e será substituído pela arte final.
+- Cada face é recortada no limite duro da moldura e entregue num quadrado nativo de **882–957 px**, sem margem transparente; o jogo aplica mipmaps e filtro trilinear.
+
+## Visual
+
+- **Fundos pintados:** o menu em **paisagem** usa `background_menu.png` (cidade); o menu em **retrato** mantém o fundo retrato atual. Nos Levels, campo nos **1–3**, cidade de outono nos **4–7** e **castelo** nos **8–11** e no **Endless**, com recorte próprio para retrato.
+- **Filtro dos fundos:** mais leve para manter a definição — menu com blur **0,30** e brilho **0,90**; gameplay com blur **0,60** e brilho **0,82** (saturação 0,95/0,90, tint 0,05/0,08 e vinheta 0,25/0,35).
+- **Tamanhos de carta:** tabuleiro até **46 px** (lógico); Clearing Zone **46 px** em paisagem e **42 px** em retrato; Support Decks **42 px**; Reserve em grade que encolhe de **34 px** (paisagem) / **42 px** (retrato) até um mínimo de **18 px**, conforme a quantidade de cartas guardadas.
+- **Janela do tabuleiro** com moldura de madeira pintada, fundo escurecido dentro e cartas bloqueadas escurecidas por profundidade.
+- **Tela do Level (retrato):** poderes no **topo-esquerdo**; **herói grande no topo-centro** (na camada atrás do HUD e do tabuleiro); barra da Clearing Zone logo abaixo; **tabuleiro na metade inferior**; **deck A, Reserve e deck B na mesma linha**; rodapé com **engrenagem, som, placa de estrelas** (ou pontuação no Endless) **e logo Claw & Crown**. O **HUD ocupa a altura toda** da tela no retrato. Em **paisagem**, a barra de HUD continua com **48 px** e **sem logo**.
+- **Clearing Zone e decks:** a barra comprida (`bar_zone.png`) é esticada por 9-slice e as cartas ficam dentro do vão de madeira, centradas; as placas quadradas (`card_available_frame.png`) viraram a mesa dos dois Support Decks, com a pilha de cartas por cima.
+- **Menu:** logo **Claw & Crown** (topo-esquerda em paisagem, topo-centro em retrato), lobo cavaleiro de corpo inteiro (esquerda/centro em paisagem, canto inferior direito em retrato), placa de madeira com os três botões e o total de estrelas sob o logo (paisagem) ou sob a placa (retrato), e **parallax** em três camadas. Em **PT** os botões usam a arte pronta (`btn_menu_jogar/opcoes/sair`); em **EN** usam a placa vazia com o texto localizado.
+- **Reserve:** campo de **pedra** pintado (`panel_reserve_field`), sem header/contador, alinhado à barra da Clearing Zone em paisagem e com as cartas centradas no vão.
+- **Poderes:** painel vertical de madeira (`panel_powers_board`, 751×1453 px) usado sem rotação nas duas orientações, com ícone e estoque de cada poder.
 
 ## Como rodar os testes (opcional)
 
@@ -51,7 +76,7 @@ Abra o terminal (PowerShell) na pasta do projeto e rode os testes unitários:
 & "C:\caminho\para\Godot_v4.7-stable_win64_console.exe" --headless --path "E:\Cartitas" --script "res://tests/run_tests.gd"
 ```
 
-Esse runner inclui, entre outros, `test_level_boards.gd` e `test_board_scatter.gd` (tabuleiros gerados de todos os Levels e rodadas do Endless, incluindo o espalhamento das camadas de cima), `test_card_art.gd` (arte das cartas em alta resolução com mipmaps) e `test_star_thresholds.gd` (limites de estrelas por carta). Troque o caminho pelo executável `_console.exe` do seu Godot. O CI (`.github/workflows/ci.yml`) roda também estes scripts, do mesmo jeito (`--script res://tests/<nome>.gd`):
+O runner roda 251 testes unitários, incluindo `test_level_boards.gd` e `test_board_scatter.gd` (tabuleiros gerados de todos os Levels e rodadas do Endless, incluindo o espalhamento das camadas de cima), `test_card_art.gd` (arte das cartas em alta resolução com mipmaps), `test_star_thresholds.gd` (limites de estrelas por carta), `test_audio.gd` (faixas e mixagem), `test_backgrounds.gd` (fundos por Level/orientação), `test_mascot_heroes.gd` (heróis por fase e expressões do L8) e `test_mascot_lines.gd`. Troque o caminho pelo executável `_console.exe` do seu Godot. O CI (`.github/workflows/ci.yml`) roda também estes scripts, do mesmo jeito (`--script res://tests/<nome>.gd`); o `smoke_mascot_heroes.gd` por enquanto é local:
 
 | Script | O que verifica |
 |---|---|
@@ -62,20 +87,21 @@ Esse runner inclui, entre outros, `test_level_boards.gd` e `test_board_scatter.g
 | `smoke_reserve.gd` | toda carta da Reserve volta à zona com clique real; a jogada sem saída relatada é vencível |
 | `smoke_stars.gd` | a estrela da vez vira pedra, faz pluff no tempo certo e a placa passa de 3★ a 1★; a primeira estrela fica dourada |
 | `smoke_settings.gd` | a engrenagem pausa o jogo e muda idioma, orientação, mascote e volume sem perder a partida |
+| `smoke_mascot_heroes.gd` | herói por fase, expressões do L8 e fala neutra no balão |
 | `regression_board_layout.gd` | posições das cartas de todos os Levels em todas as resoluções (retrato, paisagem e desktop) |
 | `probe_generation.gd` | tempo de geração e qualidade dos tabuleiros (validador, solucionável) |
-| `repro_hud_bounds.gd` | HUD inteiro dentro da tela em 6 views: campanha e Endless, retrato e paisagem, mais as views com o mascote desligado |
-| `repro_board_capture.gd` | tabuleiro da cena igual ao do gerador, em retrato (338×173) e paisagem (450×189) |
+| `repro_hud_bounds.gd` | HUD inteiro dentro da tela em 6 views: campanha e Endless, retrato e paisagem, mais as views com o mascote desligado; no retrato confere o HUD de tela cheia, o rodapé e o logo |
+| `repro_board_capture.gd` | tabuleiro da cena igual ao do gerador, em retrato (336×177) e paisagem (448×193) |
 
 ## Estrutura do projeto
 
 | Pasta        | O que contém                          |
 |--------------|---------------------------------------|
 | `scenes/`    | Cenas (menu principal e tela do level) |
-| `scripts/core/` | Lógica do jogo (sem UI)            |
-| `scripts/ui/`   | Interface e menu                    |
+| `scripts/core/` | Lógica do jogo (sem UI); inclui `audio_manager.gd` |
+| `scripts/ui/`   | Interface, menu, heróis (`hero_roster.gd`) |
 | `levels/`    | Arquivos JSON que definem os níveis   |
-| `assets/`    | Cartas (`cards/`, 960 px), kit de UI e fundos (`ui/`) |
+| `assets/`    | Cartas (`cards/`, 882–957 px nativos), heróis (`ui/heroes/`), logo e botões PT (`ui/branding/`), FX (`ui/fx/`), ícones, kit de UI, fundos e músicas (`audio/music/`) |
 | `tests/`     | Testes automatizados                  |
 | `docs/`      | Spec, ADRs, guias de arte e `CHANGELOG.md` |
 | `addons/godot_mcp/` | Addon Godot-MCP (C#, só no editor .NET) |

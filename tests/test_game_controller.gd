@@ -8,9 +8,9 @@ func _level(level_id: String = "1") -> Dictionary:
 			{"id": "c1", "type": "cat", "x": 0, "y": 0, "layer": 0},
 			{"id": "c2", "type": "cat", "x": 40, "y": 0, "layer": 0},
 			{"id": "c3", "type": "cat", "x": 80, "y": 0, "layer": 0},
-			{"id": "c4", "type": "dog", "x": 0, "y": 40, "layer": 0},
-			{"id": "c5", "type": "dog", "x": 40, "y": 40, "layer": 0},
-			{"id": "c6", "type": "dog", "x": 80, "y": 40, "layer": 0},
+			{"id": "c4", "type": "wolf", "x": 0, "y": 40, "layer": 0},
+			{"id": "c5", "type": "wolf", "x": 40, "y": 40, "layer": 0},
+			{"id": "c6", "type": "wolf", "x": 80, "y": 40, "layer": 0},
 		],
 		"deck_a": [],
 		"deck_b": [],
@@ -274,7 +274,7 @@ func test_timeout_sets_loss_reason() -> void:
 func test_undo_deck_card_after_later_draw_was_matched() -> void:
 	var g := GameController.new()
 	var lvl := _level()
-	lvl["deck_a"] = ["cat", "dog"]
+	lvl["deck_a"] = ["cat", "wolf"]
 	g.start_level(lvl, {"undo": 1})
 	g.use_deck("a")
 	g.use_deck("a")
@@ -337,3 +337,57 @@ func test_hold_and_refresh_rejected_without_stock() -> void:
 	Assert.equals(g.use_hold()["message"], "no_power", "hold needs stock")
 	Assert.equals(g.use_refresh()["message"], "no_power", "refresh needs stock")
 	Assert.equals(g.zone.size(), 1, "rejected powers change nothing")
+
+func test_select_inserts_next_to_same_type_and_reports_zone_index() -> void:
+	var g := GameController.new()
+	g.start_level(_level())
+	g.select_card("c1")
+	g.select_card("c4")
+	var r := g.select_card("c2")
+	Assert.equals(r["zone_index"], 1, "inserted right after the first cat")
+	Assert.equals(g.zone.cards.map(func(c): return c.id), ["c1", "c2", "c4"], "cats are adjacent")
+
+func test_deck_draw_inserts_next_to_same_type() -> void:
+	var g := GameController.new()
+	var lvl := _level()
+	lvl["deck_a"] = ["cat"]
+	g.start_level(lvl)
+	g.select_card("c1")
+	var r := g.use_deck("a")
+	Assert.equals(r["zone_index"], 1, "drawn cat lands after the board cat")
+	Assert.equals(g.zone.cards.map(func(c): return c.type), ["cat", "cat"], "cats are adjacent")
+
+func test_reserve_return_inserts_next_to_same_type() -> void:
+	var g := GameController.new()
+	g.start_level(_level(), {"hold": 1})
+	g.select_card("c4")
+	g.select_card("c1")
+	g.select_card("c2")
+	g.use_hold()
+	g.select_card("c3")
+	var r := g.return_from_reserve("c1")
+	Assert.is_true(r["ok"], "return ok")
+	Assert.equals(r["zone_index"], 1, "returned cat rejoins its kind")
+	Assert.equals(g.zone.cards.map(func(c): return c.id), ["c3", "c1"], "cats are adjacent")
+
+func test_matched_move_still_reports_insertion_index() -> void:
+	var g := GameController.new()
+	g.start_level(_level())
+	g.select_card("c1")
+	g.select_card("c2")
+	var r := g.select_card("c3")
+	Assert.equals(r["matched_ids"].size(), 3, "trio removed")
+	Assert.equals(r["zone_index"], 2, "index where the card was inserted")
+
+func test_undo_removes_most_recently_added_mid_row_card() -> void:
+	var g := GameController.new()
+	g.start_level(_level(), {"undo": 1})
+	g.select_card("c1")
+	g.select_card("c4")
+	g.select_card("c2")
+	Assert.equals(g.zone.cards.map(func(c): return c.id), ["c1", "c2", "c4"], "c2 sits between its kind and the dog")
+	var r := g.use_undo()
+	Assert.is_true(r["ok"], "undo ok")
+	Assert.equals(g.zone.cards.map(func(c): return c.id), ["c1", "c4"], "the newest card left the zone")
+	Assert.equals(g.board.get_card("c2").location, Card.Location.BOARD, "c2 is back on the board")
+	Assert.equals(g.board.get_card("c2").state, Card.State.AVAILABLE, "c2 is selectable again")

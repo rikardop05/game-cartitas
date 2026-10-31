@@ -26,13 +26,14 @@ const EXPECTED_RECTS := {
 	"landscape": {
 		"BoardFrame": Rect2(96, 62, 464, 208), "Powers": Rect2(571, 62, 64, 128),
 		"DeckA": Rect2(18, 201, 64, 64), "DeckB": Rect2(571, 201, 64, 64),
-		"Reserve": Rect2(18, 280, 148, 56), "ClearingZone": Rect2(172, 280, 464, 64),
+		"Reserve": Rect2(18, 280, 148, 64), "ClearingZone": Rect2(172, 280, 464, 64),
 		"ClockPill": Rect2(241, 14, 64, 32), "BackButton": Rect2(19, 11, 32, 30),
 	},
 	"portrait": {
-		"BoardFrame": Rect2(4, 46, 352, 192), "Powers": Rect2(4, 396, 352, 64),
-		"DeckA": Rect2(4, 248, 64, 64), "DeckB": Rect2(292, 248, 64, 64),
-		"Reserve": Rect2(74, 248, 212, 64), "ClearingZone": Rect2(4, 322, 352, 64),
+		"BoardFrame": Rect2(11, 327, 339, 196), "Powers": Rect2(4, 48, 80, 156),
+		"DeckA": Rect2(18, 528, 64, 64), "DeckB": Rect2(278, 528, 64, 64),
+		"Reserve": Rect2(96, 528, 168, 64), "ClearingZone": Rect2(4, 254, 352, 52),
+		"BackButton": Rect2(4, 7, 32, 30),
 	},
 }
 const BUBBLE_WAIT_MS := 3500
@@ -131,7 +132,7 @@ func _run_view(game, view: Dictionary) -> void:
 		var actual: Rect2 = nodes[node_name].get_global_rect()
 		if not actual.position.is_equal_approx(expected.position) or not actual.size.is_equal_approx(expected.size):
 			_fail("position:%s" % node_name, "rect=%s expected=%s" % [str(actual), str(expected)])
-	_assert_regions_disjoint(nodes)
+	_assert_regions_disjoint(nodes, landscape)
 	_assert_top_bar(nodes, landscape, endless)
 	_assert_sound_toggle(game, scene, nodes["SoundButton"])
 
@@ -156,11 +157,13 @@ func _run_view(game, view: Dictionary) -> void:
 	var power_buttons: Dictionary = scene.get("power_buttons")
 	for power_name in PowerManager.POWERS:
 		_assert_action_button(power_buttons.get(power_name) as Button, "power:%s" % power_name, viewport_bounds, nodes["Layout"], scene)
-	await _assert_instruction_bubble(scene, nodes, bool(view["mascot"]), viewport_bounds)
+	await _assert_instruction_bubble(scene, nodes, bool(view["mascot"]), viewport_bounds, landscape)
 
-# The top bar: chevron at the left, the title, the clock plate with the stopwatch badge stuck on
-# its left end, the stars plaque (campaign) or score plate (Endless), then help, the settings
-# gear and the sound toggle, all inside the Hud, in that order and without touching each other.
+# The top bar (landscape): chevron at the left, the title, the clock plate with the stopwatch
+# badge stuck on its left end, the stars plaque (campaign) or score plate (Endless), then help,
+# the settings gear and the sound toggle, all inside the Hud, in that order and without touching
+# each other. Portrait fills the whole 360x640 screen and splits the same pieces into a top row
+# (back, title, stopwatch+clock, help) and a footer (gear, sound, plaque/score, logo).
 func _assert_top_bar(nodes: Dictionary, landscape: bool, endless: bool) -> void:
 	var hud: Rect2 = nodes["Hud"].get_global_rect()
 	var back: Rect2 = nodes["BackButton"].get_global_rect()
@@ -177,20 +180,15 @@ func _assert_top_bar(nodes: Dictionary, landscape: bool, endless: bool) -> void:
 		_fail("hud", "second plate (StarsPill/ScorePill) missing")
 		return
 	var plate: Rect2 = second.get_global_rect()
+	var logo := nodes["Hud"].find_child("Logo", true, false) as Control
 	# The badge is part of the clock: its left edge starts the clock group.
 	var clock_group := clock.merge(stopwatch)
-	var row := [["back", back], ["title", title], ["stopwatch+clock", clock_group], ["second plate", plate], ["help", help], ["gear", gear], ["sound", sound]]
-	for item in row:
+	var pieces := [["back", back], ["title", title], ["stopwatch+clock", clock_group], ["second plate", plate], ["help", help], ["gear", gear], ["sound", sound]]
+	if logo != null:
+		pieces.append(["logo", logo.get_global_rect()])
+	for item in pieces:
 		if _max_overflow(_overflow(item[1], hud)) > EPSILON:
 			_fail("hud-in-bar", "%s %s is outside the Hud %s" % [item[0], str(item[1]), str(hud)])
-	for i in row.size() - 1:
-		if row[i][1].end.x > row[i + 1][1].position.x + EPSILON:
-			_fail("hud-order", "%s %s overlaps or follows %s %s" % [row[i][0], str(row[i][1]), row[i + 1][0], str(row[i + 1][1])])
-	# The plates sit side by side in the middle of the bar (the clock plate itself, not the badge).
-	var middle := (clock.position.x + plate.end.x) * 0.5
-	var viewport_middle := hud.size.x * 0.5
-	if absf(middle - viewport_middle) > (16.0 if landscape else 2.0):
-		_fail("hud-centre", "plates are centred on x=%.1f, the screen on x=%.1f" % [middle, viewport_middle])
 	# Stopwatch: a 30-34 px tall badge centred on the plate, its right part over the plate's left edge.
 	if stopwatch.size.y < 30.0 or stopwatch.size.y > 34.0:
 		_fail("stopwatch", "badge height %.1f is not 30-34 px" % stopwatch.size.y)
@@ -206,9 +204,9 @@ func _assert_top_bar(nodes: Dictionary, landscape: bool, endless: bool) -> void:
 	var text_right := text_rect.get_center().x + text_width * 0.5
 	if text_left < stopwatch.end.x - 1.0 or text_right > clock.end.x:
 		_fail("stopwatch", "the time text (%.1f-%.1f) is covered by the badge (ends %.1f) or leaves the plate (ends %.1f)" % [text_left, text_right, stopwatch.end.x, clock.end.x])
-	# Campaign plaque: the art's aspect ratio (1024x409), 90x36 in landscape and 70x28 in portrait.
+	# Campaign plaque: the art's aspect ratio (1024x409), 90x36 in both rows.
 	if not endless:
-		var expected := Vector2(90, 36) if landscape else Vector2(70, 28)
+		var expected := Vector2(90, 36)
 		if not plate.size.is_equal_approx(expected):
 			_fail("plaque", "stars plaque is %s, expected %s" % [str(plate.size), str(expected)])
 		if absf(plate.size.x / plate.size.y - 1024.0 / 409.0) > 0.08:
@@ -219,6 +217,61 @@ func _assert_top_bar(nodes: Dictionary, landscape: bool, endless: bool) -> void:
 	var gear_icon := nodes["SettingsButton"].get_node_or_null("Icon") as TextureRect
 	if gear_icon == null or gear_icon.texture == null or gear_icon.texture_filter != CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS:
 		_fail("gear", "the gear icon is missing or not drawn with mipmaps + trilinear filtering")
+
+	if landscape:
+		# One row, left to right; the two plates are centred as a pair; there is no logo.
+		var row := [["back", back], ["title", title], ["stopwatch+clock", clock_group], ["second plate", plate], ["help", help], ["gear", gear], ["sound", sound]]
+		for i in row.size() - 1:
+			if row[i][1].end.x > row[i + 1][1].position.x + EPSILON:
+				_fail("hud-order", "%s %s overlaps or follows %s %s" % [row[i][0], str(row[i][1]), row[i + 1][0], str(row[i + 1][1])])
+		var middle := (clock.position.x + plate.end.x) * 0.5
+		var viewport_middle := hud.size.x * 0.5
+		if absf(middle - viewport_middle) > 16.0:
+			_fail("hud-centre", "plates are centred on x=%.1f, the screen on x=%.1f" % [middle, viewport_middle])
+		if logo != null:
+			_fail("logo", "landscape must not draw the portrait wordmark")
+		return
+
+	# Portrait: the Hud is the whole 360x640 screen (footer included).
+	if not hud.position.is_equal_approx(Vector2.ZERO) or not hud.size.is_equal_approx(Vector2(360, 640)):
+		_fail("hud-portrait", "the portrait Hud must fill the 360x640 screen, got %s" % str(hud))
+	# Top row: back, title, stopwatch+clock and help, left to right, never overlapping.
+	var top := [["back", back], ["title", title], ["stopwatch+clock", clock_group], ["help", help]]
+	for i in top.size() - 1:
+		if top[i][1].end.x > top[i + 1][1].position.x + EPSILON:
+			_fail("hud-order", "%s %s overlaps or follows %s %s" % [top[i][0], str(top[i][1]), top[i + 1][0], str(top[i + 1][1])])
+	for item in top:
+		if item[1].end.y > hud.size.y * 0.5:
+			_fail("hud-row", "%s %s is not in the portrait top row" % [item[0], str(item[1])])
+	# The campaign clock sits right of the hero's head; Endless keeps it left, with its score
+	# plate in the footer instead of the stars plaque.
+	var clock_expected := Vector2(108, 6) if endless else Vector2(257, 6)
+	if not clock.position.is_equal_approx(clock_expected):
+		_fail("clock", "portrait clock is at %s, expected %s" % [str(clock.position), str(clock_expected)])
+	# Footer: gear, sound, the second plate and the logo, left to right and clear of each other.
+	var footer := [["gear", gear], ["sound", sound], ["second plate", plate]]
+	if logo != null:
+		footer.append(["logo", logo.get_global_rect()])
+	for i in footer.size() - 1:
+		if footer[i][1].end.x > footer[i + 1][1].position.x + EPSILON:
+			_fail("hud-footer-order", "%s %s overlaps or follows %s %s" % [footer[i][0], str(footer[i][1]), footer[i + 1][0], str(footer[i + 1][1])])
+	for item in footer:
+		if item[1].position.y < hud.size.y * 0.6:
+			_fail("hud-footer", "%s %s is not in the portrait footer" % [item[0], str(item[1])])
+	# The wordmark exists only in the portrait footer, aspect-preserved inside its 90x40 slot.
+	if logo == null:
+		_fail("logo", "the portrait footer is missing the wordmark")
+		return
+	if str(logo.get_meta("source_path", "")) != "res://assets/ui/branding/logo_claw_and_crown.png":
+		_fail("logo", "the portrait logo does not name the branding art: %s" % str(logo.get_meta("source_path", "")))
+	if logo.texture == null or logo.stretch_mode != TextureRect.STRETCH_KEEP_ASPECT_CENTERED:
+		_fail("logo", "the portrait logo is missing its texture or is not aspect-preserving")
+		return
+	var aspect := float(logo.texture.get_width()) / float(maxi(1, logo.texture.get_height()))
+	var drawn_x := minf(logo.size.x, logo.size.y * aspect)
+	var drawn_y := minf(logo.size.y, logo.size.x / aspect)
+	if absf(drawn_x / drawn_y - aspect) > 0.02:
+		_fail("logo", "the logo slot %s does not preserve the art's aspect %.3f" % [str(logo.size), aspect])
 
 # The sound toggle flips Game.sound_enabled() and its icon, and no sound is made while it is off.
 func _assert_sound_toggle(game, scene, button: Button) -> void:
@@ -249,14 +302,19 @@ func _assert_sound_toggle(game, scene, button: Button) -> void:
 	game.set_sound(was_on)
 	icon.texture = scene.call("_sound_texture")
 
-# The main layout regions are laid side by side or stacked: no two may share any area.
-func _assert_regions_disjoint(nodes: Dictionary) -> void:
-	for i in DISJOINT_REGIONS.size():
-		for j in range(i + 1, DISJOINT_REGIONS.size()):
-			var a: Rect2 = nodes[DISJOINT_REGIONS[i]].get_global_rect()
-			var b: Rect2 = nodes[DISJOINT_REGIONS[j]].get_global_rect()
+# The main layout regions are laid side by side or stacked: no two may share any area. In
+# portrait the Hud is the whole screen by design (it holds the footer), so it is not a region
+# to compare against the pieces it draws; the top-row/footer checks cover those instead.
+func _assert_regions_disjoint(nodes: Dictionary, landscape: bool) -> void:
+	var regions: Array = DISJOINT_REGIONS.duplicate()
+	if not landscape:
+		regions.erase("Hud")
+	for i in regions.size():
+		for j in range(i + 1, regions.size()):
+			var a: Rect2 = nodes[regions[i]].get_global_rect()
+			var b: Rect2 = nodes[regions[j]].get_global_rect()
 			if a.grow(-EPSILON).intersects(b.grow(-EPSILON)):
-				_fail("overlap", "%s %s overlaps %s %s" % [DISJOINT_REGIONS[i], str(a), DISJOINT_REGIONS[j], str(b)])
+				_fail("overlap", "%s %s overlaps %s %s" % [regions[i], str(a), regions[j], str(b)])
 
 # Blocked cards are dimmed (shader material) and darker the deeper they sit; available
 # cards are untouched. Depth comes from the screen itself, the brightness from its table.
@@ -307,7 +365,7 @@ func _assert_blocked_cards_dimmed(scene, controller) -> void:
 # Instruction line at level/round start: Ace's bubble (or the standalone one with the mascot
 # off) must show up, stay inside the viewport and keep clear of the board, the powers, the
 # decks, the Reserve, the Clearing Zone, the HUD and Ace itself.
-func _assert_instruction_bubble(scene, nodes: Dictionary, mascot_on: bool, viewport_bounds: Rect2) -> void:
+func _assert_instruction_bubble(scene, nodes: Dictionary, mascot_on: bool, viewport_bounds: Rect2, landscape: bool) -> void:
 	var mascot = scene.get("mascot")
 	if mascot_on != (mascot != null):
 		_fail("mascot", "mascot presence %s does not follow the Options toggle (%s)" % [str(mascot != null), str(mascot_on)])
@@ -333,24 +391,24 @@ func _assert_instruction_bubble(scene, nodes: Dictionary, mascot_on: bool, viewp
 	var inner := viewport_bounds.grow(-2.0)
 	if _max_overflow(_overflow(bubble, inner)) > EPSILON:
 		_fail("bubble-viewport", "bubble=%s viewport=%s" % [str(bubble), str(viewport_bounds)])
+	# Landscape: the hero may intentionally overlap the board, and the bubble may sit over
+	# the board too (opaque, mouse-ignore), but stays clear of the HUD/controls below it.
+	# Portrait: the Hud is the whole screen, so the bubble must stay in the sky band above
+	# the panels and cards (clear of the powers, the board, the zone, the decks, the Reserve).
 	var avoid := {}
-	for region in ["Hud", "BoardFrame", "Powers", "Reserve", "ClearingZone"]:
-		avoid[region] = nodes[region].get_global_rect()
+	if landscape:
+		for region in ["Hud", "Powers", "Reserve", "ClearingZone"]:
+			avoid[region] = nodes[region].get_global_rect()
+	else:
+		for region in ["Powers", "Reserve", "ClearingZone", "BoardFrame"]:
+			avoid[region] = nodes[region].get_global_rect()
 	avoid["deck_a"] = (scene.get("deck_a_btn") as Control).get_global_rect()
 	avoid["deck_b"] = (scene.get("deck_b_btn") as Control).get_global_rect()
-	if mascot != null:
-		avoid["mascot"] = Rect2(mascot.global_position, mascot.size)
 	for key in avoid:
 		if bubble.intersects(avoid[key]):
 			_fail("bubble-overlap", "bubble %s overlaps %s %s" % [str(bubble), key, str(avoid[key])])
-	if mascot != null:
-		var ace := Rect2(mascot.global_position, mascot.size)
-		for key in ["BoardFrame", "Powers", "Reserve", "ClearingZone", "Hud"]:
-			if ace.intersects(nodes[key].get_global_rect()):
-				_fail("mascot-overlap", "mascot %s overlaps %s %s" % [str(ace), key, str(nodes[key].get_global_rect())])
-		for deck in ["deck_a_btn", "deck_b_btn"]:
-			if ace.intersects((scene.get(deck) as Control).get_global_rect()):
-				_fail("mascot-overlap", "mascot %s overlaps %s" % [str(ace), deck])
+	# The large hero intentionally overlaps the board/HUD and is behind the foreground
+	# panels; only the bubble must stay readable and inside the viewport.
 
 func _wait_for_level_scene():
 	for i in 60:
@@ -494,6 +552,9 @@ func _assert_zone_single_row(zone: Control, scene) -> void:
 	if zone == null:
 		_fail("zone", "zone_container missing")
 		return
+	# The Clearing Zone has no title any more: the slots themselves fill the bar.
+	if scene.find_child("ZoneTitle", true, false) != null:
+		_fail("zone-title", "the Clearing Zone still draws its old ZoneTitle label")
 	var visible_children: Array[Control] = []
 	for child in zone.get_children():
 		if child is Control and (child as Control).is_visible_in_tree():
@@ -515,6 +576,18 @@ func _assert_zone_single_row(zone: Control, scene) -> void:
 			_fail("zone-bounds", "path=%s rect=%s container=%s overflow=%s" % [
 				str(scene.get_path_to(child)), str(rect), str(zone_bounds), str(overflow),
 			])
+	# The row fills the bar and is centred on it (equal margins left/right).
+	var bar := zone.get_parent() as Control
+	var bar_bounds := bar.get_global_rect() if bar != null else zone_bounds
+	var first_rect := visible_children[0].get_global_rect()
+	var last_rect := visible_children[visible_children.size() - 1].get_global_rect()
+	var left := first_rect.position.x - bar_bounds.position.x
+	var right := bar_bounds.end.x - last_rect.end.x
+	if absf(left - right) > 1.0:
+		_fail("zone-centre", "zone row margins in the bar differ: left=%.2f right=%.2f" % [left, right])
+	# The new bar has a thicker carved end cap; 16 px is still comfortably inside it.
+	if left > 16.0:
+		_fail("zone-span", "zone row starts %.2f px inside the bar (expected <= 16)" % left)
 
 func _assert_action_button(button: Button, label: String, viewport_bounds: Rect2, root_control: Control, scene) -> void:
 	if button == null:
@@ -540,7 +613,12 @@ func _assert_action_button(button: Button, label: String, viewport_bounds: Rect2
 func _audit_subtree_against(root_control: Control, bounds: Rect2, kind: String, scene, include_root: bool) -> void:
 	var controls: Array[Control] = []
 	_collect_visible_controls(root_control, controls, include_root)
+	var mascot_node = scene.get("mascot")
 	for control in controls:
+		# The hero is a BoardFrame child that intentionally overflows it; it is not
+		# part of the frame's layout contract.
+		if mascot_node != null and (control == mascot_node or mascot_node.is_ancestor_of(control)):
+			continue
 		var rect := control.get_global_rect()
 		if rect.size.x <= 0.0 or rect.size.y <= 0.0:
 			continue

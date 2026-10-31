@@ -1,11 +1,11 @@
 extends RefCounted
 
 func test_draw_and_empty() -> void:
-	var d := DeckManager.new(["cat", "dog", "bird"])
+	var d := DeckManager.new(["cat", "wolf", "owl"])
 	Assert.equals(d.current_type(), "cat", "top is cat")
 	Assert.equals(d.remaining_count(), 3, "3 remaining")
 	Assert.equals(d.draw_type(), "cat", "draw cat")
-	Assert.equals(d.current_type(), "dog", "next is dog")
+	Assert.equals(d.current_type(), "wolf", "next is wolf")
 	Assert.equals(d.remaining_count(), 2, "2 remaining")
 	d.draw_type()
 	d.draw_type()
@@ -13,7 +13,7 @@ func test_draw_and_empty() -> void:
 	Assert.equals(d.draw_type(), "", "draw from empty returns empty string")
 
 func test_return_type() -> void:
-	var d := DeckManager.new(["cat", "dog"])
+	var d := DeckManager.new(["cat", "wolf"])
 	d.draw_type()
 	d.return_type()
 	Assert.equals(d.current_type(), "cat", "returned to top")

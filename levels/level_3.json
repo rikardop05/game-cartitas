@@ -2,7 +2,7 @@
   "id": "3",
   "difficulty": 3,
   "clearing_capacity": 7,
-  "deck": ["star", "star", "star", "sun", "sun", "sun", "leaf", "leaf", "leaf", "cat", "cat", "cat"],
+  "deck": ["boar", "boar", "boar", "duck", "duck", "duck", "leaf", "leaf", "leaf", "cat", "cat", "cat"],
   "time_thresholds": { "three_stars": 50, "two_stars": 90 },
   "rewards": [{ "type": "refresh", "quantity": 1 }]
 }

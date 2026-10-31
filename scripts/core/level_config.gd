@@ -15,17 +15,17 @@ const INSTRUCTION_HEIGHT := 18.0
 const BOARD_MIN_HEIGHT := 200.0
 const MAX_VISIBLE_LAYERS := 4
 
-# Board envelope guardrails. Portrait is the reference layout: 360x640 logical
-# viewport with a 338x173 board area inside the kit's 352x192 board window.
-# Landscape (640x360) leaves a 450x189 area inside the 464x208 window. Configs
-# that cannot keep the minimum rendered card size are MARKED
+# Board envelope guardrails, measured from the real play hole (frame border + pad):
+# portrait is the reference layout (360x640 viewport, 336x177 play area inside the
+# kit's 352x192 window) and landscape (640x360) leaves 448x193 inside the 464x208
+# window. Configs that cannot keep the minimum rendered card size are MARKED
 # (fits_landscape=false), not rejected. Guardrails live here and are enforced by
 # validate(): 9x6 base grid, 4 layers, 72 board cards, min rendered card size.
 # Boards are wide with many small cards: the renderer never draws a board card
 # larger than MAX_BOARD_CARD_PX (small boards stay centered at that size).
-const PORTRAIT_BOARD_ENVELOPE := Vector2(338, 173)
-const LANDSCAPE_BOARD_ENVELOPE := Vector2(450, 189)
-const MAX_BOARD_CARD_PX := 40.0
+const PORTRAIT_BOARD_ENVELOPE := Vector2(336, 177)
+const LANDSCAPE_BOARD_ENVELOPE := Vector2(448, 193)
+const MAX_BOARD_CARD_PX := 46.0
 const MIN_CARD_SIZE_PX := 24.0
 const MAX_COLUMNS := 9
 const MAX_ROWS := 6

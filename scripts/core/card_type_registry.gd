@@ -2,14 +2,14 @@ class_name CardTypeRegistry
 extends RefCounted
 
 const TYPES := {
-	"cat": {"symbol": "🐱", "color": "#e07a7a"},
-	"dog": {"symbol": "🐶", "color": "#d9a05b"},
-	"bird": {"symbol": "🐦", "color": "#e0c95b"},
-	"fish": {"symbol": "🐟", "color": "#6bb5e0"},
-	"flower": {"symbol": "🌸", "color": "#e08ac9"},
-	"moon": {"symbol": "🌙", "color": "#c9b8e0"},
-	"star": {"symbol": "⭐", "color": "#f0e060"},
-	"sun": {"symbol": "☀️", "color": "#f0b060"},
+	"cat": {"symbol": "🐱", "color": "#c9564f"},
+	"mouse": {"symbol": "🐭", "color": "#b8a46a"},
+	"boar": {"symbol": "🐗", "color": "#b0713c"},
+	"owl": {"symbol": "🦉", "color": "#7a6bc9"},
+	"wolf": {"symbol": "🐺", "color": "#8fa3b8"},
+	"duck": {"symbol": "🦆", "color": "#d9a441"},
+	"frog": {"symbol": "🐸", "color": "#7fae4a"},
+	"whale": {"symbol": "🐋", "color": "#4f7fc9"},
 	"leaf": {"symbol": "🍀", "color": "#6bc98a"},
 	"heart": {"symbol": "❤️", "color": "#e06a6a"},
 	"gem": {"symbol": "💎", "color": "#6ac9d9"},

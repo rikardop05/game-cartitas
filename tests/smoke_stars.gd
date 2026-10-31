@@ -135,13 +135,13 @@ func _run() -> void:
 	var fx2: Node = scene.find_child("FxLayer", true, false)
 	_check(fx2 == null or fx2.get_child_count() == 0, "rebuild does not replay the puff")
 
-	# Portrait: the plaque is smaller, and the same states hold.
+	# Portrait: the plaque shares the footer row with the gear, sound and logo; same states hold.
 	var portrait = await _open_level(game, "1", "portrait", Vector2i(360, 640))
 	if portrait == null:
 		_check(false, "portrait level did not load")
 	else:
 		var pplaque = portrait.get("stars_row")
-		_check(pplaque != null and pplaque.size.is_equal_approx(Vector2(70, 28)), "portrait plaque is 70x28")
+		_check(pplaque != null and pplaque.size.is_equal_approx(Vector2(90, 36)), "portrait plaque is 90x36")
 		portrait.controller.timer.set_elapsed_seconds(float(portrait.controller.time_thresholds["three_stars"]) + 1.0)
 		await _frames(3)
 		_check(portrait.get("stars_base").texture == _stars_texture(2), "portrait: the base switches to stars_2")
@@ -160,14 +160,20 @@ func _run() -> void:
 		win_scene.call("_show_end", true)
 		await _frames(3)
 		var end_stars := win_scene.find_child("EndStars", true, false) as TextureRect
+		var panel := win_scene.find_child("EndPanel", true, false) as Control
 		_check(end_stars != null and end_stars.texture == _stars_texture(2), "%s: the win panel shows the stars_2 plaque" % view[0])
+		_check(panel != null, "%s: the result panel is named EndPanel" % view[0])
 		await _wait_ms(700)
 		var screen := Rect2(Vector2.ZERO, win_scene.get_viewport_rect().size)
-		if end_stars != null:
-			_check(end_stars.get_global_rect().size.x >= 130.0 and end_stars.get_global_rect().size.x <= 180.0, "%s: plaque width is 130-180 px (got %s)" % [view[0], end_stars.get_global_rect().size])
+		if end_stars != null and panel != null:
+			var paw := end_stars.get_global_rect()
+			var box := panel.get_global_rect()
+			_check(paw.size.x >= 130.0 and paw.size.x <= 260.0, "%s: plaque width is 130-260 px (got %s)" % [view[0], paw.size])
 			_check(end_stars.scale.is_equal_approx(Vector2.ONE) and end_stars.modulate.a > 0.99, "%s: the plaque popped in" % view[0])
-			var panel := end_stars.get_parent().get_parent() as Control
-			_check(screen.grow(-6.0).encloses(panel.get_global_rect()), "%s: win panel %s fits the screen %s with a 6 px margin" % [view[0], str(panel.get_global_rect()), str(screen)])
+			_check(screen.grow(-6.0).encloses(box), "%s: win panel %s fits the screen %s with a 6 px margin" % [view[0], str(box), str(screen)])
+			_check(screen.grow(-6.0).encloses(paw), "%s: the stars plaque %s fits the screen with a 6 px margin" % [view[0], str(paw)])
+			_check(is_equal_approx(paw.get_center().x, box.get_center().x), "%s: the plaque is centred on the panel" % view[0])
+			_check(paw.position.y < box.position.y and paw.end.y > box.position.y, "%s: the plaque rides on the panel's top edge (plaque %s, panel %s)" % [view[0], str(paw), str(box)])
 	_finish(_errors)
 
 func _finish(errors: Array) -> void:

@@ -10,11 +10,11 @@ func _level() -> Dictionary:
 			{"id": "c1", "type": "cat", "x": 0, "y": 0, "layer": 0},
 			{"id": "c2", "type": "cat", "x": 40, "y": 0, "layer": 0},
 			{"id": "c3", "type": "cat", "x": 80, "y": 0, "layer": 0},
-			{"id": "c4", "type": "dog", "x": 0, "y": 40, "layer": 0},
-			{"id": "c5", "type": "dog", "x": 40, "y": 40, "layer": 0},
-			{"id": "c6", "type": "dog", "x": 80, "y": 40, "layer": 0},
+			{"id": "c4", "type": "wolf", "x": 0, "y": 40, "layer": 0},
+			{"id": "c5", "type": "wolf", "x": 40, "y": 40, "layer": 0},
+			{"id": "c6", "type": "wolf", "x": 80, "y": 40, "layer": 0},
 		],
-		"deck_a": ["bird", "bird", "bird"],
+		"deck_a": ["owl", "owl", "owl"],
 		"deck_b": [],
 		"time_thresholds": {"three_stars": 60, "two_stars": 120},
 		"rewards": [],
@@ -31,7 +31,7 @@ func test_snapshot_after_start() -> void:
 	Assert.equals(s.board_cards.size(), 6, "board cards")
 	Assert.equals(s.zone_cards.size(), 0, "zone empty")
 	Assert.equals(s.reserve_cards.size(), 0, "reserve empty")
-	Assert.equals(s.deck_a_type, "bird", "deck a type")
+	Assert.equals(s.deck_a_type, "owl", "deck a type")
 	Assert.equals(s.deck_a_remaining, 3, "deck a remaining")
 	Assert.equals(s.deck_b_remaining, 0, "deck b remaining")
 	Assert.equals(s.power_counts["hold"], 2, "hold count")

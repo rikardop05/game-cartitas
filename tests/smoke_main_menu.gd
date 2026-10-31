@@ -10,9 +10,9 @@ extends SceneTree
 const STEP_TIMEOUT_MS := 20000
 const THROWAWAY_SAVE := "user://smoke_main_menu_save.json"
 const MAIN_BUTTONS := {
-	"PlayButton": {"key": "play", "pt_texture": "btn_play_pt.png"},
-	"OptionsButton": {"key": "options", "pt_texture": "btn_options_pt.png"},
-	"QuitButton": {"key": "quit", "pt_texture": "btn_quit_pt.png"},
+	"PlayButton": {"key": "play", "pt_texture": "btn_menu_jogar.png"},
+	"OptionsButton": {"key": "options", "pt_texture": "btn_menu_opcoes.png"},
+	"QuitButton": {"key": "quit", "pt_texture": "btn_menu_sair.png"},
 }
 
 var _failures: Array[String] = []
@@ -65,6 +65,21 @@ func _scenario(game) -> void:
 	_press(menu, "BackButton")
 	await _frames(3)
 	_check(menu.find_child("PlayButton", true, false) != null, "Back returns to the main menu")
+	# The sign layout is measured in untransformed space, so it must not move with
+	# the parallax (the old code read the transformed content container).
+	var board := menu.get("_board") as Control
+	var board_layer := menu.get("_board_layer") as Control
+	if board != null and board_layer != null:
+		menu.set_parallax(Vector2.ZERO)
+		menu.call("_layout_board")
+		var origin_zero := board.position + board_layer.position
+		menu.set_parallax(Vector2(1, 1))
+		menu.call("_layout_board")
+		var origin_moved := board.position + board_layer.position
+		_check(origin_zero.is_equal_approx(origin_moved), "menu sign layout is stable under parallax")
+		menu.set_parallax(Vector2.ZERO)
+	var board_shadow := menu.find_child("BoardShadow", true, false) as TextureRect
+	_check(board_shadow != null and board_shadow.material == null, "menu shadow is pre-rendered (no per-pixel shader)")
 
 	# Options: volume row (minus, slider, plus, mute glyph).
 	_press(menu, "OptionsButton")
@@ -135,8 +150,14 @@ func _scenario(game) -> void:
 
 # One locale of the main menu: the three buttons exist, are clickable, and show the right face.
 func _check_menu(menu, locale: String) -> void:
-	var texts := _texts(menu)
-	_check(texts.has(Localizer.t("title")), "[%s] menu shows the title" % locale)
+	var logo := menu.find_child("Logo", true, false) as TextureRect
+	_check(logo != null and logo.texture != null, "[%s] menu shows the painted logo" % locale)
+	if logo != null and logo.texture != null:
+		var source := str(logo.get_meta("source_path", ""))
+		_check(source.ends_with("logo_claw_and_crown.png"),
+			"[%s] logo uses the Claw & Crown art (got '%s')" % [locale, source])
+		_check(logo.size.y >= 40.0, "[%s] logo is legible (height %.1f)" % [locale, logo.size.y])
+	_check(menu.find_child("MenuHero", true, false) != null, "[%s] menu shows the decorative hero" % locale)
 	_check(menu.find_child("TotalStars", true, false) != null, "[%s] menu shows the total stars line" % locale)
 	for node_name in MAIN_BUTTONS:
 		var spec: Dictionary = MAIN_BUTTONS[node_name]
@@ -152,18 +173,26 @@ func _check_menu(menu, locale: String) -> void:
 		_check(face != null and face.texture != null, "[%s] %s has a texture face" % [locale, node_name])
 		var label := btn.find_child("FaceText", true, false) as Label
 		var face_path := face.texture.resource_path if face != null and face.texture != null else ""
-		if locale == "pt":
-			_check(face_path.ends_with(str(spec["pt_texture"])), "[pt] %s uses %s (got '%s')" % [node_name, spec["pt_texture"], face_path])
-			_check(label == null, "[pt] %s draws no extra text over the baked artwork" % node_name)
-		else:
-			_check(face_path.ends_with("pill.png"), "[en] %s uses the blank pill (got '%s')" % [node_name, face_path])
-			_check(label != null and label.text == Localizer.t(str(spec["key"])), "[en] %s shows localized text" % node_name)
-	if locale == "en":
-		# The English menu must not show any of the Portuguese words.
-		for key in ["play", "options", "quit"]:
-			var pt_word: String = Localizer.STRINGS[key]["pt"]
-			if pt_word != Localizer.STRINGS[key]["en"]:
-				_check(not texts.has(pt_word), "[en] menu does not show Portuguese '%s'" % pt_word)
+		# Both locales use the delivered Portuguese PNGs (the user wants to see them); the
+		# localized wording stays available as tooltip/accessibility text.
+		_check(face_path.ends_with(str(spec["pt_texture"])),
+			"[%s] %s uses %s (got '%s')" % [locale, node_name, spec["pt_texture"], face_path])
+		_check(label == null, "[%s] %s draws no extra text over the baked artwork" % [locale, node_name])
+		_check(face != null and face.texture_filter == CanvasItem.TEXTURE_FILTER_NEAREST,
+			"[%s] %s keeps the pixel art crisp (nearest)" % [locale, node_name])
+		_check(str(btn.get_meta("label", "")) == Localizer.t(str(spec["key"])),
+			"[%s] %s keeps its localized accessible label" % [locale, node_name])
+	_check(logo != null and logo.size.y >= 40.0, "[%s] menu logo is legible" % locale)
+	# Portrait: the logo must sit ABOVE the plaque art, never over it.
+	var board := menu.get("_board") as Control
+	var board_layer := menu.get("_board_layer") as Control
+	if logo != null and not bool(menu.call("_landscape")):
+		_check(board != null and board_layer != null, "[%s] portrait menu has the sign" % locale)
+		if board != null and board_layer != null:
+			var art_top := board.position.y + board_layer.position.y + (72.0 / 1499.0) * board.size.y
+			_check(logo.global_position.y + logo.size.y <= art_top + 0.5,
+				"[%s] logo sits above the plaque (logo bottom %.1f, plaque top %.1f)" % [
+					locale, logo.global_position.y + logo.size.y, art_top])
 	# The three buttons stack inside the panel, in order, without overlapping.
 	var play := menu.find_child("PlayButton", true, false) as Control
 	var opts := menu.find_child("OptionsButton", true, false) as Control

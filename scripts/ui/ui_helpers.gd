@@ -10,6 +10,8 @@ const GOLD := Color("#ffe36e")
 
 static var _font_cache: SystemFont = null
 static var _card_texture_cache: Dictionary = {}
+static var _frame_cache: Dictionary = {}
+static var _shadow_cache: Dictionary = {}
 
 static func symbol_font() -> SystemFont:
 	if _font_cache == null:
@@ -19,7 +21,7 @@ static func symbol_font() -> SystemFont:
 
 # Card art standard: assets/cards/card_<type>.png, square, high resolution (>= 512 px, ideally
 # a multiple of 64 such as 960, frame included). The UI is drawn at the PHYSICAL screen size
-# (stretch mode canvas_items), so a 40 px logical card is 80+ real pixels; the art is kept at
+# (stretch mode canvas_items), so a 46 px logical card is 90+ real pixels; the art is kept at
 # full resolution with mipmaps and drawn with trilinear filtering, letting the GPU scale it to
 # whatever size the screen needs instead of pre-shrinking it to logical pixels (which blurred
 # and pixelated it once the window upscaled the result). Mipmaps are built here, so any
@@ -96,6 +98,11 @@ const KIT_DIR := "res://assets/ui/kit/"
 const HUD_DIR := "res://assets/ui/hud/"
 # Levels from this one on (and Endless) use the second background set.
 const AUTUMN_FROM_LEVEL := 4
+# Endgame backdrop: the castle replaces the autumn town from L8 on, including Endless
+# (level 999), so the run finishes in the same place as the campaign.
+const CASTLE_FROM_LEVEL := 8
+const CASTLE_LANDSCAPE := "res://assets/ui/background_castle.png"
+const CASTLE_PORTRAIT := "res://assets/ui/background_castle_portrait.png"
 
 # A piece of the pixel-art UI kit (assets/ui/kit/<name>.png), or null if missing.
 static func kit_texture(name: String) -> Texture2D:
@@ -117,6 +124,14 @@ static func kit_stylebox(name: String, margin: int = 5, content_margin: int = 6)
 	style.content_margin_bottom = content_margin
 	return style
 
+# One region of a painted kit piece as a texture, for NinePatchRect frames that must scale
+# their corners instead of drawing them at source size.
+static func atlas_texture(name: String, region: Rect2) -> AtlasTexture:
+	var atlas := AtlasTexture.new()
+	atlas.atlas = kit_texture(name)
+	atlas.region = region
+	return atlas
+
 # 9-slice rect from a kit piece, for decorative frames drawn at an exact size.
 static func kit_panel(name: String, margin: int = 5) -> NinePatchRect:
 	var panel := NinePatchRect.new()
@@ -127,6 +142,221 @@ static func kit_panel(name: String, margin: int = 5) -> NinePatchRect:
 	panel.patch_margin_bottom = margin
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return panel
+
+# Decodes a Texture2D into an editable RGBA image (decompressing imported PNGs).
+static func _editable_image(texture: Texture2D) -> Image:
+	if texture == null:
+		return null
+	var image := texture.get_image()
+	if image == null:
+		return null
+	image = image.duplicate()
+	if image.is_compressed():
+		image.decompress()
+	return image
+
+# 9-slice a painted frame that has a transparent centre, showing only its visible
+# border: crops the alpha bounding box, fits it and caps the border thickness (so a
+# thick painted bevel never eats the play area). Returns the fitted texture, the
+# 9-slice margins and the real inner hole, in target-local px. Cached by texture
+# path, target size and border cap.
+static func alpha_nine_patch(texture: Texture2D, target_size: Vector2, max_border: float = 8.0) -> Dictionary:
+	var key := "%s|%.0fx%.0f|%.1f" % [
+		texture.resource_path if texture != null else "",
+		target_size.x, target_size.y, max_border,
+	]
+	if _frame_cache.has(key):
+		return _frame_cache[key]
+	var image := _editable_image(texture)
+	if image == null or target_size.x <= 0.0 or target_size.y <= 0.0:
+		return {}
+	var used := image.get_used_rect()
+	if used.size.x < 4 or used.size.y < 4:
+		return {}
+	var crop := image.get_region(used)
+	var w := crop.get_width()
+	var h := crop.get_height()
+	var threshold := 16
+	var cy := h / 2
+	var cx := w / 2
+	var left := _opaque_run(crop, Vector2i(1, 0), 0, cy, threshold)
+	var right := _opaque_run(crop, Vector2i(-1, 0), w - 1, cy, threshold)
+	var top := _opaque_run(crop, Vector2i(0, 1), cx, 0, threshold)
+	var bottom := _opaque_run(crop, Vector2i(0, -1), cx, h - 1, threshold)
+	# A solid picture (no transparent centre) is not a frame: keep a proportional
+	# margin so the picture is never cropped into a fake border.
+	if left >= w / 2 or right >= w / 2 or top >= h / 2 or bottom >= h / 2:
+		left = maxi(1, w / 12)
+		right = left
+		top = maxi(1, h / 12)
+		bottom = top
+	var scale := target_size.y / float(h)
+	var thickest := float(maxi(maxi(left, right), maxi(top, bottom))) * scale
+	if max_border > 0.0 and thickest > max_border:
+		scale *= max_border / thickest
+	var fitted := crop.duplicate()
+	fitted.resize(maxi(2, roundi(w * scale)), maxi(2, roundi(h * scale)), Image.INTERPOLATE_BILINEAR)
+	fitted.generate_mipmaps()
+	var ml := clampi(roundi(left * scale), 1, fitted.get_width() / 2)
+	var mr := clampi(roundi(right * scale), 1, fitted.get_width() / 2)
+	var mt := clampi(roundi(top * scale), 1, fitted.get_height() / 2)
+	var mb := clampi(roundi(bottom * scale), 1, fitted.get_height() / 2)
+	var inner := Rect2(
+		ml, mt,
+		maxf(1.0, target_size.x - ml - mr),
+		maxf(1.0, target_size.y - mt - mb),
+	)
+	var result := {
+		"texture": ImageTexture.create_from_image(fitted),
+		"margins": Rect2i(ml, mt, mr, mb),
+		"inner": inner,
+		"source_bounds": used,
+	}
+	_frame_cache[key] = result
+	return result
+
+# 9-slice a painted panel with fixed proportional margins: the texture is cropped
+# to its alpha bounding box, fitted to the target height (preserving its aspect),
+# and the margins are scaled with it. Use this for panels whose corner ornaments
+# must not be cut (the reserve field, the powers board). `margin_ratio` is
+# (left, top, right, bottom) as fractions of the CROPPED texture size.
+static func trimmed_nine_patch(texture: Texture2D, target_size: Vector2, margin_ratio: Rect2, cache_key: String = "") -> Dictionary:
+	var source_key := cache_key if not cache_key.is_empty() else (texture.resource_path if texture != null else "")
+	var key := "trim|%s|%.0fx%.0f|%s" % [source_key, target_size.x, target_size.y, str(margin_ratio)]
+	if _frame_cache.has(key):
+		return _frame_cache[key]
+	var image := _editable_image(texture)
+	if image == null or target_size.x <= 0.0 or target_size.y <= 0.0:
+		return {}
+	var used := image.get_used_rect()
+	if used.size.x < 4 or used.size.y < 4:
+		return {}
+	var crop := image.get_region(used)
+	var w := crop.get_width()
+	var h := crop.get_height()
+	var scale := target_size.y / float(h)
+	var fitted: Image = crop.duplicate()
+	fitted.resize(maxi(2, roundi(w * scale)), maxi(2, roundi(target_size.y)), Image.INTERPOLATE_BILINEAR)
+	fitted.generate_mipmaps()
+	var fw := fitted.get_width()
+	var fh := fitted.get_height()
+	var max_x := maxi(1, fw / 2 - 1)
+	var max_y := maxi(1, fh / 2 - 1)
+	var ml := clampi(roundi(fw * margin_ratio.position.x), 1, max_x)
+	var mt := clampi(roundi(fh * margin_ratio.position.y), 1, max_y)
+	var mr := clampi(roundi(fw * margin_ratio.size.x), 1, max_x)
+	var mb := clampi(roundi(fh * margin_ratio.size.y), 1, max_y)
+	if ml + mr >= int(target_size.x):
+		ml = maxi(1, int(target_size.x) / 4)
+		mr = ml
+	if mt + mb >= int(target_size.y):
+		mt = maxi(1, int(target_size.y) / 4)
+		mb = mt
+	var inner := Rect2(
+		ml, mt,
+		maxf(1.0, target_size.x - ml - mr),
+		maxf(1.0, target_size.y - mt - mb),
+	)
+	var result := {
+		"texture": ImageTexture.create_from_image(fitted),
+		"margins": Rect2i(ml, mt, mr, mb),
+		"inner": inner,
+		"source_bounds": used,
+	}
+	_frame_cache[key] = result
+	return result
+
+static var _rotated_cache: Dictionary = {}
+
+# A painted picture rotated 90 degrees and cached (used to lay the tall powers
+# board sideways in portrait without squashing its corner ornaments).
+static func rotated_texture(path: String, clockwise: bool = true) -> Texture2D:
+	var key := "%s|%s" % [path, str(clockwise)]
+	if _rotated_cache.has(key):
+		return _rotated_cache[key]
+	var source := hires_texture(path)
+	var image := _editable_image(source)
+	if image == null:
+		return source
+	image.rotate_90(ClockDirection.CLOCKWISE if clockwise else ClockDirection.COUNTERCLOCKWISE)
+	image.generate_mipmaps()
+	var result := ImageTexture.create_from_image(image)
+	_rotated_cache[key] = result
+	return result
+
+static func _opaque_run(image: Image, step: Vector2i, start_x: int, start_y: int, threshold: int) -> int:
+	var run := 0
+	var x := start_x
+	var y := start_y
+	while x >= 0 and y >= 0 and x < image.get_width() and y < image.get_height():
+		if roundi(image.get_pixel(x, y).a * 255.0) <= threshold:
+			break
+		run += 1
+		x += step.x
+		y += step.y
+	return run
+
+# A soft drop shadow pre-rendered from a picture's alpha: downscaled, blurred with
+# two separable box passes and cached, so drawing it costs one textured quad instead
+# of nine texture taps per pixel every frame.
+static func shadow_texture(texture: Texture2D, softness: float, strength: float) -> Texture2D:
+	if texture == null:
+		return null
+	# Generated ImageTextures (card art) have an empty resource_path; key those by
+	# instance id so different cards never reuse the first card's silhouette.
+	var source_key := texture.resource_path
+	if source_key.is_empty():
+		source_key = str(texture.get_instance_id())
+	var key := "%s|%.1f|%.2f" % [source_key, softness, strength]
+	if _shadow_cache.has(key):
+		return _shadow_cache[key]
+	var image := _editable_image(texture)
+	if image == null:
+		return null
+	var w := image.get_width()
+	var h := image.get_height()
+	var scale := minf(1.0, 256.0 / float(maxi(w, h)))
+	if scale < 1.0:
+		w = maxi(1, roundi(w * scale))
+		h = maxi(1, roundi(h * scale))
+		image.resize(w, h, Image.INTERPOLATE_BILINEAR)
+	var radius := clampi(roundi(softness * scale), 1, 8)
+	var alpha := _blur_alpha(image, radius)
+	var out := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	out.fill(Color(0, 0, 0, 0))
+	for y in h:
+		for x in w:
+			var a := clampf(alpha[y * w + x] * strength, 0.0, 1.0)
+			if a > 0.002:
+				out.set_pixel(x, y, Color(0.04, 0.02, 0.01, a))
+	var result := ImageTexture.create_from_image(out)
+	_shadow_cache[key] = result
+	return result
+
+static func _blur_alpha(image: Image, radius: int) -> PackedFloat32Array:
+	var w := image.get_width()
+	var h := image.get_height()
+	var src := PackedFloat32Array()
+	src.resize(w * h)
+	for y in h:
+		for x in w:
+			src[y * w + x] = image.get_pixel(x, y).a
+	var tmp := PackedFloat32Array()
+	tmp.resize(w * h)
+	for _pass in 2:
+		for y in h:
+			for x in w:
+				var total := 0.0
+				for k in range(-radius, radius + 1):
+					total += src[y * w + clampi(x + k, 0, w - 1)]
+				tmp[y * w + x] = total / float(radius * 2 + 1)
+		for y in h:
+			for x in w:
+				var total := 0.0
+				for k in range(-radius, radius + 1):
+					total += tmp[clampi(y + k, 0, h - 1) * w + x]
+				src[y * w + x] = total / float(radius * 2 + 1)
+	return src
 
 # Kit-plate style for list/option rows (9-sliced, so any width works) with hover/press tints.
 static func apply_plate_style(btn: Button, tint := Color.WHITE) -> void:
@@ -146,9 +376,19 @@ static func apply_plate_style(btn: Button, tint := Color.WHITE) -> void:
 		btn.add_theme_stylebox_override(state, style)
 	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 
-# `level` picks the background set: 1-3 the meadow, AUTUMN_FROM_LEVEL+ (and Endless,
-# passed as a large number) the autumn town; 0 (menus) uses the meadow.
+# `level` picks the background set: 1-3 the meadow, 4-7 the autumn town, 8+ (and
+# Endless, passed as 999) the castle; 0 (menus) uses the meadow. The castle has a
+# dedicated portrait crop, so each orientation gets the right source.
 static func background_path(landscape: bool, level: int = 0) -> String:
+	# The main menu has its own landscape city; portrait keeps the painted portrait.
+	if level <= 0 and landscape and ResourceLoader.exists("res://assets/ui/background_menu.png"):
+		return "res://assets/ui/background_menu.png"
+	if level >= CASTLE_FROM_LEVEL:
+		var castle := CASTLE_LANDSCAPE if landscape else CASTLE_PORTRAIT
+		if ResourceLoader.exists(castle):
+			return castle
+		if ResourceLoader.exists(CASTLE_LANDSCAPE):
+			return CASTLE_LANDSCAPE
 	if level >= AUTUMN_FROM_LEVEL and ResourceLoader.exists("res://assets/ui/background_autumn.png"):
 		return "res://assets/ui/background_autumn.png"
 	return "res://assets/ui/background.png" if landscape else "res://assets/ui/background_portrait.png"
@@ -172,6 +412,14 @@ static func make_background(landscape: bool, level: int = 0) -> Control:
 	bg.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	var mat := ShaderMaterial.new()
 	mat.shader = preload("res://scripts/ui/background_filter.gdshader")
+	var menu := level <= 0
+	# Menu: almost no blur, high brightness/saturation, tiny tint/vignette. Gameplay:
+	# lighter than before so the delivered art stays defined, still calm enough for cards.
+	mat.set_shader_parameter("blur_texels", 0.30 if menu else 0.60)
+	mat.set_shader_parameter("brightness", 0.90 if menu else 0.82)
+	mat.set_shader_parameter("saturation", 0.95 if menu else 0.90)
+	mat.set_shader_parameter("tint_strength", 0.05 if menu else 0.08)
+	mat.set_shader_parameter("vignette_strength", 0.25 if menu else 0.35)
 	bg.material = mat
 	return bg
 

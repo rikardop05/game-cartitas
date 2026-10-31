@@ -2,7 +2,7 @@
   "id": "2",
   "difficulty": 2,
   "clearing_capacity": 7,
-  "deck": ["cat", "cat", "cat", "dog", "dog", "dog", "bird", "bird", "bird", "fish", "fish", "fish"],
+  "deck": ["cat", "cat", "cat", "wolf", "wolf", "wolf", "owl", "owl", "owl", "whale", "whale", "whale"],
   "time_thresholds": { "three_stars": 45, "two_stars": 75 },
   "rewards": [{ "type": "undo", "quantity": 1 }]
 }

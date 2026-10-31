@@ -2,7 +2,7 @@
   "id": "8",
   "difficulty": 8,
   "clearing_capacity": 7,
-  "deck": ["cat", "cat", "cat", "dog", "dog", "dog", "star", "star", "star", "sun", "sun", "sun"],
+  "deck": ["cat", "cat", "cat", "wolf", "wolf", "wolf", "boar", "boar", "boar", "duck", "duck", "duck"],
   "time_thresholds": { "three_stars": 90, "two_stars": 160 },
   "rewards": [{ "type": "undo", "quantity": 1 }]
 }

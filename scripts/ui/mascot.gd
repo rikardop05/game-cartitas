@@ -1,23 +1,31 @@
 class_name Mascot
 extends Control
 
-# "Ace" (PT: "Ás"), the Cartitas mascot (T7.8): a small living playing card with a
-# face, drawn entirely in code, plus a speech bubble that floats above it. Original
-# character; no external art. Everything ignores the mouse so it never steals taps.
+# A full-body hero portrait (assets/ui/heroes/) plus a speech bubble that floats
+# above or beside it. The portrait is fixed per Level / Endless round by hero_for(),
+# so the screens never have to choose one. The voice is always the neutral "hero"
+# line family, so the same lines fit every portrait. Everything ignores the mouse so
+# it never steals taps.
 #
-# Usage: add it as a child, give it a size (default 44x52), then call
+# Usage: add it as a child, give it a size (default 64x96), then call
 # say("match") / say("win", {"stars": 3}) / set_mood(Mascot.Mood.SAD).
 # With idle_tips on it shows a rotating "idle_tip" (see idle_event) every 10-14 s
 # while visible. The line picker is the session-wide Game.mascot_lines().
 
 enum Mood { IDLE, HAPPY, WORRIED, SAD }
 
-const BASE_SIZE := Vector2(44.0, 52.0)
+# Layout box and roster live in HeroRoster (data-only, testable headless).
+const BASE_SIZE := HeroRoster.BASE_SIZE
+const HEROES := HeroRoster.HEROES
+const FALLBACK_HERO := HeroRoster.FALLBACK_HERO
+const DEFAULT_CHARACTER := HeroRoster.DEFAULT_HERO
+const HERO_DIR := HeroRoster.HERO_DIR
+const BUNNY_LEVEL := HeroRoster.BUNNY_LEVEL
 const INK := Color("#3a2410")
 const CARD_FACE := Color("#fff1d2")
-const SUIT_RED := Color("#c0392b")
-const BLUSH := Color(1.0, 0.5, 0.45, 0.6)
-const TEAR := Color("#6fb7e8")
+# Common heroes show mood with a subtle tint only; the character never moves.
+const WORRIED_TINT := Color(0.84, 0.88, 0.99)
+const SAD_TINT := Color(0.72, 0.74, 0.80)
 const TIP_DELAY := Vector2(10.0, 14.0)
 const BUBBLE_FONT_SIZE := 9
 const BUBBLE_TEXT_MAX_WIDTH := 108.0
@@ -48,34 +56,33 @@ var idle_tips := true
 # screen can keep the bubble off buttons and counters.
 var side_bubble_bounds := Rect2()
 # Global rect the bubble must stay inside while it floats above the mascot (an empty
-# rect means the whole viewport). The screen sets it to the free band above Ace so the
-# bubble never reaches the board.
+# rect means the whole viewport). The screen sets it to the free band above the
+# mascot so the bubble never reaches the board.
 var free_bounds := Rect2()
 # Pool used by the idle-tip timer; Endless switches it to "idle_tip_endless" so the
 # campaign-only tip about stars is never shown there.
 var idle_event := "idle_tip"
 var mood: Mood = Mood.IDLE
-var bob := 0.0:
+# Hero id ("cat", "wolf_ranger", ...): only the portrait changes, the voice stays neutral.
+var character := DEFAULT_CHARACTER:
 	set(value):
-		bob = value
-		queue_redraw()
-var hop := 0.0:
-	set(value):
-		hop = value
-		queue_redraw()
-var sway := 0.0:
-	set(value):
-		sway = value
+		var id := str(value)
+		character = id if (HEROES.has(id) or id == FALLBACK_HERO) else DEFAULT_CHARACTER
+		if _texture_ready:
+			_load_texture()
 		queue_redraw()
 
 var _rng := RandomNumberGenerator.new()
-var _card_style := StyleBoxFlat.new()
+var _level_id := ""
+var _endless := false
+# File stem of the portrait currently drawn ("hero_bunny_sequence", ...), for checks.
+var frame_id := ""
+var _texture_ready := false
+var _texture: Texture2D
 var _bubble_root: Control
 var _bubble: PanelContainer
 var _bubble_label: Label
 var _tail: Control
-var _motion_tweens: Array[Tween] = []
-var _hop_tween: Tween
 var _fade_tween: Tween
 var _clock := 0.0
 var _last_said := {}
@@ -83,35 +90,40 @@ var _tip_in := 0.0
 var _bubble_left := 0.0
 var _layout_frames := 0
 var _mood_left := 0.0
-var _blink_in := 3.0
-var _blinking := false
+
+# Portrait for a campaign Level (L1..L9 map directly; L10/L11 and unknown ids use
+# the menu wolf) or an Endless round (the 9 heroes rotate from round 1).
+static func hero_for(level_id: String, endless_round: int = 0) -> String:
+	return HeroRoster.hero_for(level_id, endless_round)
+
+# Compatibility alias for older call sites.
+static func character_for(level_id: String, endless_round: int = 0) -> String:
+	return HeroRoster.hero_for(level_id, endless_round)
+
+# L8 bunny swaps the portrait itself; the other heroes keep one portrait + tint/dip.
+static func bunny_expression_for(mood: Mood) -> String:
+	return HeroRoster.bunny_expression_for(int(mood))
 
 func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	custom_minimum_size = BASE_SIZE
 	size = BASE_SIZE
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_rng.randomize()
 	# The session-wide picker keeps the no-repeat memory across Mascot instances.
 	lines = Game.mascot_lines()
-	_card_style.bg_color = CARD_FACE
-	_card_style.border_color = INK
-	_card_style.set_border_width_all(2)
-	_card_style.set_corner_radius_all(6)
-	_card_style.anti_aliasing = true
+	_level_id = Game.current_level_id
+	_endless = Game.endless_run != null
+	var endless_round := 0
+	if Game.endless_run != null:
+		endless_round = Game.endless_run.current_round
+	character = hero_for(_level_id, endless_round)
+	_texture_ready = true
+	_load_texture()
 
 func _ready() -> void:
 	_build_bubble()
-	_start_motion()
 	_arm_tip_timer()
-
-func _notification(what: int) -> void:
-	if what == NOTIFICATION_VISIBILITY_CHANGED:
-		for tween in _motion_tweens:
-			if tween != null and tween.is_valid():
-				if is_visible_in_tree():
-					tween.play()
-				else:
-					tween.pause()
 
 # Shows the line for an event and sets the matching mood. Returns the Localizer
 # key that was shown, or "" when nothing was said (unknown event, cooldown,
@@ -122,7 +134,8 @@ func say(event: String, context: Dictionary = {}) -> String:
 	_apply_event_mood(event)
 	if EVENT_COOLDOWNS.has(event) and _clock - float(_last_said.get(event, -1000.0)) < float(EVENT_COOLDOWNS[event]):
 		return ""
-	var key := lines.pick(event, context)
+	# The portrait's id never reaches the picker: every hero uses the neutral family.
+	var key := lines.pick(event, context, MascotLines.HERO_CHARACTER)
 	if key == "":
 		return ""
 	_last_said[event] = _clock
@@ -147,16 +160,15 @@ func bubble_global_rect() -> Rect2:
 
 # Text for an event without showing a bubble (used by the end-screen panel).
 func localized_line(event: String, context: Dictionary = {}) -> String:
-	var key := lines.pick(event, context)
+	var key := lines.pick(event, context, MascotLines.HERO_CHARACTER)
 	return Localizer.t(key) if key != "" else ""
 
 # duration > 0 returns to Mood.IDLE after that many seconds.
 func set_mood(new_mood: Mood, duration: float = 0.0) -> void:
 	mood = new_mood
 	_mood_left = duration if new_mood != Mood.IDLE else 0.0
+	_apply_mood_look()
 	queue_redraw()
-	if new_mood == Mood.HAPPY and is_inside_tree():
-		_hop()
 
 func hide_bubble() -> void:
 	_bubble_left = 0.0
@@ -173,7 +185,6 @@ func _process(delta: float) -> void:
 	if not is_visible_in_tree():
 		return
 	_clock += delta
-	_update_blink(delta)
 	if _mood_left > 0.0:
 		_mood_left -= delta
 		if _mood_left <= 0.0:
@@ -203,33 +214,24 @@ func _apply_event_mood(event: String) -> void:
 func _arm_tip_timer() -> void:
 	_tip_in = _rng.randf_range(TIP_DELAY.x, TIP_DELAY.y)
 
-func _update_blink(delta: float) -> void:
-	_blink_in -= delta
-	if _blink_in > 0.0:
+func _is_bunny_level8() -> bool:
+	return not _endless and character == "bunny" and str(_level_id).to_int() == BUNNY_LEVEL
+
+func _apply_mood_look() -> void:
+	if _is_bunny_level8():
+		# The L8 expression frames carry the mood; the character itself stays still.
+		self_modulate = Color.WHITE
+		_load_texture()
+		queue_redraw()
 		return
-	_blinking = not _blinking
-	_blink_in = 0.12 if _blinking else _rng.randf_range(2.5, 5.0)
+	match mood:
+		Mood.WORRIED:
+			self_modulate = WORRIED_TINT
+		Mood.SAD:
+			self_modulate = SAD_TINT
+		_:
+			self_modulate = Color.WHITE
 	queue_redraw()
-
-func _start_motion() -> void:
-	# Idle bob and a slight sway, looping for as long as the mascot lives.
-	var bob_tween := create_tween().set_loops()
-	bob_tween.tween_property(self, "bob", -1.6, 0.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	bob_tween.tween_property(self, "bob", 0.0, 0.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	var sway_tween := create_tween().set_loops()
-	sway_tween.tween_property(self, "sway", 0.04, 1.3).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	sway_tween.tween_property(self, "sway", -0.04, 1.3).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_motion_tweens = [bob_tween, sway_tween]
-	if not is_visible_in_tree():
-		for tween in _motion_tweens:
-			tween.pause()
-
-func _hop() -> void:
-	if _hop_tween != null and _hop_tween.is_valid():
-		_hop_tween.kill()
-	_hop_tween = create_tween()
-	_hop_tween.tween_property(self, "hop", -4.0, 0.1).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	_hop_tween.tween_property(self, "hop", 0.0, 0.14).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 
 # ---------------------------------------------------------------- speech bubble
 
@@ -308,7 +310,7 @@ func _place_bubble() -> void:
 	if _side_mode():
 		global_target = Vector2(
 			global_position.x + size.x + BUBBLE_SIDE_GAP,
-			side_bubble_bounds.end.y - _bubble.size.y)  # bottom-aligned, next to Ace's head
+			side_bubble_bounds.end.y - _bubble.size.y)  # bottom-aligned, next to the mascot's head
 		global_target.y = clampf(global_target.y, side_bubble_bounds.position.y, maxf(side_bubble_bounds.position.y, side_bubble_bounds.end.y - _bubble.size.y))
 	else:
 		global_target = global_position + Vector2(size.x * 0.5 - BUBBLE_TAIL_INSET, -_bubble.size.y - BUBBLE_GAP)
@@ -345,92 +347,51 @@ func _draw_tail() -> void:
 
 func _draw() -> void:
 	var s := size / BASE_SIZE
-	var pivot := Vector2(22.0, 50.0) * s
-	# Soft shadow stays on the floor while the card bobs above it.
-	draw_set_transform_matrix(Transform2D.IDENTITY.scaled(s))
+	# Static floor shadow; the character itself never bobs, sways or hops.
+	var shadow_center := Vector2(size.x * 0.5, size.y - 1.5 * s.y)
 	var shadow := PackedVector2Array()
 	for i in 16:
 		var a := TAU * float(i) / 16.0
-		shadow.append(Vector2(22.0 + cos(a) * 13.0, 51.0 + sin(a) * 2.2))
+		shadow.append(shadow_center + Vector2(cos(a) * 13.0 * s.x, sin(a) * 2.2 * s.y))
 	draw_colored_polygon(shadow, Color(0, 0, 0, 0.22))
-	var xf := Transform2D.IDENTITY.scaled(s)
-	xf = xf.translated(-pivot).rotated(sway).translated(pivot)
-	xf = xf.translated(Vector2(0.0, (bob + hop) * s.y))
-	draw_set_transform_matrix(xf)
-	_draw_card()
-	draw_set_transform_matrix(Transform2D.IDENTITY)
+	var rect := _sprite_rect()
+	if _texture != null:
+		draw_texture_rect(_texture, rect, false)
+	else:
+		_draw_placeholder(rect)
 
-func _draw_card() -> void:
-	# Legs and arms first, so the card body covers where they attach.
-	draw_rect(Rect2(13.0, 42.0, 6.0, 8.0), INK)
-	draw_rect(Rect2(25.0, 42.0, 6.0, 8.0), INK)
-	var arms := _arm_points()
-	for i in 2:
-		draw_line(arms[i][0], arms[i][1], INK, 3.0, true)
-		draw_circle(arms[i][1], 2.0, INK)
-	_card_style.draw(get_canvas_item(), Rect2(5.0, 3.0, 34.0, 41.0))
-	# Corner index: an "A" with a red diamond, like the ace it is.
-	draw_string(get_theme_default_font(), Vector2(8.5, 14.0), "A", HORIZONTAL_ALIGNMENT_LEFT, -1.0, 11, INK)
-	_draw_diamond(Vector2(11.0, 18.5), 2.6)
-	_draw_diamond(Vector2(33.0, 38.5), 2.6)
-	_draw_face()
+# Bottom-centre, aspect preserved: the art is never squashed, whatever the control size.
+func _sprite_rect() -> Rect2:
+	var source := Vector2(3.0, 4.0) if _texture == null else _texture.get_size()
+	var k := minf(size.x / source.x, size.y / source.y)
+	var drawn := source * k
+	return Rect2(Vector2((size.x - drawn.x) * 0.5, size.y - drawn.y), drawn)
 
-func _draw_diamond(center: Vector2, radius: float) -> void:
-	draw_colored_polygon(PackedVector2Array([
-		center + Vector2(0.0, -radius * 1.2), center + Vector2(radius, 0.0),
-		center + Vector2(0.0, radius * 1.2), center + Vector2(-radius, 0.0),
-	]), SUIT_RED)
+func _load_texture() -> void:
+	# L8 bunny swaps the frame by mood; every other hero keeps one portrait. Missing
+	# art falls back to the menu wolf and then to any delivered hero, never blank.
+	var order: Array = []
+	if _is_bunny_level8():
+		order.append(bunny_expression_for(mood))
+	order.append("hero_%s" % character)
+	order.append("hero_%s" % FALLBACK_HERO)
+	for id in HEROES:
+		order.append("hero_%s" % id)
+	_texture = null
+	frame_id = ""
+	for name in order:
+		var texture := UiHelpers.hires_texture(HERO_DIR % name)
+		if texture != null:
+			_texture = texture
+			frame_id = name
+			break
+	queue_redraw()
 
-func _arm_points() -> Array:
-	var left := Vector2(6.0, 28.0)
-	var right := Vector2(38.0, 28.0)
-	match mood:
-		Mood.HAPPY:
-			return [[left, Vector2(1.0, 21.0)], [right, Vector2(43.0, 21.0)]]
-		Mood.WORRIED:
-			return [[left, Vector2(2.0, 26.0)], [right, Vector2(42.0, 26.0)]]
-		Mood.SAD:
-			return [[left, Vector2(2.5, 36.0)], [right, Vector2(41.5, 36.0)]]
-	return [[left, Vector2(1.5, 34.0)], [right, Vector2(42.5, 34.0)]]
-
-func _draw_face() -> void:
-	var eye_y := 26.0
-	var eye_xs := [16.0, 28.0]
-	for x in eye_xs:
-		var eye := Vector2(x, eye_y)
-		match mood:
-			Mood.HAPPY:
-				draw_arc(eye + Vector2(0.0, 1.5), 3.0, PI, TAU, 10, INK, 2.0, true)
-			_:
-				if _blinking and mood == Mood.IDLE:
-					draw_line(eye + Vector2(-2.6, 0.0), eye + Vector2(2.6, 0.0), INK, 2.0, true)
-				else:
-					draw_circle(eye, 2.6 if mood == Mood.WORRIED else 2.4, INK)
-					draw_circle(eye + Vector2(0.8, -0.9), 0.8, CARD_FACE)
-	match mood:
-		Mood.IDLE:
-			draw_arc(Vector2(22.0, 31.5), 5.0, PI * 0.2, PI * 0.8, 10, INK, 2.0, true)
-		Mood.HAPPY:
-			draw_circle(Vector2(11.0, 31.5), 2.4, BLUSH)
-			draw_circle(Vector2(33.0, 31.5), 2.4, BLUSH)
-			var mouth := PackedVector2Array()
-			for i in 9:
-				var a := PI * float(i) / 8.0
-				mouth.append(Vector2(22.0 + cos(a) * 5.0, 31.0 + sin(a) * 5.0))
-			draw_colored_polygon(mouth, INK)
-			draw_circle(Vector2(22.0, 34.8), 2.0, Color("#e8737a"))
-		Mood.WORRIED:
-			draw_line(Vector2(11.0, 21.0), Vector2(18.0, 19.0), INK, 1.6, true)
-			draw_line(Vector2(26.0, 19.0), Vector2(33.0, 21.0), INK, 1.6, true)
-			draw_polyline(PackedVector2Array([
-				Vector2(17.0, 35.0), Vector2(19.5, 33.2), Vector2(22.0, 35.0),
-				Vector2(24.5, 33.2), Vector2(27.0, 35.0),
-			]), INK, 1.8, true)
-			draw_circle(Vector2(35.0, 20.0), 1.9, TEAR)
-			draw_colored_polygon(PackedVector2Array([Vector2(35.0, 16.0), Vector2(33.4, 19.4), Vector2(36.6, 19.4)]), TEAR)
-		Mood.SAD:
-			draw_line(Vector2(11.0, 22.0), Vector2(18.0, 19.5), INK, 1.6, true)
-			draw_line(Vector2(26.0, 19.5), Vector2(33.0, 22.0), INK, 1.6, true)
-			draw_arc(Vector2(22.0, 39.0), 5.0, PI * 1.2, PI * 1.8, 10, INK, 2.0, true)
-			draw_circle(Vector2(13.0, 31.0), 1.5, TEAR)
-			draw_line(Vector2(13.0, 28.5), Vector2(13.0, 30.0), TEAR, 1.5, true)
+# Last resort when no hero portrait exists: a simple silhouette, still visible.
+func _draw_placeholder(rect: Rect2) -> void:
+	var body := rect.grow(-rect.size.x * 0.08)
+	draw_rect(body, Color("#8a6647"))
+	draw_rect(Rect2(body.position + Vector2(body.size.x * 0.08, body.size.y * 0.04), Vector2(body.size.x * 0.84, body.size.y * 0.4)), Color("#a37b58"))
+	draw_circle(body.position + Vector2(body.size.x * 0.32, body.size.y * 0.24), body.size.x * 0.07, INK)
+	draw_circle(body.position + Vector2(body.size.x * 0.68, body.size.y * 0.24), body.size.x * 0.07, INK)
+	draw_line(body.position + Vector2(body.size.x * 0.3, body.size.y * 0.42), body.position + Vector2(body.size.x * 0.7, body.size.y * 0.42), INK, 1.5, true)

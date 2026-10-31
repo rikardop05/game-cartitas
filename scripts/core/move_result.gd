@@ -36,6 +36,7 @@ var reason: Reason = Reason.OK
 var defeat: bool = false
 var matched_ids: Array[String] = []
 var status: int = 0
+var zone_index: int = -1
 
 func _init(p_ok: bool = false, p_reason: Reason = Reason.OK, p_status: int = 0, p_defeat: bool = false) -> void:
 	ok = p_ok
@@ -53,4 +54,5 @@ func to_dict() -> Dictionary:
 		"defeat": defeat,
 		"matched_ids": matched_ids,
 		"status": status,
+		"zone_index": zone_index,
 	}

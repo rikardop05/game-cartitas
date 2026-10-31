@@ -168,7 +168,9 @@ func _scenarios(game) -> void:
 	_check(c.zone.size() == 3, "taps still work after the rebuild (zone %d)" % c.zone.size())
 	if not await _settle(scene):
 		return
-	_check_zone_clean(scene, [_card_type(c, ids[0]), _card_type(c, ids[1]), _card_type(c, ids[2])], "after taps following a rebuild")
+	_check_zone_clean(scene, _zone_types(c), "after taps following a rebuild")
+	var grouped := [_card_type(c, ids[0]), _card_type(c, ids[0]), _card_type(c, ids[1])]
+	_check(_zone_types(c) == grouped, "taps after a rebuild put the same type together (%s)" % str(_zone_types(c)))
 	if not _failures.is_empty():
 		return
 
@@ -199,8 +201,13 @@ func _tap(scene, type: String, ids: Array) -> bool:
 		if a["action"] == "use_deck":
 			var deck: DeckManager = c.deck_a if a["deck"] == "a" else c.deck_b
 			if deck.current_type() == type:
+				var before: Array = c.zone.cards.duplicate()
 				scene._on_deck(a["deck"])
-				ids.append(c.zone.cards.back().id if c.zone.size() > 0 else "")
+				for card in c.zone.cards:
+					if not before.has(card):
+						ids.append(card.id)
+				if ids.size() < 1:
+					ids.append("")
 				return true
 	_fail("no legal move of type %s to tap" % type)
 	return false

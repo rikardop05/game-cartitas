@@ -1,9 +1,9 @@
 extends RefCounted
 
-# Card faces: 8 of the 12 types have painted square art (480-960 px, frame included); the other
-# four keep the emoji placeholder until more art arrives. Update both lists when art is added.
-const WITH_ART := ["bird", "cat", "dog", "fish", "flower", "moon", "star", "sun"]
-const PLACEHOLDER := ["leaf", "heart", "gem", "crystal"]
+# Card faces: 11 of the 12 types have painted square art (art 960 px, frame included); crystal
+# keeps the emoji placeholder until its art arrives. Update both lists when art is added.
+const WITH_ART := ["boar", "cat", "duck", "frog", "gem", "heart", "leaf", "mouse", "owl", "whale", "wolf"]
+const PLACEHOLDER := ["crystal"]
 
 func test_every_type_is_either_art_or_placeholder() -> void:
 	var listed: Array = WITH_ART + PLACEHOLDER
@@ -36,4 +36,18 @@ func test_art_keeps_full_resolution_with_mipmaps() -> void:
 		var image := texture.get_image()
 		Assert.is_true(image != null and image.has_mipmaps(), "%s art has mipmaps for clean downscaling" % type)
 		Assert.is_true(texture.get_width() >= 480, "%s art stays high resolution (got %d px)" % [type, texture.get_width()])
-	Assert.is_true(UiHelpers.card_texture("bird") == UiHelpers.card_texture("bird"), "card art is cached per type")
+	Assert.is_true(UiHelpers.card_texture("owl") == UiHelpers.card_texture("owl"), "card art is cached per type")
+
+func test_card_shadows_are_cached_per_card_face() -> void:
+	# Generated ImageTextures have an empty resource_path; the shadow cache must key them
+	# by identity, otherwise every card reuses the first card's silhouette.
+	var heart := UiHelpers.card_texture("heart")
+	var gem := UiHelpers.card_texture("gem")
+	var leaf := UiHelpers.card_texture("leaf")
+	Assert.is_true(heart != null and gem != null and leaf != null, "heart/gem/leaf art exist")
+	var sh := UiHelpers.shadow_texture(heart, 2.0, 0.35)
+	var sg := UiHelpers.shadow_texture(gem, 2.0, 0.35)
+	var sl := UiHelpers.shadow_texture(leaf, 2.0, 0.35)
+	Assert.is_true(sh != null and sg != null and sl != null, "card shadows are generated")
+	Assert.is_true(sh != sg and sh != sl and sg != sl, "different card faces get different shadows")
+	Assert.is_true(UiHelpers.shadow_texture(heart, 2.0, 0.35) == sh, "the same face/shape is cached")

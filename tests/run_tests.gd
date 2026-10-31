@@ -22,8 +22,11 @@ const SUITE_PATHS := [
 	"res://tests/test_board_solvability_solver.gd",
 	"res://tests/test_endless.gd",
 	"res://tests/test_mascot_lines.gd",
+	"res://tests/test_mascot_heroes.gd",
 	"res://tests/test_card_art.gd",
+	"res://tests/test_backgrounds.gd",
 	"res://tests/test_star_thresholds.gd",
+	"res://tests/test_audio.gd",
 ]
 
 func _init() -> void:

@@ -32,13 +32,9 @@ func _init(height: int = 42) -> void:
 	box.add_child(_make_kit_icon_button("VolumeDown", "icon_minus", func(): _step_volume(-VOLUME_STEP)))
 	box.add_child(_make_slider())
 	box.add_child(_make_kit_icon_button("VolumeUp", "icon_plus", func(): _step_volume(VOLUME_STEP)))
-	var plate := PanelContainer.new()
-	plate.name = "SoundPlate"
-	plate.add_theme_stylebox_override("panel", UiHelpers.kit_stylebox("panel_menu", 3, 1))
-	box.add_child(plate)
 	var mute := _make_kit_icon_button("SoundButton", _sound_icon_name(), _on_toggle_sound)
 	mute.tooltip_text = Localizer.t("sound_label")
-	plate.add_child(mute)
+	box.add_child(mute)
 
 func _sound_icon_name() -> String:
 	return "icon_sound_on" if _game.sound_enabled() else "icon_sound_off"

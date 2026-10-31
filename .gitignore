@@ -18,6 +18,18 @@ skills-lock.json
 
 # Local MCP scaffolding
 godot-mcp/
+.godot-mcp/
+addons/
+
+# Local agent tooling
+.claude/
+.ai-game-dev/
+CartitasInfinity.csproj
+CartitasInfinity.sln
+
+# Superseded art kept only on disk
+assets/cards/legacy/
+assets/ui/npc/
 
 # Exported builds (demo .exe)
 build/

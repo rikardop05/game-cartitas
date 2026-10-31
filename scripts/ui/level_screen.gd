@@ -13,6 +13,31 @@ const BOARD_Y_COMPRESSION := 1.0
 const BOARD_SHADE := Color(0.0, 0.0, 0.0, 0.5)
 # The cards sit this many px inside the window's drawn frame.
 const BOARD_PAD := 2.0
+# Thickest painted border drawn around the board, in logical px. The frame PNG is
+# alpha-cropped to its visible box and 9-sliced; capping the border keeps the thick
+# painted bevel from eating the play area. Drop the cleaned art's 9-slice margin here
+# once the Atelie delivers it.
+const BOARD_FRAME_BORDER_MAX := 6.0
+# Painted UI pieces delivered by the Atelie. Margins are fractions of the cropped
+# texture and keep the carved corners/ornaments from being cut by the 9-slice.
+const RESERVE_FIELD_ART := "res://assets/ui/kit/panel_reserve_field.png"
+const RESERVE_FIELD_MARGINS := Rect2(0.07, 0.11, 0.07, 0.11)
+const POWERS_BOARD_ART := "res://assets/ui/kit/panel_powers_board.png"
+const POWERS_BOARD_MARGINS := Rect2(0.09, 0.05, 0.09, 0.05)
+# The square wooden plate is the table under each Support Deck's pile.
+const DECK_TABLE_ART := "res://assets/ui/kit/card_available_frame.png"
+const MATCH_BURST_ART := "res://assets/ui/fx/match_burst.png"
+const MATCH_SMOKE_ART := "res://assets/ui/fx/match_smoke.png"
+const MATCH_FX_CARD_SPAN := 2.0
+const MATCH_FX_SECONDS := 0.34
+# The Clearing Zone bar's painted body inside its file (the file has wide transparent margins)
+# and the share of the width its carved end caps take when 9-sliced.
+const ZONE_BAR_ART := "res://assets/ui/kit/bar_zone.png"
+# Fractions of the cropped bar: the dark bevel and the carved end caps stay intact,
+# the slots sit inside the wooden hole.
+const ZONE_BAR_MARGINS := Rect2(0.025, 0.10, 0.025, 0.10)
+# Size the painted sound note is cached at for the HUD buttons.
+const SOUND_ICON_PX := 72
 # Endless uses the autumn background like the later Levels.
 const ENDLESS_BACKGROUND_LEVEL := 999
 # Frame thickness (source px) when a kit panel is 9-sliced: border plus its shadow line.
@@ -37,59 +62,82 @@ const LAND_POWERS := Rect2(571, 62, 64, 128)
 const LAND_POWERS_INNER := Rect2(5, 6, 54, 115)
 const LAND_DECK_A := Rect2(18, 201, 64, 64)
 const LAND_DECK_B := Rect2(571, 201, 64, 64)
-const LAND_RESERVE := Rect2(18, 280, 148, 56)
+const LAND_RESERVE := Rect2(18, 280, 148, 64)
 const LAND_ZONE := Rect2(172, 280, 464, 64)
-const LAND_MASCOT_AREA := Rect2(3, 48, 87, 147)
-const PORT_HUD_HEIGHT := 44.0
+# The hero may overlap the board/HUD intentionally; the MascotArea is only the
+# placement box (the mascot itself is behind Layout, its bubble above it).
+const LAND_MASCOT_AREA := Rect2(0, 48, 160, 222)
+# Portrait fills the whole 360x640 screen: powers at the top-left, the hero top-centre,
+# the zone bar under it, the board in the lower half, then decks/Reserve and a footer
+# with the gear, sound, stars plaque and logo. Nothing reflows.
 const PORT_CHEVRON := Rect2(4, 7, 32, 30)
 const PORT_TITLE := Rect2(40, 6, 54, 32)
 const PORT_PILL_CLOCK := Vector2(108, 6)
-const PORT_PILL_SECOND := Vector2(188, 6)
-# Campaign portrait: the plaque is smaller, so the clock moves left to keep the pair centred.
-const PORT_PILL_CLOCK_CAMPAIGN := Vector2(111, 6)
-const PORT_PLAQUE := Rect2(179, 8, 70, 28)
-const PORT_HELP := Rect2(253, 7, 30, 30)
-const PORT_GEAR := Rect2(284, 4, 36, 36)
-const PORT_SOUND := Rect2(320, 4, 36, 36)
-const PORT_BOARD_FRAME := Rect2(4, 46, 352, 192)
-const PORT_BOARD_INNER := Rect2(5, 6, 342, 177)
-const PORT_POWERS := Rect2(4, 396, 352, 64)
-const PORT_POWERS_INNER := Rect2(7, 7, 338, 50)
-const PORT_DECK_A := Rect2(4, 248, 64, 64)
-const PORT_DECK_B := Rect2(292, 248, 64, 64)
-const PORT_RESERVE := Rect2(74, 248, 212, 64)
-const PORT_ZONE := Rect2(4, 322, 352, 64)
-const PORT_MASCOT_AREA := Rect2(0, 468, 360, 172)
+const PORT_PILL_SECOND := Vector2(145, 598)
+# Campaign portrait: the clock moves right of the hero's head, beside the help button;
+# the stars plaque and the logo take the footer.
+const PORT_PILL_CLOCK_CAMPAIGN := Vector2(257, 6)
+const PORT_PLAQUE := Rect2(132, 596, 90, 36)
+const PORT_HELP := Rect2(322, 7, 30, 30)
+const PORT_GEAR := Rect2(14, 601, 32, 32)
+const PORT_SOUND := Rect2(52, 601, 32, 32)
+const PORT_BOARD_FRAME := Rect2(11, 327, 339, 196)
+const PORT_BOARD_INNER := Rect2(5, 6, 329, 184)
+# Portrait keeps the vertical powers board (no 90-degree rotation blur): an 80x156
+# panel at the top-left, with the three buttons stacked like the landscape panel.
+const PORT_POWERS := Rect2(4, 48, 80, 156)
+const PORT_POWERS_INNER := Rect2(5, 6, 70, 144)
+const PORT_DECK_A := Rect2(18, 528, 64, 64)
+const PORT_DECK_B := Rect2(278, 528, 64, 64)
+const PORT_RESERVE := Rect2(96, 528, 168, 64)
+const PORT_ZONE := Rect2(4, 254, 352, 52)
+# The hero box: 174x260 top-centre, so the zone bar only overlaps the skirt by ~5 px.
+const PORT_MASCOT_AREA := Rect2(104, 0, 174, 260)
+# Safe free area for the instruction bubble in the sky: clear of the powers panel
+# (left) and of the board/zone (below); the hero may sit under it.
+const LAND_INSTRUCTION_AREA := Rect2(0, 48, 160, 222)
+# Portrait: the narrow free strip right of the hero (the powers own the left, the hero the
+# centre). Keeping the bubble there never covers the hero's head/face or the powers panel.
+const PORT_INSTRUCTION_AREA := Rect2(276, 40, 80, 150)
+# The painted wordmark lives in the portrait footer only (landscape keeps its title).
+const PORT_LOGO := Rect2(266, 594, 90, 40)
+const LOGO_ART := "res://assets/ui/branding/logo_claw_and_crown.png"
 const PILL_SIZE := Vector2(64, 32)
 # The stopwatch badge overlaps the left end of the clock plate (relative to the plate); the time
 # text is centred on the part of the plate it leaves free.
 const STOPWATCH_RECT := Rect2(-13, 0, 33, 32)
-const CLOCK_TEXT_X := 20.0
+# The stopwatch badge overlaps the plate's left end; a small inset keeps the time
+# clear of it while sitting visually near the plate centre (was 20 = too far right).
+const CLOCK_TEXT_X := 8.0
 # Where the three stars sit on the plaque art (fractions of its width / height).
 const PLAQUE_STAR_X := [0.235, 0.5, 0.765]
 const PLAQUE_STAR_Y := 0.52
 const STARS_PATH_FORMAT := "stars_%d"
 const STAR_PUFF_COUNT := 7
 # End panel: the plaque of the earned stars (the art is 1024x409).
-const END_PLAQUE_LANDSCAPE := Vector2(132, 53)
-const END_PLAQUE_PORTRAIT := Vector2(168, 67)
+const END_PLAQUE_LANDSCAPE := Vector2(140, 56)
+const END_PLAQUE_PORTRAIT := Vector2(230, 92)
+# The plaque hangs over the result panel's top edge by this share of its height. Landscape is
+# tight on 360 px, so there it tucks in further behind the panel.
+const END_STARS_OVERLAP_LANDSCAPE := 0.22
+const END_STARS_OVERLAP_PORTRAIT := 0.2
 # The inside of a 64x64 slot (deck piles are centred in it).
 const SLOT_INNER := Rect2(5, 6, 54, 52)
-const ZONE_TITLE_X := 8.0
-const ZONE_TITLE_WIDTH := 66.0
 const POWER_BUTTON_LANDSCAPE := Vector2(54, 36)
-const POWER_BUTTON_PORTRAIT := Vector2(104, 46)
-const LANDSCAPE_ZONE_CARD_SIZE := Vector2(40.0, 40.0)
-# 7 slots + 6 gaps of 2 px must fit the zone row in one line.
-const PORTRAIT_ZONE_CARD_SIZE := Vector2(36.0, 36.0)
-const LANDSCAPE_RESERVE_CARD_SIZE := Vector2(30.0, 30.0)
-const PORTRAIT_RESERVE_CARD_SIZE := Vector2(38.0, 38.0)
-const DECK_CARD_SIZE := Vector2(36.0, 36.0)
+const LANDSCAPE_ZONE_CARD_SIZE := Vector2(46.0, 46.0)
+# The zone row fills the whole bar: 7 slots + 6 computed gaps, centered.
+const PORTRAIT_ZONE_CARD_SIZE := Vector2(42.0, 42.0)
+const LANDSCAPE_RESERVE_CARD_SIZE := Vector2(34.0, 34.0)
+const PORTRAIT_RESERVE_CARD_SIZE := Vector2(42.0, 42.0)
+const DECK_CARD_SIZE := Vector2(42.0, 42.0)
 # A Support Deck is a pile: one face-up card plus up to PILE_MAX_EDGES card edges.
-const PILE_EDGE_STEP := 3.0
-const PILE_MAX_EDGES := 5
-const MASCOT_SCALE_LANDSCAPE := 1.3
-const MASCOT_SCALE_PORTRAIT := 1.6
+# 42 + 3*4 = 54 = SLOT_INNER width: the real stacked frames fill the 64 px slot.
+const PILE_EDGE_STEP := 4.0
+const PILE_MAX_EDGES := 3
+# The hero portraits are 2:3 and replace the old 46x55 NPCs: 64x96 landscape keeps a
+# free band for the bubble above the hero; portrait has room for a bigger figure.
+const MASCOT_SCALE_LANDSCAPE := 1.6
+const MASCOT_SCALE_PORTRAIT := 1.8
 const INSTRUCTION_SECONDS := 4.0
 # Card moves are applied to the controller the instant they are tapped; these timings only
 # drive the overlay visuals (flying ghost, match flash) that catch up with the state.
@@ -98,6 +146,13 @@ const FLIGHT_TILT := 0.07
 const FLIGHT_START_SCALE := 1.08
 const MATCH_FADE_SECONDS := 0.25
 const MATCH_FLASH_SECONDS := 0.45
+# A card entering the zone lands beside its kind: the cards right of the gap slide over while
+# it flies. After a match, the survivors hop back into the freed slots once the flash has played.
+const ZONE_SHIFT_SECONDS := 0.18
+const ZONE_HOP_SECONDS := 0.26
+# The hop lifts the card by this fraction of its own height before it drops into the slot.
+const ZONE_HOP_LIFT_RATIO := 0.35
+const ZONE_HOP_DELAY := 0.1
 # The end panel waits for in-flight visuals, but never longer than this.
 const END_WAIT_MAX_MSEC := 1200
 # Blocked cards darken with their depth under reachable cards: 1 = directly under an
@@ -124,12 +179,24 @@ static var _dim_materials := {}
 static var _chevron_texture_cache: ImageTexture
 static var _portrait_frame_cache: ImageTexture
 static var _sound_icon_cache := {}
+# Visible (alpha bbox) rect of each painted FX inside its texture, in texture px.
+static var _fx_optical_cache := {}
 
 # The three cards of one match, flashed together once the last of them has landed.
 class MatchGroup extends RefCounted:
 	var pending := 0
 	var nodes: Array = []
 	var rects: Array = []
+	var shifts: Array = []
+
+# One card of the zone drawn on its way to the slot it now owns: the insertion slides the
+# cards after the gap to the right, a match hops the survivors to the left.
+class ZoneShift extends RefCounted:
+	var card_id := ""
+	var ghost: Control
+	var from := Rect2()
+	var to := Rect2()
+	var lift := 0.0
 
 # One card in the air: its ghost node and where it is heading.
 class Flight extends RefCounted:
@@ -147,7 +214,6 @@ class Flight extends RefCounted:
 var controller: GameController
 var board_container: Control
 var zone_container: HFlowContainer
-var reserve_header: Label
 var reserve_container: Control
 var deck_a_btn: Button
 var deck_b_btn: Button
@@ -164,7 +230,6 @@ var stars_overlay: TextureRect
 var stars_shown := -1
 var score_label: Label
 var level_label: Label
-var zone_header: Label
 var _sound_icon: TextureRect
 var _mascot_area: Control
 var _instruction_bubble: PanelContainer
@@ -186,6 +251,7 @@ var _fx_layer: Control
 # Cards still flying toward the zone, by card id; their zone slot stays hidden until they land.
 var _flights: Dictionary = {}
 var _hidden_cards: Dictionary = {}
+var _shifts: Array = []
 var _end_wait_started_msec := -1
 var _layout_cache: Dictionary = {}
 var _layout_cache_size := Vector2.ZERO
@@ -195,6 +261,9 @@ var match_flashes := 0
 var _endless: EndlessRun
 
 func _ready() -> void:
+	var audio := get_node_or_null("/root/Audio")
+	if audio != null:
+		audio.play_gameplay(self)
 	_level_id = Game.current_level_id
 	_endless = Game.endless_run
 	_build_ui()
@@ -226,6 +295,13 @@ func _ready() -> void:
 	controller.start_level(level, _endless.power_stock if _endless != null else Game.progress.inventory)
 	render()
 	_play_intro()
+
+# Gameplay music keeps playing while the next scene loads; the menu (or the next Level)
+# crossfades over it. release() only mutes it if no scene has claimed the audio since.
+func _exit_tree() -> void:
+	var audio := get_node_or_null("/root/Audio")
+	if audio != null:
+		audio.release(self)
 
 func _notification(what: int) -> void:
 	match what:
@@ -267,16 +343,23 @@ func _timer_warning(remaining: float) -> void:
 		timer_label.add_theme_color_override("font_color", TEXT_PRIMARY)
 
 func _on_resized() -> void:
-	if controller != null and not _ended:
-		var landscape := _viewport_is_landscape()
-		if landscape != _is_landscape:
-			_build_ui()
-			await get_tree().process_frame
-			await get_tree().process_frame
-			render()
-		else:
-			await get_tree().process_frame
-			render()
+	if controller == null or _ended:
+		return
+	var landscape := _viewport_is_landscape()
+	if landscape != _is_landscape:
+		_build_ui()
+		await get_tree().process_frame
+		if not is_inside_tree():
+			return
+		await get_tree().process_frame
+		if not is_inside_tree():
+			return
+		render()
+	else:
+		await get_tree().process_frame
+		if not is_inside_tree():
+			return
+		render()
 
 func _build_ui() -> void:
 	_is_landscape = _viewport_is_landscape()
@@ -305,6 +388,7 @@ func _build_ui() -> void:
 	# Every piece sits at its own kit position (logical px); the layout never reflows.
 	var layout := Control.new()
 	layout.name = "Layout"
+	layout.z_index = 0
 	layout.set_anchors_preset(Control.PRESET_FULL_RECT)
 	layout.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(layout)
@@ -332,20 +416,24 @@ func _build_ui() -> void:
 func _background_level() -> int:
 	return ENDLESS_BACKGROUND_LEVEL if _endless != null else _level_id.to_int()
 
-# Ace lives in the free space of the layout (MascotArea): above deck A in landscape, the
-# bottom of the screen in portrait. It is a direct child of the screen (outside Layout),
-# so it never takes layout space.
+# The big hero lives inside BoardFrame so the layer order is frame < hero < cards.
+# It may overflow the frame (the frame does not clip); foreground panels (z>=8) and
+# the HUD cover the parts that would hurt reading/taps. Its bubble is foreground.
 func _build_mascot() -> void:
 	mascot = null
 	if not Game.mascot_enabled():
 		return
 	mascot = Mascot.new()
 	mascot.name = "Mascot"
-	mascot.z_index = 600
+	mascot.z_index = 1
 	mascot.visible = false  # shown by _place_mascot once the layout is known
 	if _endless != null:
 		mascot.idle_event = "idle_tip_endless"
-	add_child(mascot)
+	var frame := find_child("BoardFrame", true, false) as Control
+	if frame != null:
+		frame.add_child(mascot)
+	else:
+		add_child(mascot)
 
 func _place_mascot() -> void:
 	if mascot == null or _mascot_area == null:
@@ -355,19 +443,20 @@ func _place_mascot() -> void:
 		return
 	mascot.size = Mascot.BASE_SIZE * (MASCOT_SCALE_LANDSCAPE if _is_landscape else MASCOT_SCALE_PORTRAIT)
 	if _is_landscape:
-		# Left column: Ace stands at the bottom of the free space, its bubble in the band above.
-		mascot.global_position = Vector2(
-			area.get_center().x - mascot.size.x * 0.5,
-			area.end.y - mascot.size.y - 2.0
-		)
-		mascot.side_bubble_bounds = Rect2()
-		mascot.free_bounds = Rect2(area.position, Vector2(area.size.x, maxf(0.0, mascot.global_position.y - 4.0 - area.position.y)))
-	else:
-		# Bottom area: Ace on the left, its bubble to the right at head height.
-		mascot.global_position = Vector2(area.position.x + 36.0, area.get_center().y - mascot.size.y * 0.5)
+		# Landscape: bottom-align in the frame, left edge of the MascotArea.
+		mascot.global_position = Vector2(area.position.x, area.end.y - mascot.size.y)
 		mascot.free_bounds = Rect2()
-		var left := mascot.global_position.x + mascot.size.x
-		mascot.side_bubble_bounds = Rect2(left, mascot.global_position.y - 4.0, area.end.x - left - 8.0, mascot.size.y * 0.7)
+		mascot.side_bubble_bounds = Rect2(
+			mascot.global_position.x + mascot.size.x + 6.0,
+			area.position.y + 10.0, 200.0, 60.0)
+	else:
+		# Portrait: x = MascotArea left, vertically centred; the bubble floats above
+		# the hero over the board's top edge (opaque, mouse-ignore).
+		mascot.global_position = Vector2(
+			area.position.x,
+			area.position.y + (area.size.y - mascot.size.y) * 0.5)
+		mascot.side_bubble_bounds = Rect2()
+		mascot.free_bounds = PORT_INSTRUCTION_AREA
 	mascot.visible = not _ended
 
 func _say(event: String, context: Dictionary = {}) -> void:
@@ -387,9 +476,9 @@ func _say_instruction() -> void:
 		_show_instruction_bubble(text)
 
 func _show_instruction_bubble(text: String) -> void:
-	if _mascot_area == null or _ended:
+	if _ended:
 		return
-	var area := _mascot_area.get_global_rect()
+	var area: Rect2 = _pick(LAND_INSTRUCTION_AREA, PORT_INSTRUCTION_AREA)
 	if area.size.x <= 0.0 or area.size.y <= 0.0:
 		return
 	if _instruction_bubble != null and is_instance_valid(_instruction_bubble):
@@ -460,6 +549,16 @@ func _make_art(node_name: String, texture: Texture2D, rect: Rect2, hires: bool =
 	_place(art, rect)
 	return art
 
+# A cached, pre-rendered soft drop shadow for a painted/pixel-art control. The alpha
+# blur is baked once by UiHelpers.shadow_texture, so this costs one textured quad.
+func _make_drop_shadow(texture: Texture2D, rect: Rect2, softness: float = 1.8, strength: float = 0.35) -> TextureRect:
+	var shadow_tex := UiHelpers.shadow_texture(texture, softness, strength)
+	if shadow_tex == null:
+		return null
+	var shadow := _make_art("Shadow", shadow_tex, rect, true)
+	shadow.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	return shadow
+
 # The pixel-art "<" of the back button: drawn here (the kit has no chevron) as a 16x15 image
 # shown at 2x with the project's nearest filter, so every pixel stays crisp.
 static func _chevron_texture() -> Texture2D:
@@ -490,23 +589,27 @@ static func _chevron_texture() -> Texture2D:
 		_chevron_texture_cache = ImageTexture.create_from_image(image)
 	return _chevron_texture_cache
 
-# panel_board_portrait is solid; the window needs the same transparent centre the landscape
-# frame has, so the darkened background shows through behind the cards.
-static func _portrait_frame_texture() -> Texture2D:
-	if _portrait_frame_cache == null:
-		var source := UiHelpers.kit_texture("panel_board_portrait")
-		if source == null:
-			return null
-		var image := source.get_image()
-		if image.is_compressed():
-			image.decompress()
-		image.convert(Image.FORMAT_RGBA8)
-		image.fill_rect(Rect2i(PORT_BOARD_INNER), Color(0, 0, 0, 0))
-		_portrait_frame_cache = ImageTexture.create_from_image(image)
-	return _portrait_frame_cache
+# A 9-sliced painted panel from UiHelpers' alpha-cropped data: the carved corners
+# keep their shape, the border never squashes, and nothing is stretched diagonally.
+func _make_nine_patch_art(node_name: String, frame_data: Dictionary, rect: Rect2) -> NinePatchRect:
+	var art := NinePatchRect.new()
+	art.name = node_name
+	art.texture = frame_data.get("texture")
+	var margins: Rect2i = frame_data.get("margins", Rect2i())
+	art.patch_margin_left = margins.position.x
+	art.patch_margin_top = margins.position.y
+	art.patch_margin_right = margins.size.x
+	art.patch_margin_bottom = margins.size.y
+	art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(art, Rect2(Vector2.ZERO, rect.size))
+	return art
 
-func _board_frame_texture() -> Texture2D:
-	return UiHelpers.kit_texture("panel_board_frame") if _is_landscape else _portrait_frame_texture()
+# The Clearing Zone bar: the new painted plank, alpha-cropped and 9-sliced so the
+# carved end caps stay intact and the slots can use the wooden hole.
+func _zone_bar_data(rect: Rect2) -> Dictionary:
+	return UiHelpers.trimmed_nine_patch(
+		UiHelpers.hires_texture(ZONE_BAR_ART), rect.size, ZONE_BAR_MARGINS, "zone_bar")
 
 # A flat button showing a picture at an exact size; it nudges down one pixel while pressed
 # and brightens on hover.
@@ -517,7 +620,11 @@ func _make_icon_button(node_name: String, texture: Texture2D, rect: Rect2, hires
 	btn.focus_mode = Control.FOCUS_NONE
 	_make_flat_button_compact(btn)
 	_place(btn, rect)
-	var icon := _make_art("Icon", texture, Rect2(Vector2(inset, inset), rect.size - Vector2(inset, inset) * 2.0), hires)
+	var icon_rect := Rect2(Vector2(inset, inset), rect.size - Vector2(inset, inset) * 2.0)
+	var shadow := _make_drop_shadow(texture, Rect2(icon_rect.position + Vector2(1, 1), icon_rect.size), 1.5, 0.35)
+	if shadow != null:
+		btn.add_child(shadow)
+	var icon := _make_art("Icon", texture, icon_rect, hires)
 	btn.add_child(icon)
 	btn.button_down.connect(func(): icon.position.y = inset + 1.0)
 	btn.button_up.connect(func(): icon.position.y = inset)
@@ -528,8 +635,10 @@ func _make_icon_button(node_name: String, texture: Texture2D, rect: Rect2, hires
 func _build_hud(parent: Control) -> void:
 	var hud := Control.new()
 	hud.name = "Hud"
+	hud.z_index = 8
 	hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_place(hud, Rect2(0.0, 0.0, get_viewport_rect().size.x, _pick(LAND_HUD_HEIGHT, PORT_HUD_HEIGHT)))
+	# Portrait uses the full height (the footer lives in the HUD); landscape keeps its 48 px bar.
+	_place(hud, Rect2(0.0, 0.0, get_viewport_rect().size.x, _pick(LAND_HUD_HEIGHT, get_viewport_rect().size.y)))
 	parent.add_child(hud)
 
 	var back := _make_icon_button("BackButton", _chevron_texture(), _pick(LAND_CHEVRON, PORT_CHEVRON))
@@ -574,7 +683,13 @@ func _build_hud(parent: Control) -> void:
 			style.modulate_color = Color(0.82, 0.82, 0.82)
 		help.add_theme_stylebox_override(state, style)
 	help.pressed.connect(_on_help)
-	_place(help, _pick(LAND_HELP, PORT_HELP))
+	var help_rect: Rect2 = _pick(LAND_HELP, PORT_HELP)
+	_place(help, help_rect)
+	var help_shadow := _make_drop_shadow(
+		UiHelpers.kit_texture("pill"),
+		Rect2(help_rect.position + Vector2(1, 1), help_rect.size), 1.5, 0.35)
+	if help_shadow != null:
+		hud.add_child(help_shadow)
 	hud.add_child(help)
 
 	# The gear opens the in-game settings; it has the sound toggle's footprint and style.
@@ -584,13 +699,36 @@ func _build_hud(parent: Control) -> void:
 	hud.add_child(gear)
 
 	_sound_icon = null
-	var sound := _make_icon_button("SoundButton", _sound_texture(), _pick(LAND_SOUND, PORT_SOUND))
+	var sound := _make_icon_button("SoundButton", _sound_texture(), _pick(LAND_SOUND, PORT_SOUND), false, 2.0)
 	_sound_icon = sound.get_node("Icon") as TextureRect
 	sound.pressed.connect(_on_sound_toggle)
 	hud.add_child(sound)
 
-# The kit's sound icons are pure black pixel art: they get a 1 px cream halo (so the image is
-# 18x18, drawn at 2x) to stay readable on the dark autumn background.
+	# The painted wordmark only exists in the portrait footer (landscape has no logo).
+	if not _is_landscape:
+		var logo := _make_logo()
+		if logo != null:
+			hud.add_child(logo)
+
+# The Claw & Crown wordmark: intrinsic aspect inside its footer slot, centred and never
+# stretched. Returns null when the art is missing (the HUD then simply has no logo).
+func _make_logo() -> Control:
+	var texture := UiHelpers.hires_texture(LOGO_ART)
+	if texture == null:
+		return null
+	var logo := TextureRect.new()
+	logo.name = "Logo"
+	logo.texture = texture
+	logo.set_meta("source_path", LOGO_ART)
+	logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	logo.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(logo, PORT_LOGO)
+	return logo
+
+# The painted note icon is 1024 px square: it is shrunk once to HUD size and cached. The muted
+# face is the same picture baked darker at build time, so it reads as off at a glance.
 func _sound_texture() -> Texture2D:
 	var icon_name := "icon_sound_on" if Game.sound_enabled() else "icon_sound_off"
 	if not _sound_icon_cache.has(icon_name):
@@ -601,22 +739,8 @@ func _sound_texture() -> Texture2D:
 		if icon.is_compressed():
 			icon.decompress()
 		icon.convert(Image.FORMAT_RGBA8)
-		var halo := Color("#fff1d2")
-		var image := Image.create(icon.get_width() + 2, icon.get_height() + 2, false, Image.FORMAT_RGBA8)
-		image.fill(Color(0, 0, 0, 0))
-		for y in icon.get_height():
-			for x in icon.get_width():
-				if icon.get_pixel(x, y).a < 0.5:
-					continue
-				for dy in range(-1, 2):
-					for dx in range(-1, 2):
-						image.set_pixel(x + 1 + dx, y + 1 + dy, halo)
-		for y in icon.get_height():
-			for x in icon.get_width():
-				var pixel := icon.get_pixel(x, y)
-				if pixel.a >= 0.5:
-					image.set_pixel(x + 1, y + 1, pixel)
-		_sound_icon_cache[icon_name] = ImageTexture.create_from_image(image)
+		icon.resize(SOUND_ICON_PX, SOUND_ICON_PX, Image.INTERPOLATE_LANCZOS)
+		_sound_icon_cache[icon_name] = ImageTexture.create_from_image(icon)
 	return _sound_icon_cache[icon_name]
 
 func _on_sound_toggle() -> void:
@@ -648,6 +772,9 @@ func _make_pill_label(pill: TextureRect, text: String, font_size: int, color: Co
 func _build_hud_pills(hud: Control) -> void:
 	var clock_at: Vector2 = _pick(LAND_PILL_CLOCK, PORT_PILL_CLOCK if _endless != null else PORT_PILL_CLOCK_CAMPAIGN)
 	var clock_pill := _make_pill("ClockPill", clock_at)
+	var clock_shadow := _make_drop_shadow(UiHelpers.kit_texture("pill"), Rect2(clock_at + Vector2(1, 1), PILL_SIZE), 1.5, 0.35)
+	if clock_shadow != null:
+		hud.add_child(clock_shadow)
 	hud.add_child(clock_pill)
 	timer_label = _make_pill_label(clock_pill, "00:00", 12, TEXT_PRIMARY, false, CLOCK_TEXT_X)
 	clock_pill.add_child(_make_art("Stopwatch", UiHelpers.hud_texture("icon_stopwatch"), STOPWATCH_RECT, true))
@@ -656,7 +783,11 @@ func _build_hud_pills(hud: Control) -> void:
 		stars_row = null
 		stars_base = null
 		stars_overlay = null
-		var score := _make_pill("ScorePill", _pick(LAND_PILL_SECOND, PORT_PILL_SECOND))
+		var score_at: Vector2 = _pick(LAND_PILL_SECOND, PORT_PILL_SECOND)
+		var score := _make_pill("ScorePill", score_at)
+		var score_shadow := _make_drop_shadow(UiHelpers.kit_texture("pill"), Rect2(score_at + Vector2(1, 1), PILL_SIZE), 1.5, 0.35)
+		if score_shadow != null:
+			hud.add_child(score_shadow)
 		hud.add_child(score)
 		score_label = _make_pill_label(score, _score_text(), 11, GOLD, true)
 	else:
@@ -671,9 +802,17 @@ func _make_flat_button_compact(button: Button) -> void:
 # The board window: a darkened copy of the background inside the kit frame, the cards on top.
 func _build_board_frame(parent: Control) -> void:
 	var rect: Rect2 = _pick(LAND_BOARD_FRAME, PORT_BOARD_FRAME)
+	# The visible border of the current PNG decides the real hole; the constants are
+	# only the fallback when the art is missing. This keeps the interior centred even
+	# when the painted frame changes (new art, cleaned shadow, thicker bevel).
+	var frame_data := UiHelpers.alpha_nine_patch(
+		UiHelpers.kit_texture("panel_board_frame"), rect.size, BOARD_FRAME_BORDER_MAX)
 	var inner: Rect2 = _pick(LAND_BOARD_INNER, PORT_BOARD_INNER)
+	if not frame_data.is_empty():
+		inner = frame_data["inner"]
 	var frame := Control.new()
 	frame.name = "BoardFrame"
+	frame.z_index = 0
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_place(frame, rect)
 	parent.add_child(frame)
@@ -683,11 +822,12 @@ func _build_board_frame(parent: Control) -> void:
 	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_place(shade, inner)
 	frame.add_child(shade)
-	frame.add_child(_make_art("BoardArt", _board_frame_texture(), Rect2(Vector2.ZERO, rect.size)))
+	if not frame_data.is_empty():
+		frame.add_child(_make_nine_patch_art("BoardArt", frame_data, rect))
 	board_container = Control.new()
 	board_container.name = "Board"
 	board_container.clip_contents = true
-	board_container.z_index = 1
+	board_container.z_index = 2
 	_place(board_container, inner.grow(-BOARD_PAD))
 	frame.add_child(board_container)
 
@@ -697,10 +837,24 @@ func _build_deck_slot(parent: Control, deck_id: String) -> void:
 	var rect: Rect2 = _pick(LAND_DECK_A if deck_id == "a" else LAND_DECK_B, PORT_DECK_A if deck_id == "a" else PORT_DECK_B)
 	var slot := Control.new()
 	slot.name = "Deck%s" % deck_id.to_upper()
+	slot.z_index = 8
 	slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_place(slot, rect)
 	parent.add_child(slot)
-	slot.add_child(_make_art("SlotArt", UiHelpers.kit_texture("slot_64"), Rect2(Vector2.ZERO, rect.size)))
+	# The square wooden plate is the deck's table; the pile sits on top of it.
+	var table_shadow := Panel.new()
+	table_shadow.name = "DeckTableShadow"
+	table_shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var table_style := StyleBoxFlat.new()
+	table_style.bg_color = Color(0, 0, 0, 0)
+	table_style.draw_center = false
+	table_style.shadow_color = Color(0.0, 0.0, 0.0, 0.30)
+	table_style.shadow_size = 2
+	table_style.shadow_offset = Vector2(1.0, 2.0)
+	table_shadow.add_theme_stylebox_override("panel", table_style)
+	_place(table_shadow, Rect2(Vector2.ZERO, rect.size))
+	slot.add_child(table_shadow)
+	slot.add_child(_make_art("DeckTable", UiHelpers.hires_texture(DECK_TABLE_ART), Rect2(Vector2.ZERO, rect.size), true))
 	var btn := _make_deck_button(deck_id)
 	btn.position = (SLOT_INNER.position + (SLOT_INNER.size - _deck_pile_size()) * 0.5).floor()
 	slot.add_child(btn)
@@ -709,92 +863,103 @@ func _build_deck_slot(parent: Control, deck_id: String) -> void:
 	else:
 		deck_b_btn = btn
 
-# The Reserve box: the kit panel 9-sliced to the box, its title on top and the cards below.
+# The Reserve box: the painted stone field 9-sliced to the box (no translucent fill
+# over it), with the cards centred inside the stone hole. No header/count.
 func _build_reserve_panel(parent: Control) -> void:
 	var rect: Rect2 = _pick(LAND_RESERVE, PORT_RESERVE)
 	var panel := Control.new()
 	panel.name = "Reserve"
+	panel.z_index = 8
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_place(panel, rect)
 	parent.add_child(panel)
-	var art := UiHelpers.kit_panel("panel_reserve", FRAME_MARGIN)
-	art.name = "ReserveArt"
-	_place(art, Rect2(Vector2.ZERO, rect.size))
-	panel.add_child(art)
-	reserve_header = Label.new()
-	reserve_header.name = "ReserveTitle"
-	reserve_header.add_theme_font_size_override("font_size", 8)
-	reserve_header.add_theme_color_override("font_color", TEXT_MUTED)
-	reserve_header.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_place(reserve_header, Rect2(8.0, 6.0, rect.size.x - 16.0, 11.0))
-	panel.add_child(reserve_header)
+	var frame_data := UiHelpers.trimmed_nine_patch(
+		UiHelpers.hires_texture(RESERVE_FIELD_ART), rect.size, RESERVE_FIELD_MARGINS)
+	var inner := Rect2(8.0, 8.0, rect.size.x - 16.0, rect.size.y - 16.0)
+	if not frame_data.is_empty():
+		inner = frame_data["inner"]
+		panel.add_child(_make_nine_patch_art("ReserveArt", frame_data, rect))
 	reserve_container = Control.new()
 	reserve_container.name = "ReserveCards"
 	reserve_container.clip_contents = true
-	_place(reserve_container, Rect2(7.0, 18.0, rect.size.x - 14.0, rect.size.y - 18.0 - 8.0))
+	# Use the painted hole, inset a little so cards never touch the ornaments.
+	_place(reserve_container, inner.grow(-3.0))
 	panel.add_child(reserve_container)
 
-# The Clearing Zone: the kit bar with its title on the left and the 7 slots in one row.
+# The Clearing Zone: the painted bar with the 7 slots inside its wooden hole, centred
+# on both axes. No title/counter; render() distributes the leftover width into gaps.
 func _build_zone_panel(parent: Control) -> void:
 	var rect: Rect2 = _pick(LAND_ZONE, PORT_ZONE)
 	var zone := Control.new()
 	zone.name = "ClearingZone"
+	zone.z_index = 8
 	zone.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_place(zone, rect)
 	parent.add_child(zone)
-	zone.add_child(_make_art("ZoneArt", UiHelpers.kit_texture("bar_zone" if _is_landscape else "bar_zone_portrait"), Rect2(Vector2.ZERO, rect.size)))
-	zone_header = Label.new()
-	zone_header.name = "ZoneTitle"
-	zone_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	zone_header.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	zone_header.add_theme_font_size_override("font_size", 8)
-	zone_header.add_theme_color_override("font_color", TEXT_PRIMARY)
-	zone_header.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_place(zone_header, Rect2(ZONE_TITLE_X, 6.0, ZONE_TITLE_WIDTH, rect.size.y - 12.0))
-	zone.add_child(zone_header)
+	var bar_data := _zone_bar_data(rect)
+	var inner := Rect2(8.0, 6.0, rect.size.x - 16.0, rect.size.y - 12.0)
+	if not bar_data.is_empty():
+		zone.add_child(_make_nine_patch_art("ZoneArt", bar_data, rect))
+		inner = bar_data["inner"]
+	else:
+		var fallback := ColorRect.new()
+		fallback.name = "ZoneArt"
+		fallback.color = Color("#b45f1d")
+		fallback.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_place(fallback, rect)
+		zone.add_child(fallback)
 	var card := _zone_card_size()
+	var slots_rect := inner.grow(-2.0)
 	zone_container = HFlowContainer.new()
 	zone_container.name = "ZoneSlots"
 	zone_container.alignment = FlowContainer.ALIGNMENT_CENTER
 	zone_container.custom_minimum_size = card
-	zone_container.add_theme_constant_override("h_separation", 8 if _is_landscape else 2)
+	zone_container.add_theme_constant_override("h_separation", 2)
 	zone_container.add_theme_constant_override("v_separation", 3)
-	var slots_x := ZONE_TITLE_X + ZONE_TITLE_WIDTH + 4.0
-	_place(zone_container, Rect2(slots_x, floorf((rect.size.y - card.y) * 0.5) - 1.0, rect.size.x - slots_x - 8.0, card.y))
+	_place(zone_container, Rect2(
+		slots_rect.position.x,
+		slots_rect.position.y + floorf((slots_rect.size.y - card.y) * 0.5),
+		slots_rect.size.x,
+		card.y))
 	zone.add_child(zone_container)
 
-# The power panel: landscape stacks the powers in the tall kit panel on the right of the
-# board, portrait lays them out in a strip (the same panel 9-sliced) under the Clearing Zone.
+# The power panel: the tall painted board stays vertical in both orientations (no
+# 90-degree rotation blur); landscape puts it right of the board, portrait puts it
+# as a column on the right, with the three buttons stacked.
 func _build_controls(parent: Control) -> void:
 	var rect: Rect2 = _pick(LAND_POWERS, PORT_POWERS)
 	var panel := Control.new()
 	panel.name = "Powers"
+	panel.z_index = 8
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_place(panel, rect)
 	parent.add_child(panel)
-	if _is_landscape:
-		panel.add_child(_make_art("PowersArt", UiHelpers.kit_texture("panel_powers"), Rect2(Vector2.ZERO, rect.size)))
+	var frame_data := UiHelpers.trimmed_nine_patch(
+		UiHelpers.hires_texture(POWERS_BOARD_ART), rect.size, POWERS_BOARD_MARGINS)
+	var inner: Rect2 = _pick(LAND_POWERS_INNER, PORT_POWERS_INNER)
+	if not frame_data.is_empty():
+		panel.add_child(_make_nine_patch_art("PowersArt", frame_data, rect))
+		inner = frame_data["inner"]
 	else:
 		var art := UiHelpers.kit_panel("panel_powers", FRAME_MARGIN)
 		art.name = "PowersArt"
 		_place(art, Rect2(Vector2.ZERO, rect.size))
 		panel.add_child(art)
-	var box: BoxContainer = VBoxContainer.new() if _is_landscape else HBoxContainer.new()
+	var box := VBoxContainer.new()
 	box.name = "PowerButtons"
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	box.add_theme_constant_override("separation", 2 if _is_landscape else 8)
-	_place(box, _pick(LAND_POWERS_INNER, PORT_POWERS_INNER))
+	box.add_theme_constant_override("separation", 2)
+	_place(box, inner)
 	panel.add_child(box)
 	for p in PowerManager.POWERS:
 		box.add_child(_make_power_button(p))
 
-# One power: its icon and the "xN" stock side by side (portrait adds the name below). The
-# full name stays in the tooltip.
+# One power: its icon and the "xN" stock side by side; the full name stays in the tooltip.
 func _make_power_button(p: String) -> Button:
 	var btn := Button.new()
 	btn.name = "Power_%s" % p
-	btn.custom_minimum_size = _pick(POWER_BUTTON_LANDSCAPE, POWER_BUTTON_PORTRAIT)
+	btn.custom_minimum_size = POWER_BUTTON_LANDSCAPE
 	btn.focus_mode = Control.FOCUS_NONE
 	btn.tooltip_text = _power_name(p)
 	var hover := StyleBoxFlat.new()
@@ -819,31 +984,37 @@ func _make_power_button(p: String) -> Button:
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(row)
 
-	var icon := Label.new()
-	icon.text = _power_icon(p)
-	icon.add_theme_font_override("font", UiHelpers.symbol_font())
-	icon.add_theme_font_size_override("font_size", 17 if _is_landscape else 22)
-	icon.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var icon_size := 33.0
+	var icon := TextureRect.new()
+	icon.name = "PowerIcon"
+	icon.texture = UiHelpers.hires_texture("res://assets/ui/icons/icon_power_%s.png" % p)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	icon.custom_minimum_size = Vector2(icon_size, icon_size)
+	icon.size = Vector2(icon_size, icon_size)
+	icon.position = Vector2.ZERO
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(icon)
+	var icon_box := Control.new()
+	icon_box.name = "PowerIconBox"
+	icon_box.custom_minimum_size = Vector2(icon_size, icon_size)
+	icon_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	icon_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var icon_shadow := _make_drop_shadow(
+		icon.texture, Rect2(Vector2(1, 2), Vector2(icon_size, icon_size)), 1.5, 0.35)
+	if icon_shadow != null:
+		icon_box.add_child(icon_shadow)
+	icon_box.add_child(icon)
+	row.add_child(icon_box)
 	var count_lbl := Label.new()
 	count_lbl.text = "x0"
-	count_lbl.add_theme_font_size_override("font_size", 10 if _is_landscape else 12)
+	count_lbl.add_theme_font_size_override("font_size", 10)
 	count_lbl.add_theme_color_override("font_color", GOLD)
 	UiHelpers.add_text_shadow(count_lbl, 3)
 	count_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	count_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(count_lbl)
 	btn.set_meta("count_label", count_lbl)
-	if not _is_landscape:
-		var name_lbl := Label.new()
-		name_lbl.text = _power_name(p)
-		name_lbl.add_theme_font_size_override("font_size", 8)
-		name_lbl.add_theme_color_override("font_color", TEXT_PRIMARY)
-		UiHelpers.add_text_shadow(name_lbl, 2)
-		name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		col.add_child(name_lbl)
 	return btn
 
 func _make_deck_button(deck_id: String) -> Button:
@@ -888,7 +1059,7 @@ func render() -> void:
 	for card in board_cards:
 		if card.is_removed() or card.location != Card.Location.BOARD:
 			continue
-		var node := _make_card_button(card, int(depths.get(card.id, 0)), _on_card.bind(card.id), card_size, true)
+		var node := _make_card_button(card, int(depths.get(card.id, 0)), _on_card.bind(card.id), card_size, false)
 		var visual_position: Vector2 = grid_positions.get(card.id, Vector2(
 			(card.position.x - origin.x) * position_scale.x,
 			(card.position.y - origin.y) * position_scale.y
@@ -897,12 +1068,19 @@ func render() -> void:
 		node.z_index = card.layer
 		board_container.add_child(node)
 
-	zone_header.text = "%s\n%d/%d" % [Localizer.t("clearing_zone"), controller.zone.size(), controller.clearing_capacity]
 	var zone_card_size := _zone_card_size()
+	# Fill the whole bar: distribute the leftover width into equal gaps between slots
+	# (the container's ALIGNMENT_CENTER then keeps the row optically centred).
+	var slots := maxi(1, controller.clearing_capacity)
+	var gap := 2
+	if slots > 1:
+		var usable: float = zone_container.size.x
+		gap = maxi(2, floori((usable - slots * zone_card_size.x) / float(slots - 1)))
+	zone_container.add_theme_constant_override("h_separation", gap)
 	for i in controller.clearing_capacity:
 		if i < controller.zone.cards.size():
 			var zone_card: Card = controller.zone.cards[i]
-			var display := _make_card_display(zone_card.type, zone_card_size)
+			var display := _make_card_display(zone_card.type, zone_card_size, true)
 			# A card still flying in shows up in its slot only when its ghost lands.
 			if _hidden_cards.has(zone_card.id):
 				display.modulate = Color(1, 1, 1, 0)
@@ -912,7 +1090,6 @@ func render() -> void:
 	# Slot rects are read right after a move, in the same frame: lay the slots out now.
 	zone_container.notification(Container.NOTIFICATION_SORT_CHILDREN)
 
-	reserve_header.text = "%s  %d" % [Localizer.t("reserve"), controller.reserve.size()]
 	# Any Reserve card can go back to the zone, so every one is a button laid out where it
 	# can be seen and tapped (returning only the last one could soft-lock a level).
 	var reserve_layout := _reserve_layout(controller.reserve.size())
@@ -920,7 +1097,7 @@ func render() -> void:
 	var reserve_positions: Array = reserve_layout["positions"]
 	for i in controller.reserve.size():
 		var card: Card = controller.reserve[i]
-		var node := _make_card_button(card, 0, _on_reserve_return.bind(card.id), reserve_size)
+		var node := _make_card_button(card, 0, _on_reserve_return.bind(card.id), reserve_size, true)
 		node.position = reserve_positions[i]
 		node.z_index = i
 		reserve_container.add_child(node)
@@ -977,7 +1154,7 @@ func _reserve_layout(count: int) -> Dictionary:
 	var max_size := _reserve_max_card_size()
 	if count <= 0 or box.x <= 0.0 or box.y <= 0.0:
 		return {"size": max_size, "positions": []}
-	var gap := 3.0
+	var gap := 1.0
 	var side := minf(max_size.x, box.y)
 	var cols := 1
 	var rows := count
@@ -990,11 +1167,17 @@ func _reserve_layout(count: int) -> Dictionary:
 	var step_y := side + gap
 	if rows > 1 and rows * side + (rows - 1) * gap > box.y:
 		step_y = maxf(side * 0.4, (box.y - side) / float(rows - 1))
-	var used_cols := mini(cols, count)
-	var x0 := maxf(0.0, (box.x - (used_cols * side + (used_cols - 1) * gap)) / 2.0)
+	# Centre the whole grid vertically and each row horizontally inside the field.
+	var total_h := side + float(rows - 1) * step_y
+	var y0 := maxf(0.0, (box.y - total_h) * 0.5)
 	var positions: Array = []
 	for i in count:
-		positions.append(Vector2(x0 + (i % cols) * (side + gap), floori(float(i) / float(cols)) * step_y))
+		var row := floori(float(i) / float(cols))
+		var col := i % cols
+		var in_row := mini(cols, count - row * cols)
+		var row_width := in_row * side + float(in_row - 1) * gap
+		var row_x0 := maxf(0.0, (box.x - row_width) * 0.5)
+		positions.append(Vector2(row_x0 + col * (side + gap), y0 + float(row) * step_y))
 	return {"size": Vector2(side, side), "positions": positions}
 
 func _zone_card_size() -> Vector2:
@@ -1069,13 +1252,17 @@ func _show_layout_warning_if_needed() -> void:
 	_layout_warning.text = msg
 	_layout_warning.visible = true
 	_layout_warning.reset_size()
-	_layout_warning.position = Vector2(get_viewport_rect().size.x - _layout_warning.size.x - 8, _pick(LAND_HUD_HEIGHT, PORT_HUD_HEIGHT))
+	# Portrait has no 44 px bar any more: keep the warning above the footer, never off-screen.
+	var warn_y: float = _pick(
+		LAND_HUD_HEIGHT,
+		maxf(0.0, get_viewport_rect().size.y - _layout_warning.size.y - 8.0))
+	_layout_warning.position = Vector2(get_viewport_rect().size.x - _layout_warning.size.x - 8, warn_y)
 
 # `depth` > 0 marks a blocked board card: it is dimmed by the DEPTH_* tables (see
 # _dim_material). `shadow` adds the soft drop shadow board cards use so stacked layers read.
 # A type with art is drawn as that art alone (it already carries its own frame); the others
 # get the coloured panel with the emoji placeholder.
-func _make_card_rect(type: String, depth: int, card_size: Vector2, shadow: bool = false) -> Control:
+func _make_card_rect(type: String, depth: int, card_size: Vector2, shadow: bool = false, zone_shadow: bool = false) -> Control:
 	var root := Panel.new()
 	root.custom_minimum_size = card_size
 	root.size = card_size
@@ -1083,20 +1270,38 @@ func _make_card_rect(type: String, depth: int, card_size: Vector2, shadow: bool 
 	var card_style := StyleBoxFlat.new()
 	# bg_color always names the type (smoke_rapid_taps reads it back from the zone slots).
 	card_style.bg_color = CardTypeRegistry.color(type)
-	if UiHelpers.has_card_art(type):
-		# Painted face: the fill is not drawn and there is no border or rounding, only the
-		# soft shadow behind the art.
+	var has_art := UiHelpers.has_card_art(type)
+	if has_art:
+		# Painted face: the fill is not drawn and there is no border, rounding or extra
+		# shadow, so only the frame painted in the PNG is visible.
 		card_style.draw_center = false
 		card_style.set_corner_radius_all(0)
+		card_style.shadow_size = 0
 	else:
 		card_style.border_color = Color("#fff2d5")
 		card_style.set_border_width_all(2)
 		card_style.set_corner_radius_all(5)
-	if shadow:
-		card_style.shadow_color = Color(0.0, 0.0, 0.0, 0.34)
-		card_style.shadow_size = 3
-		card_style.shadow_offset = Vector2(0.0, 2.0)
+	if (shadow or zone_shadow) and not has_art:
+		# Placeholder cards have no alpha silhouette; a soft rounded box shadow is fine.
+		card_style.shadow_color = Color(0.0, 0.0, 0.0, 0.30)
+		card_style.shadow_size = 2
+		card_style.shadow_offset = Vector2(1.0, 2.0)
 	root.add_theme_stylebox_override("panel", card_style)
+	if (shadow or zone_shadow) and has_art:
+		# Painted cards use their own alpha silhouette, never a transparent rectangle.
+		var card_tex := UiHelpers.card_texture(type)
+		var shadow_tex := UiHelpers.shadow_texture(
+			card_tex, 2.0 if zone_shadow else 1.5, 0.35 if zone_shadow else 0.30)
+		if shadow_tex != null:
+			var shadow_node := Control.new()
+			shadow_node.name = "CardShadow"
+			shadow_node.custom_minimum_size = card_size
+			shadow_node.size = card_size
+			shadow_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			var shadow_offset := Vector2(2.0, 2.0) if zone_shadow else Vector2(1.0, 2.0)
+			shadow_node.draw.connect(func():
+				shadow_node.draw_texture_rect(shadow_tex, Rect2(shadow_offset, card_size), false))
+			root.add_child(shadow_node)
 	var art := _make_card_art(type, card_size)
 	root.add_child(art)
 	if depth > 0:
@@ -1160,19 +1365,31 @@ func _make_card_button(card: Card, depth: int, on_click: Callable, card_size: Ve
 	btn.pressed.connect(on_click)
 	return btn
 
-func _make_card_display(type: String, card_size: Vector2) -> Control:
-	return _make_card_rect(type, 0, card_size)
+func _make_card_display(type: String, card_size: Vector2, zone_shadow: bool = false) -> Control:
+	return _make_card_rect(type, 0, card_size, false, zone_shadow)
 
-# `on_zone` styles the slot for the orange Clearing Zone bar; otherwise it is the dark
-# placeholder (empty deck).
+# `on_zone` draws the painted card frame as the empty selection slot; otherwise it is
+# the dark kit slot used by an empty Support Deck.
 func _make_empty_slot(card_size: Vector2, on_zone: bool = false) -> Control:
+	if on_zone:
+		# Cards sit directly on the bar: an empty zone slot is reserved space only.
+		# The style keeps the legacy slot contract but draws nothing (no square plate).
+		var empty := Panel.new()
+		empty.custom_minimum_size = card_size
+		empty.size = card_size
+		empty.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var empty_style := StyleBoxFlat.new()
+		empty_style.bg_color = Color(0.48, 0.22, 0.05, 0.34)
+		empty_style.draw_center = false
+		empty.add_theme_stylebox_override("panel", empty_style)
+		return empty
 	var slot := Panel.new()
 	slot.custom_minimum_size = card_size
 	slot.size = card_size
 	slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# The kit's 48 px square, 9-sliced to the slot size and dimmed so cards stand out on it.
 	var style := UiHelpers.kit_stylebox("slot_48", 4, 0)
-	style.modulate_color = Color(0.82, 0.74, 0.66, 0.9) if on_zone else Color(0.62, 0.55, 0.5, 0.75)
+	style.modulate_color = Color(0.62, 0.55, 0.5, 0.75)
 	slot.add_theme_stylebox_override("panel", style)
 	return slot
 
@@ -1182,22 +1399,13 @@ func _pile_edges(deck: DeckManager) -> int:
 	if remaining <= 1:
 		return 0
 	var total := maxi(deck.card_types.size(), 2)
-	return clampi(roundi(float(PILE_MAX_EDGES) * float(remaining - 1) / float(total - 1)), 1, PILE_MAX_EDGES)
+	var edges := clampi(roundi(float(PILE_MAX_EDGES) * float(remaining - 1) / float(total - 1)), 1, PILE_MAX_EDGES)
+	# Never pretend there are more cards than the ones actually left under the top.
+	return mini(edges, remaining - 1)
 
-func _make_pile_edge(card_size: Vector2, shade: float) -> Control:
-	var edge := Panel.new()
-	edge.size = card_size
-	edge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color("#6a4b3a").darkened(shade)
-	style.border_color = Color("#2b1a12")
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(4)
-	edge.add_theme_stylebox_override("panel", style)
-	return edge
-
-# Draws a deck as a pile: card edges stacked behind a face-up top card, fanning to the
-# left (deck A) or to the right (deck B). The pile fades away once the deck is empty.
+# Draws a deck as a pile: the real faces of the next cards are stacked behind the
+# face-up top card, fanning left (deck A) or right (deck B). The top card covers most
+# of each lower face, leaving its frame as the visible stacked edge.
 func _update_deck_button(btn: Button, deck: DeckManager, edges_left: bool) -> void:
 	_clear(btn)
 	var card_size := _deck_card_size()
@@ -1224,10 +1432,16 @@ func _update_deck_button(btn: Button, deck: DeckManager, edges_left: bool) -> vo
 	btn.visible = true
 	btn.disabled = false
 	var edges := _pile_edges(deck)
+	# Far cards first, then nearer ones, so the top card covers them naturally.
 	for i in range(edges, 0, -1):
-		var edge := _make_pile_edge(card_size, 0.04 * float(i))
-		edge.position = face_rect.position + Vector2((-1.0 if edges_left else 1.0) * float(i) * PILE_EDGE_STEP, 0.0)
-		btn.add_child(edge)
+		var type_index := deck.current_index + i
+		if type_index >= deck.card_types.size():
+			continue
+		var lower := _make_card_rect(str(deck.card_types[type_index]), 0, card_size)
+		lower.position = face_rect.position + Vector2(
+			(-1.0 if edges_left else 1.0) * float(i) * PILE_EDGE_STEP, 0.0)
+		lower.modulate = Color(1, 1, 1, 1).darkened(0.05 * float(i))
+		btn.add_child(lower)
 	var face := _make_card_rect(deck.current_type(), 0, card_size, true)
 	face.position = face_rect.position
 	btn.add_child(face)
@@ -1573,7 +1787,9 @@ func _apply_move(card_type: String, card_id: String, source_rect: Rect2, snap: D
 	_record_endless_match(matched.size())
 	var snap_ids: Array = snap["ids"]
 	var snap_rects: Array = snap["rects"]
-	var target_index := snap_ids.size()
+	var target_index := int(result.get("zone_index", -1))
+	if target_index < 0:
+		target_index = _zone_insertion_index(snap["types"], card_type)
 	if card_id == "":
 		card_id = _drawn_card_id(snap_ids, matched, target_index)
 	var target := _zone_slot_rect(snap_rects, target_index)
@@ -1600,14 +1816,23 @@ func _apply_move(card_type: String, card_id: String, source_rect: Rect2, snap: D
 	else:
 		_hidden_cards[card_id] = true
 	render()
+	_animate_zone_reorder(snap, group)
 	var warn := matched.is_empty() and controller.zone.size() == controller.clearing_capacity - 1
 	_launch_flight(card_id, card_type, source_rect, target, group, warn)
 	_check_end()
 
+# Where a card of `card_type` goes: right after the last card of its kind, else at the end.
+func _zone_insertion_index(types: Array, card_type: String) -> int:
+	var index := types.size()
+	for i in types.size():
+		if str(types[i]) == card_type:
+			index = i + 1
+	return index
+
 # Id of the card a deck draw just put in the zone (it is gone again if it matched).
 func _drawn_card_id(snap_ids: Array, matched: Array, target_index: int) -> String:
 	if matched.is_empty():
-		if target_index < controller.zone.cards.size():
+		if target_index >= 0 and target_index < controller.zone.cards.size():
 			return controller.zone.cards[target_index].id
 		return ""
 	for id in matched:
@@ -1709,6 +1934,7 @@ func _clear_fx() -> void:
 			_drop_fx_node(child)
 	_flights.clear()
 	_hidden_cards.clear()
+	_shifts.clear()
 	if controller != null and zone_container != null:
 		render()
 
@@ -1721,6 +1947,7 @@ func _cancel_zone_flights() -> void:
 			continue
 		_flights.erase(id)
 		_drop_fx_node(flight.ghost)
+	_clear_shifts()
 	_hidden_cards.clear()
 
 func _launch_flight(card_id: String, card_type: String, source_rect: Rect2, target: Rect2, group: MatchGroup, warn: bool) -> void:
@@ -1800,6 +2027,91 @@ func _zone_index_of(card_id: String) -> int:
 			return i
 	return -1
 
+func _zone_child_rect(index: int) -> Rect2:
+	if index >= 0 and index < zone_container.get_child_count():
+		return (zone_container.get_child(index) as Control).get_global_rect()
+	return Rect2(zone_container.global_position, _zone_card_size())
+
+func _hide_zone_card(card_id: String) -> void:
+	var index := _zone_index_of(card_id)
+	if index >= 0 and index < zone_container.get_child_count():
+		(zone_container.get_child(index) as Control).modulate = Color(1, 1, 1, 0)
+
+func _show_zone_card(card_id: String) -> void:
+	var index := _zone_index_of(card_id)
+	if index >= 0 and index < zone_container.get_child_count():
+		(zone_container.get_child(index) as Control).modulate = Color.WHITE
+
+# Every card the move pushed to another slot gets a ghost that walks to it: cards right of the
+# fresh gap slide while the new card flies in, and the cards the removal frees up wait for the
+# flash, then hop left and drop into their slot with an impact.
+func _animate_zone_reorder(snap: Dictionary, group: MatchGroup) -> void:
+	var ids: Array = snap["ids"]
+	var rects: Array = snap["rects"]
+	for i in controller.zone.cards.size():
+		var card: Card = controller.zone.cards[i]
+		var old_index := ids.find(card.id)
+		if old_index < 0 or old_index == i or i >= zone_container.get_child_count():
+			continue
+		if _flights.has(card.id) or old_index >= rects.size():
+			continue
+		var shift := _make_shift(card, rects[old_index], _zone_child_rect(i), old_index > i)
+		if shift == null:
+			continue
+		if group != null:
+			group.shifts.append(shift)
+		else:
+			_start_shift(shift, 0.0)
+
+func _make_shift(card: Card, from: Rect2, to: Rect2, hop: bool) -> ZoneShift:
+	var size := to.size if to.size.x > 0.0 else from.size
+	if size.x <= 0.0 or from.size.x <= 0.0:
+		return null
+	var ghost := _make_card_rect(card.type, 0, size)
+	_fx().add_child(ghost)
+	ghost.global_position = from.position
+	var shift := ZoneShift.new()
+	shift.card_id = card.id
+	shift.ghost = ghost
+	shift.from = from
+	shift.to = to
+	shift.lift = maxf(8.0, size.y * ZONE_HOP_LIFT_RATIO) if hop else 0.0
+	_hidden_cards[card.id] = true
+	_hide_zone_card(card.id)
+	_shifts.append(shift)
+	return shift
+
+func _start_shift(shift: ZoneShift, delay: float) -> void:
+	if shift == null or shift.ghost == null or not is_instance_valid(shift.ghost):
+		return
+	var tween := shift.ghost.create_tween()
+	if delay > 0.0:
+		tween.tween_interval(delay)
+	tween.tween_method(_step_shift.bind(shift), 0.0, 1.0, ZONE_HOP_SECONDS if shift.lift > 0.0 else ZONE_SHIFT_SECONDS) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_callback(_land_shift.bind(shift))
+
+func _step_shift(progress: float, shift: ZoneShift) -> void:
+	if shift.ghost == null or not is_instance_valid(shift.ghost):
+		return
+	var pos := shift.from.position.lerp(shift.to.position, progress)
+	if shift.lift > 0.0:
+		pos.y -= shift.lift * sin(progress * PI)
+	shift.ghost.global_position = pos
+
+func _land_shift(shift: ZoneShift) -> void:
+	_shifts.erase(shift)
+	_hidden_cards.erase(shift.card_id)
+	_show_zone_card(shift.card_id)
+	if shift.lift > 0.0:
+		_play_card_impact(shift.to.get_center())
+	_drop_fx_node(shift.ghost)
+
+func _clear_shifts() -> void:
+	for shift: ZoneShift in _shifts.duplicate():
+		_drop_fx_node(shift.ghost)
+	_shifts.clear()
+
 # Stand-in for a card that already left the zone state, drawn where it sat until the flash.
 func _spawn_card_overlay(card_type: String, rect: Rect2) -> Control:
 	var overlay := _make_card_rect(card_type, 0, rect.size)
@@ -1829,7 +2141,6 @@ func _play_match(group: MatchGroup) -> void:
 	match_flashes += 1
 	_play_sfx("match")
 	_say("match")
-	var center := Vector2.ZERO
 	for rect: Rect2 in group.rects:
 		var flash := Panel.new()
 		flash.size = rect.size
@@ -1848,31 +2159,94 @@ func _play_match(group: MatchGroup) -> void:
 		tween.tween_property(flash, "scale", Vector2(1.3, 1.3), 0.3)
 		tween.tween_property(flash, "modulate:a", 0.0, MATCH_FLASH_SECONDS)
 		tween.chain().tween_callback(flash.queue_free)
-		center += rect.get_center()
 	for node: Control in group.nodes:
 		if not is_instance_valid(node):
 			continue
 		var fade := node.create_tween()
 		fade.tween_property(node, "modulate:a", 0.0, MATCH_FADE_SECONDS).set_delay(0.08)
 		fade.tween_callback(node.queue_free)
-	if not group.rects.is_empty():
-		_play_gold_burst(center / group.rects.size())
+	for shift: ZoneShift in group.shifts:
+		_start_shift(shift, ZONE_HOP_DELAY)
+	group.shifts.clear()
+	# One burst + smoke per matched card, scaled to that card (not one central FX).
+	for rect: Rect2 in group.rects:
+		_play_match_burst(rect.get_center(), rect.size.x)
 
-func _play_gold_burst(center: Vector2) -> void:
-	var burst := UiHelpers.symbol_label("✦", 40)
-	burst.size = Vector2(40, 40)
-	burst.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	burst.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	burst.modulate = Color(1, 0.84, 0.3, 0.95)
-	burst.pivot_offset = Vector2(20, 20)
-	burst.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_fx().add_child(burst)
-	burst.global_position = center - Vector2(20, 20)
-	var t := burst.create_tween()
-	t.set_parallel(true)
-	t.tween_property(burst, "scale", Vector2(2.2, 2.2), 0.35)
-	t.tween_property(burst, "modulate:a", 0.0, 0.35)
-	t.chain().tween_callback(burst.queue_free)
+# Painted burst + smoke over one matched card, played as the three cards fade.
+# Kept short and entirely on the FX layer so rapid taps never wait for it.
+func _play_match_burst(center: Vector2, card_side: float) -> void:
+	var side := maxf(72.0, card_side * MATCH_FX_CARD_SPAN)
+	# Same card centre for both layers: no vertical offset, delay or spin.
+	_spawn_match_fx(MATCH_BURST_ART, center, side, 0.15, 1.08)
+	_spawn_match_fx(MATCH_SMOKE_ART, center, side * 1.14, 0.15, 1.12)
+
+# The painted FX files carry wide transparent margins, so centring the whole texture rect
+# made the visible puff sit visibly above the card. This returns the alpha bounding box
+# (the visible picture) in texture px, cached per texture.
+static func _fx_optical_rect(texture: Texture2D) -> Rect2:
+	var key := texture.resource_path
+	if key == "":
+		key = str(texture.get_rid())
+	if _fx_optical_cache.has(key):
+		return _fx_optical_cache[key]
+	var used := Rect2(Vector2.ZERO, texture.get_size())
+	var image := texture.get_image()
+	if image != null:
+		if image.is_compressed():
+			image.decompress()
+		image.convert(Image.FORMAT_RGBA8)
+		# Sample the alpha on a grid: the files carry a near-invisible 1-4/255 border, so
+		# Image.get_used_rect() (alpha > 0) still reports the whole file.
+		var w := image.get_width()
+		var h := image.get_height()
+		var step := maxi(1, int(minf(float(w), float(h)) / 96.0))
+		var min_x := w
+		var min_y := h
+		var max_x := -1
+		var max_y := -1
+		for y in range(0, h, step):
+			for x in range(0, w, step):
+				if image.get_pixel(x, y).a > 0.02:
+					min_x = mini(min_x, x)
+					min_y = mini(min_y, y)
+					max_x = maxi(max_x, x)
+					max_y = maxi(max_y, y)
+		if max_x >= min_x and max_y >= min_y:
+			used = Rect2(Vector2(min_x, min_y), Vector2(max_x - min_x + step, max_y - min_y + step))
+	_fx_optical_cache[key] = used
+	return used
+
+func _spawn_match_fx(path: String, center: Vector2, side: float, start_scale: float, end_scale: float) -> void:
+	var texture := UiHelpers.hires_texture(path)
+	if texture == null:
+		return
+	# Draw only the visible alpha box and centre THAT on the card centre.
+	var optical := _fx_optical_rect(texture)
+	var aspect := optical.size.x / maxf(1.0, optical.size.y)
+	var drawn := Vector2(side, side / aspect) if aspect >= 1.0 else Vector2(side * aspect, side)
+	var atlas := AtlasTexture.new()
+	atlas.atlas = texture
+	atlas.region = optical
+	var node := TextureRect.new()
+	node.texture = atlas
+	node.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	node.stretch_mode = TextureRect.STRETCH_SCALE
+	node.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	node.size = drawn
+	node.pivot_offset = drawn * 0.5
+	node.modulate = Color(1, 1, 1, 0)
+	node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_fx().add_child(node)
+	# Put the pivot (the visible centre) on the card centre while the node is still at scale 1,
+	# then scale around it: the FX expands in place and can never drift off the card.
+	node.global_position = center - drawn * 0.5
+	node.scale = Vector2(start_scale, start_scale)
+	var tween := node.create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(node, "modulate:a", 1.0, 0.05)
+	tween.tween_property(node, "scale", Vector2(end_scale, end_scale), MATCH_FX_SECONDS)
+	tween.chain().tween_property(node, "modulate:a", 0.0, 0.20)
+	tween.chain().tween_callback(node.queue_free)
 
 func _play_card_impact(center: Vector2) -> void:
 	var impact := UiHelpers.symbol_label("✦", 24)
@@ -1994,20 +2368,7 @@ func _show_end(win: bool) -> void:
 	info.add_child(title)
 
 	if win:
-		var plaque := TextureRect.new()
-		plaque.name = "EndStars"
-		plaque.texture = UiHelpers.hud_texture(STARS_PATH_FORMAT % clampi(controller.stars, 1, 3))
-		plaque.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-		plaque.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		plaque.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		plaque.custom_minimum_size = END_PLAQUE_LANDSCAPE if _is_landscape else END_PLAQUE_PORTRAIT
-		plaque.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		plaque.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		plaque.pivot_offset = plaque.custom_minimum_size * 0.5
-		plaque.modulate = Color(1, 1, 1, 0)
-		plaque.scale = Vector2(0.3, 0.3)
-		info.add_child(plaque)
-		_reveal_plaque(plaque)
+		_add_end_stars(info)
 
 		var time_line := Label.new()
 		time_line.text = "%s: %s" % [Localizer.t("time"), _format_time(controller.timer.elapsed_seconds())]
@@ -2066,6 +2427,11 @@ func _show_endless_end(win: bool) -> void:
 # Shared end-of-round panel shell: dark shade + centered warm panel. Returns the
 # VBox the caller fills with rows.
 func _open_end_panel() -> VBoxContainer:
+	# The result takes the whole screen: the HUD row would only peek out behind the stars.
+	var hud := find_child("Hud", true, false) as Control
+	if hud != null:
+		hud.visible = false
+
 	var shade := ColorRect.new()
 	shade.color = Color(0, 0, 0, 0.72)
 	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -2078,10 +2444,18 @@ func _open_end_panel() -> VBoxContainer:
 	center.z_index = 1001
 	add_child(center)
 
+	# The column centers the panel with the earned stars plaque riding on its top edge.
+	var column := VBoxContainer.new()
+	column.name = "EndColumn"
+	column.alignment = BoxContainer.ALIGNMENT_CENTER
+	column.add_theme_constant_override("separation", 0)
+	center.add_child(column)
+
 	var panel := _make_kit_panel(22, 16, 18)
+	panel.name = "EndPanel"
 	panel.custom_minimum_size = Vector2(240, 0)
 	panel.theme = UiHelpers.warm_theme()
-	center.add_child(panel)
+	column.add_child(panel)
 
 	var info := VBoxContainer.new()
 	info.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -2089,6 +2463,34 @@ func _open_end_panel() -> VBoxContainer:
 	info.add_theme_constant_override("separation", 3 if _is_landscape and Game.mascot_enabled() else 6)
 	panel.add_child(info)
 	return info
+
+# The earned stars plaque, sitting on top of the result panel and straddling its edge.
+func _add_end_stars(info: Container) -> void:
+	var plaque := TextureRect.new()
+	plaque.name = "EndStars"
+	plaque.texture = UiHelpers.hud_texture(STARS_PATH_FORMAT % clampi(controller.stars, 1, 3))
+	plaque.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	plaque.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	plaque.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	plaque.custom_minimum_size = END_PLAQUE_LANDSCAPE if _is_landscape else END_PLAQUE_PORTRAIT
+	plaque.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	plaque.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	plaque.pivot_offset = plaque.custom_minimum_size * 0.5
+	plaque.modulate = Color(1, 1, 1, 0)
+	plaque.scale = Vector2(0.3, 0.3)
+	var column := info.get_parent().get_parent() as VBoxContainer
+	if column == null:
+		return
+	column.add_child(plaque)
+	column.move_child(plaque, 0)
+	# The stars sit in front of the panel, over its top edge.
+	plaque.z_index = 2
+	column.add_theme_constant_override("separation", -roundi(plaque.custom_minimum_size.y * float(_pick(END_STARS_OVERLAP_LANDSCAPE, END_STARS_OVERLAP_PORTRAIT))))
+	if _is_landscape:
+		# The plaque eats into the short landscape screen: tighten the rows to keep it inside.
+		var sep := info.get_theme_constant("separation")
+		info.add_theme_constant_override("separation", maxi(1, sep - 2))
+	_reveal_plaque(plaque)
 
 func _make_end_label(text: String, font_size: int, color: Color, symbols: bool = false) -> Label:
 	var label := UiHelpers.symbol_label(text, font_size) if symbols else Label.new()
@@ -2135,7 +2537,9 @@ func _add_end_mascot(parent: Container, win: bool, event: String, context: Dicti
 		return
 	var ace := Mascot.new()
 	ace.idle_tips = false
-	ace.custom_minimum_size = Vector2(33, 39)
+	# End-panel portrait keeps the 2:3 hero aspect, just smaller than the in-game one.
+	ace.custom_minimum_size = Vector2(36, 54)
+	ace.size = Vector2(36, 54)
 	ace.set_mood(Mascot.Mood.HAPPY if win else Mascot.Mood.SAD)
 	var line := ace.localized_line(event, context)
 	var row := HBoxContainer.new()
@@ -2264,6 +2668,13 @@ func _play_intro() -> void:
 	if is_instance_valid(overlay):
 		overlay.queue_free()
 	_say_instruction()
+	# After the how-to line, the hero says one neutral intro line (hero_intro_*).
+	# Skip it if a match/warning bubble is already showing or the level ended.
+	await get_tree().create_timer(INSTRUCTION_SECONDS + 0.25).timeout
+	if _ended or not is_inside_tree() or mascot == null or not is_instance_valid(mascot):
+		return
+	if not mascot.bubble_global_rect().has_area():
+		mascot.say("intro")
 
 func _show_error(msg: String) -> void:
 	var label := Label.new()
@@ -2291,6 +2702,11 @@ func _build_stars_plaque(hud: Control) -> void:
 	stars_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_place(stars_row, rect)
 	stars_row.pivot_offset = rect.size * 0.5
+	var plaque_shadow := _make_drop_shadow(
+		UiHelpers.hud_texture(STARS_PATH_FORMAT % 3),
+		Rect2(rect.position + Vector2(1, 1), rect.size), 3.0, 0.35)
+	if plaque_shadow != null:
+		hud.add_child(plaque_shadow)
 	hud.add_child(stars_row)
 	var full := Rect2(Vector2.ZERO, rect.size)
 	stars_base = _make_art("StarsBase", UiHelpers.hud_texture(STARS_PATH_FORMAT % 3), full, true)

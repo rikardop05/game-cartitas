@@ -6,8 +6,8 @@ extends SceneTree
 # full zone must not lose or stall, and Hold + Reserve taps must be able to win.
 
 const THROWAWAY_SAVE := "user://smoke_reserve_save.json"
-const ZONE_TYPES := ["leaf", "gem", "crystal", "gem", "crystal", "leaf", "moon"]
-const RESERVE_TYPES := ["moon", "leaf", "gem", "crystal", "moon"]
+const ZONE_TYPES := ["leaf", "gem", "crystal", "gem", "crystal", "leaf", "frog"]
+const RESERVE_TYPES := ["frog", "leaf", "gem", "crystal", "frog"]
 const VIEWS := [
 	{"orientation": "landscape", "window": Vector2i(640, 360)},
 	{"orientation": "portrait", "window": Vector2i(360, 640)},

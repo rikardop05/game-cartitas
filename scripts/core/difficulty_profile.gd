@@ -18,7 +18,7 @@ extends RefCounted
 # at the start; complexity = informative 1..11 rating; seed = base seed.
 const LEVELS := {
 	1: {
-		"board_types": ["cat", "dog", "bird"],
+		"board_types": ["cat", "wolf", "owl"],
 		"board_cards": 9,
 		"columns": 4,
 		"rows": 2,
@@ -31,7 +31,7 @@ const LEVELS := {
 		"seed": 1001,
 	},
 	2: {
-		"board_types": ["cat", "dog", "bird", "fish", "flower"],
+		"board_types": ["cat", "wolf", "owl", "whale", "mouse"],
 		"board_cards": 15,
 		"columns": 5,
 		"rows": 3,
@@ -43,7 +43,7 @@ const LEVELS := {
 		"seed": 2001,
 	},
 	3: {
-		"board_types": ["cat", "dog", "bird", "fish", "flower", "moon", "star"],
+		"board_types": ["cat", "wolf", "owl", "whale", "mouse", "frog", "boar"],
 		"board_cards": 21,
 		"columns": 5,
 		"rows": 3,
@@ -56,7 +56,7 @@ const LEVELS := {
 		"seed": 3001,
 	},
 	4: {
-		"board_types": ["cat", "dog", "bird", "fish", "flower", "moon", "star", "sun"],
+		"board_types": ["cat", "wolf", "owl", "whale", "mouse", "frog", "boar", "duck"],
 		"board_cards": 27,
 		"columns": 5,
 		"rows": 3,
@@ -70,7 +70,7 @@ const LEVELS := {
 		"seed": 4001,
 	},
 	5: {
-		"board_types": ["cat", "dog", "bird", "fish", "flower", "moon", "star", "sun"],
+		"board_types": ["cat", "wolf", "owl", "whale", "mouse", "frog", "boar", "duck"],
 		"board_cards": 33,
 		"columns": 6,
 		"rows": 3,
@@ -84,7 +84,7 @@ const LEVELS := {
 		"seed": 5001,
 	},
 	6: {
-		"board_types": ["cat", "dog", "bird", "fish", "flower", "moon", "star", "sun", "leaf"],
+		"board_types": ["cat", "wolf", "owl", "whale", "mouse", "frog", "boar", "duck", "leaf"],
 		"board_cards": 39,
 		"columns": 7,
 		"rows": 3,
@@ -98,7 +98,7 @@ const LEVELS := {
 		"seed": 6001,
 	},
 	7: {
-		"board_types": ["cat", "dog", "bird", "fish", "flower", "moon", "star", "sun", "leaf"],
+		"board_types": ["cat", "wolf", "owl", "whale", "mouse", "frog", "boar", "duck", "leaf"],
 		"board_cards": 45,
 		"columns": 7,
 		"rows": 4,
@@ -112,7 +112,7 @@ const LEVELS := {
 		"seed": 7001,
 	},
 	8: {
-		"board_types": ["cat", "dog", "bird", "fish", "flower", "moon", "star", "sun", "leaf"],
+		"board_types": ["cat", "wolf", "owl", "whale", "mouse", "frog", "boar", "duck", "leaf"],
 		"board_cards": 48,
 		"columns": 7,
 		"rows": 4,
@@ -125,7 +125,7 @@ const LEVELS := {
 		"seed": 8001,
 	},
 	9: {
-		"board_types": ["cat", "dog", "bird", "fish", "flower", "moon", "star", "sun", "leaf", "heart"],
+		"board_types": ["cat", "wolf", "owl", "whale", "mouse", "frog", "boar", "duck", "leaf", "heart"],
 		"board_cards": 54,
 		"columns": 8,
 		"rows": 4,
@@ -138,7 +138,7 @@ const LEVELS := {
 		"seed": 9001,
 	},
 	10: {
-		"board_types": ["cat", "dog", "bird", "fish", "flower", "moon", "star", "sun", "leaf", "heart"],
+		"board_types": ["cat", "wolf", "owl", "whale", "mouse", "frog", "boar", "duck", "leaf", "heart"],
 		"board_cards": 57,
 		"columns": 8,
 		"rows": 4,
@@ -151,7 +151,7 @@ const LEVELS := {
 		"seed": 10001,
 	},
 	11: {
-		"board_types": ["cat", "dog", "bird", "fish", "flower", "moon", "star", "sun", "leaf", "heart"],
+		"board_types": ["cat", "wolf", "owl", "whale", "mouse", "frog", "boar", "duck", "leaf", "heart"],
 		"board_cards": 63,
 		"columns": 9,
 		"rows": 4,

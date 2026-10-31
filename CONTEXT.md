@@ -55,5 +55,21 @@ _Avoid_: Level (inside Endless Mode), stage
 **Score**:
 Endless Mode points: per matched card plus a bonus per cleared Round. The campaign has no Score, only stars.
 
+**Hero**:
+The character drawn beside the board who says the instruction, tips and reactions (it replaced the single mascot "Ace"). One Hero is fixed per Level or Endless Round; every Hero speaks with the same neutral "hero" line family.
+_Avoid_: Mascot (the old single host), NPC
+
+**Hero Portrait**:
+The full-body painted image that represents a Hero (`assets/ui/heroes/hero_<id>.png`). Campaign Levels 1–9 have their own portrait; Levels 10–11 fall back to the menu wolf; Endless Mode rotates the nine heroes each Round.
+_Avoid_: Mascot sprite, avatar
+
+**Hero Expression**:
+An alternate Hero Portrait used only by the Level 8 bunny, chosen by mood: thinking (idle), sequence (happy), bad choice (worried), defeat (sad). Other heroes keep one portrait and vary by tint and vertical offset.
+_Avoid_: Frame (ambiguous with animation frames)
+
+**Logo**:
+The painted Claw & Crown wordmark (`assets/ui/branding/logo_claw_and_crown.png`) shown in the menu in place of the title text. "Cartitas Infinity" stays the internal project name.
+_Avoid_: Title (the text fallback used when the logo art is missing)
+
 **Action**:
 A single player interaction: select a card, draw a deck card, or use a power.

@@ -4,8 +4,10 @@ extends SceneTree
 const LEVEL_ID := "6"
 const EPSILON := 0.01
 const VIEWS := [
-	{"name": "portrait-360x640", "orientation": "portrait", "window": Vector2i(360, 640), "board": Vector2(338, 173)},
-	{"name": "landscape-640x360", "orientation": "landscape", "window": Vector2i(640, 360), "board": Vector2(450, 189)},
+	# The hole comes from the painted panel_board_frame.png (alpha nine-patch, border capped at
+	# BOARD_FRAME_BORDER_MAX), so it changed with the new frame art delivered this round.
+	{"name": "portrait-360x640", "orientation": "portrait", "window": Vector2i(360, 640), "board": Vector2(323, 181)},
+	{"name": "landscape-640x360", "orientation": "landscape", "window": Vector2i(640, 360), "board": Vector2(448, 193)},
 ]
 
 var _errors: Array[String] = []

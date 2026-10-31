@@ -2,7 +2,7 @@
   "id": "7",
   "difficulty": 7,
   "clearing_capacity": 7,
-  "deck": ["crystal", "crystal", "crystal", "moon", "moon", "moon", "leaf", "leaf", "leaf", "gem", "gem", "gem", "heart", "heart", "heart"],
+  "deck": ["crystal", "crystal", "crystal", "frog", "frog", "frog", "leaf", "leaf", "leaf", "gem", "gem", "gem", "heart", "heart", "heart"],
   "time_thresholds": { "three_stars": 90, "two_stars": 160 },
   "rewards": [{ "type": "hold", "quantity": 1 }]
 }
