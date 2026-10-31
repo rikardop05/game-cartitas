@@ -26,6 +26,8 @@ addons/
 .ai-game-dev/
 CartitasInfinity.csproj
 CartitasInfinity.sln
+test_out.txt
+test_err.txt
 
 # Superseded art kept only on disk
 assets/cards/legacy/
