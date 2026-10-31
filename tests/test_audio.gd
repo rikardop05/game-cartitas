@@ -45,6 +45,7 @@ func _sfx_gains() -> Dictionary:
 		AudioManager.CARD_SELECT_SFX: AudioManager.CARD_SELECT_DB,
 		AudioManager.DECK_DRAW_SFX: AudioManager.DECK_DRAW_DB,
 		AudioManager.LEVEL_START_SFX: AudioManager.LEVEL_START_DB,
+		AudioManager.TRIPLE_MATCH_SFX: AudioManager.TRIPLE_MATCH_DB,
 		AudioManager.LEVEL_COMPLETE_SFX: AudioManager.LEVEL_COMPLETE_DB,
 		AudioManager.LEVEL_FAILED_SFX: AudioManager.LEVEL_FAILED_DB,
 		AudioManager.POWER_HOLD_SFX: AudioManager.POWER_HOLD_DB,

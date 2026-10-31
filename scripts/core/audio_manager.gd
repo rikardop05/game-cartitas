@@ -30,6 +30,7 @@ const POWER_HOLD_SFX := "res://assets/audio/sfx/power_hold.wav"
 const POWER_UNDO_SFX := "res://assets/audio/sfx/power_undo.wav"
 const POWER_REFRESH_SFX := "res://assets/audio/sfx/power_refresh.wav"
 const LEVEL_START_SFX := "res://assets/audio/sfx/level_start.wav"
+const TRIPLE_MATCH_SFX := "res://assets/audio/sfx/triple_match.wav"
 const UI_CLICK_SFX := "res://assets/audio/sfx/ui_click.wav"
 const UI_SETTING_SFX := "res://assets/audio/sfx/ui_setting.wav"
 const CARD_SELECT_DB := 8.0
@@ -40,6 +41,7 @@ const POWER_HOLD_DB := -4.0
 const POWER_UNDO_DB := 7.0
 const POWER_REFRESH_DB := 20.0
 const LEVEL_START_DB := 14.0
+const TRIPLE_MATCH_DB := -6.0
 const UI_CLICK_DB := 2.0
 const UI_SETTING_DB := 2.0
 
@@ -116,6 +118,10 @@ func play_card_select() -> void:
 # A card drawn from a Support Deck into the Clearing Zone.
 func play_deck_draw() -> void:
 	_play_sfx(DECK_DRAW_SFX, DECK_DRAW_DB)
+
+# Three matching cards completed: they vanish from the Clearing Zone.
+func play_match() -> void:
+	_play_sfx(TRIPLE_MATCH_SFX, TRIPLE_MATCH_DB)
 
 # The Level or Round title card, right as the board appears.
 func play_level_start() -> void:

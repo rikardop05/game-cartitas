@@ -2161,7 +2161,7 @@ func _zone_slot_rect(rects: Array, index: int) -> Rect2:
 # of the three has landed, as an overlay: the zone underneath is already updated.
 func _play_match(group: MatchGroup) -> void:
 	match_flashes += 1
-	_play_sfx("match")
+	_play_effect("play_match")
 	_say("match")
 	for rect: Rect2 in group.rects:
 		var flash := Panel.new()
@@ -2320,9 +2320,6 @@ func _play_sfx(kind: String) -> void:
 			frequency = 700.0
 		"place":
 			frequency = 520.0
-		"match":
-			frequency = 760.0
-			duration = 0.16
 		"puff":
 			frequency = 260.0
 			duration = 0.12
