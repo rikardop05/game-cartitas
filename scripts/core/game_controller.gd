@@ -90,7 +90,7 @@ func select_card_typed(card_id: String) -> MoveResultType:
 		return _make_result(false, MoveResult.Reason.ZONE_OVERFLOW, true)
 	_record_action({"type": "SELECT_CARD", "card_id": card_id})
 	var zone_index: int = zone.add(card)
-	return _resolve_and_check(card.type, zone_index)
+	return _resolve_and_check(card.type, zone_index, card)
 
 func use_deck(deck_id: String) -> Dictionary:
 	return use_deck_typed(deck_id).to_dict()
@@ -324,9 +324,10 @@ func get_legal_actions() -> Array:
 func _would_overflow(_card_type: String) -> bool:
 	return zone.is_full()
 
-func _resolve_and_check(card_type: String, zone_index: int = -1) -> MoveResultType:
+func _resolve_and_check(card_type: String, zone_index: int = -1, board_change: Card = null) -> MoveResultType:
 	var matched: Array[Card] = zone.resolve_matches(card_type)
-	board.recalculate_availability()
+	if board_change != null:
+		board.recalculate_availability(board_change)
 	_check_end()
 	var result := _make_result(true, MoveResult.Reason.OK, false, matched.map(_card_id))
 	result.zone_index = zone_index

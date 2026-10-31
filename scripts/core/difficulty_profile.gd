@@ -168,7 +168,7 @@ const LEVELS := {
 		"free_ratio_min": 0.17,
 		"free_ratio_max": 0.41,
 		"complexity": 11.0,
-		"seed": 11002,
+		"seed": 11004,
 	},
 }
 

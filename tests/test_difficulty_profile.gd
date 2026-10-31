@@ -65,6 +65,11 @@ func test_resolved_levels_keep_the_support_deck_rule() -> void:
 			counts[t] = int(counts.get(t, 0)) + 1
 		for t in counts:
 			Assert.is_true(int(counts[t]) <= 2, "level %s resolved deck has at most 2 of '%s'" % [id, t])
+		for deck_key in ["deck_a", "deck_b"]:
+			var cards: Array = level[deck_key]
+			for i in range(1, cards.size()):
+				Assert.not_equals(str(cards[i]), str(cards[i - 1]),
+					"level %s %s has no two equal cards side by side at %d" % [id, deck_key, i])
 		var board_counts := {}
 		for c in level["cards"]:
 			board_counts[str(c["type"])] = int(board_counts.get(str(c["type"]), 0)) + 1

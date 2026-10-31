@@ -42,7 +42,21 @@ func is_blocked(card: Card) -> bool:
 			return true
 	return false
 
-func recalculate_availability() -> void:
+# Full pass by default. When a board card has just left (selected into the zone)
+# only the hidden cards it covered can turn available, so the pass is limited to
+# those candidates - the solver makes thousands of these calls on the big boards.
+func recalculate_availability(removed: Card = null) -> void:
+	if removed != null:
+		var removed_rect := removed.get_display_rect()
+		for c in cards:
+			if c.location != Card.Location.BOARD or c.is_removed() or c.state != Card.State.HIDDEN:
+				continue
+			if c.layer >= removed.layer:
+				continue
+			if not removed_rect.intersects(c.get_display_rect()):
+				continue
+			c.state = Card.State.HIDDEN if is_blocked(c) else Card.State.AVAILABLE
+		return
 	for c in cards:
 		if c.location != Card.Location.BOARD or c.is_removed():
 			continue

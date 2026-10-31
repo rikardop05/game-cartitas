@@ -97,7 +97,72 @@ static func split_decks(pool: Array, seed_used: int) -> Dictionary:
 			deck_a.append_array(group)
 		else:
 			deck_b.append_array(group)
-	return {"deck_a": deck_a, "deck_b": deck_b}
+	var rng_a := RandomNumberGenerator.new()
+	rng_a.seed = (seed_used * 2 + 1) & 0x7FFFFFFF
+	var rng_b := RandomNumberGenerator.new()
+	rng_b.seed = (seed_used * 2 + 2) & 0x7FFFFFFF
+	return {"deck_a": _shuffle_no_adjacent(deck_a, rng_a), "deck_b": _shuffle_no_adjacent(deck_b, rng_b)}
+
+# Seeded shuffle of one deck that never puts two equal types side by side when the
+# counts allow it (two copies of a type spread through the deck). Retries with the same
+# generator until a clean order comes out, so the result is deterministic.
+static func _shuffle_no_adjacent(items: Array, rng: RandomNumberGenerator) -> Array:
+	if items.size() <= 1:
+		return items.duplicate()
+	var pair_types: Array = []
+	var only_pairs := true
+	for raw in items:
+		var t := str(raw)
+		if not pair_types.has(t):
+			pair_types.append(t)
+	for t in pair_types:
+		var n := 0
+		for raw in items:
+			if str(raw) == t:
+				n += 1
+		if n != 2:
+			only_pairs = false
+			break
+	if only_pairs and pair_types.size() > 1:
+		for i in range(pair_types.size() - 1, 0, -1):
+			var j := rng.randi_range(0, i)
+			var tmp = pair_types[i]
+			pair_types[i] = pair_types[j]
+			pair_types[j] = tmp
+		var woven: Array = []
+		for i in pair_types.size():
+			woven.append(pair_types[i])
+			if i > 0:
+				woven.append(pair_types[i - 1])
+		woven.append(pair_types[pair_types.size() - 1])
+		return woven
+	for _attempt in 64:
+		var counts := {}
+		var order: Array = []
+		for raw in items:
+			var t := str(raw)
+			if not counts.has(t):
+				order.append(t)
+				counts[t] = 0
+			counts[t] = int(counts[t]) + 1
+		var out: Array = []
+		var previous := ""
+		var stuck := false
+		while out.size() < items.size():
+			var candidates: Array = []
+			for t in order:
+				if int(counts[t]) > 0 and t != previous:
+					candidates.append(t)
+			if candidates.is_empty():
+				stuck = true
+				break
+			var pick := str(candidates[rng.randi_range(0, candidates.size() - 1)])
+			out.append(pick)
+			counts[pick] = int(counts[pick]) - 1
+			previous = pick
+		if not stuck:
+			return out
+	return items.duplicate()
 
 static func instantiate_level(config: LevelConfig, cards: Array, seed_used: int) -> Dictionary:
 	var decks := split_decks(config.deck_types, seed_used)

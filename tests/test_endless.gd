@@ -43,6 +43,11 @@ func _check_round(round_number: int) -> void:
 	Assert.is_true(SolvabilityChecker.is_solvable(level), "round %d is solvable" % round_number)
 	var deck_total: int = level["deck_a"].size() + level["deck_b"].size()
 	Assert.equals(deck_total, EndlessRun.deck_card_count(round_number), "round %d deck size" % round_number)
+	for deck_key in ["deck_a", "deck_b"]:
+		var deck_cards: Array = level[deck_key]
+		for i in range(1, deck_cards.size()):
+			Assert.not_equals(str(deck_cards[i]), str(deck_cards[i - 1]),
+				"round %d %s has no two equal cards side by side at %d" % [round_number, deck_key, i])
 	var counts := {}
 	for t in level["deck_a"] + level["deck_b"]:
 		counts[t] = int(counts.get(t, 0)) + 1
