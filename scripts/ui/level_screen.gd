@@ -1672,6 +1672,19 @@ func _build_settings_overlay() -> void:
 	close.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	close.pressed.connect(_close_settings)
 	col.add_child(close)
+	# Every option inside the gear window clicks with the same sound as the gear itself.
+	_connect_settings_clicks(overlay)
+
+# Connected once per overlay build (the overlay is always re-created), covering the option
+# rows, the volume buttons and both closes.
+func _connect_settings_clicks(node: Node) -> void:
+	for child in node.get_children():
+		if child is BaseButton:
+			(child as BaseButton).pressed.connect(_play_settings_click)
+		_connect_settings_clicks(child)
+
+func _play_settings_click() -> void:
+	_play_effect("play_ui_setting")
 
 func _make_settings_row(node_name: String, text: String, callback: Callable, height: int) -> Button:
 	var btn := Button.new()
