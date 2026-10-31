@@ -20,9 +20,34 @@ signal track_changed(path: String)
 const MENU_TRACK := "res://assets/audio/music/beyond_the_walls.mp3"
 const GAME_TRACK := "res://assets/audio/music/castle_eudora.mp3"
 
+# One-shot effects. The gains trim the delivered files to a common perceived level; both keep
+# their peak below -6 dB so a click never clips on top of the music.
+const CARD_SELECT_SFX := "res://assets/audio/sfx/card_select.wav"
+const DECK_DRAW_SFX := "res://assets/audio/sfx/deck_draw.wav"
+const LEVEL_COMPLETE_SFX := "res://assets/audio/sfx/level_complete.wav"
+const LEVEL_FAILED_SFX := "res://assets/audio/sfx/level_failed.wav"
+const POWER_HOLD_SFX := "res://assets/audio/sfx/power_hold.wav"
+const POWER_UNDO_SFX := "res://assets/audio/sfx/power_undo.wav"
+const POWER_REFRESH_SFX := "res://assets/audio/sfx/power_refresh.wav"
+const LEVEL_START_SFX := "res://assets/audio/sfx/level_start.wav"
+const UI_CLICK_SFX := "res://assets/audio/sfx/ui_click.wav"
+const UI_SETTING_SFX := "res://assets/audio/sfx/ui_setting.wav"
+const CARD_SELECT_DB := 8.0
+const DECK_DRAW_DB := 2.0
+const LEVEL_COMPLETE_DB := -4.0
+const LEVEL_FAILED_DB := 2.0
+const POWER_HOLD_DB := -4.0
+const POWER_UNDO_DB := 7.0
+const POWER_REFRESH_DB := 20.0
+const LEVEL_START_DB := 14.0
+const UI_CLICK_DB := 2.0
+const UI_SETTING_DB := 2.0
+
 const FADE_SECONDS := 0.8
 const MUSIC_BUS := "Music"
 const SFX_BUS := "SFX"
+# Round-robin voices, so quick successive taps overlap instead of cutting each other off.
+const SFX_VOICES := 3
 # Music players never peak at 0 dB: two tracks overlap while crossfading, so this headroom
 # (plus the limiter on Master) is what keeps the sum from clipping.
 const TRACK_PEAK_DB := -2.0
@@ -30,6 +55,8 @@ const TRACK_PEAK_DB := -2.0
 const SILENT_DB := -80.0
 
 var _players: Array[AudioStreamPlayer] = []
+var _sfx_players: Array[AudioStreamPlayer] = []
+var _sfx_next := 0
 var _streams: Dictionary = {}
 var _active := -1
 var _current_path := ""
@@ -51,6 +78,13 @@ func _ready() -> void:
 		player.process_mode = Node.PROCESS_MODE_ALWAYS
 		add_child(player)
 		_players.append(player)
+	for i in SFX_VOICES:
+		var sfx := AudioStreamPlayer.new()
+		sfx.name = "Sfx%d" % i
+		sfx.bus = SFX_BUS
+		sfx.process_mode = Node.PROCESS_MODE_ALWAYS
+		add_child(sfx)
+		_sfx_players.append(sfx)
 	_sync_volume()
 
 func _process(_delta: float) -> void:
@@ -59,11 +93,12 @@ func _process(_delta: float) -> void:
 # Release the cached streams with the scene tree, so a clean quit leaves no resource in use.
 func _exit_tree() -> void:
 	_kill_fade()
-	for player in _players:
+	for player in _players + _sfx_players:
 		if is_instance_valid(player):
 			player.stop()
 			player.stream = null
 	_players.clear()
+	_sfx_players.clear()
 	_streams.clear()
 
 # --- Intent from the scenes -------------------------------------------------------------
@@ -73,6 +108,44 @@ func play_menu(owner: Node = null) -> void:
 
 func play_gameplay(owner: Node = null) -> void:
 	_play(GAME_TRACK, owner)
+
+# A card picked from the Board (the heavy stone landing in the Clearing Zone).
+func play_card_select() -> void:
+	_play_sfx(CARD_SELECT_SFX, CARD_SELECT_DB)
+
+# A card drawn from a Support Deck into the Clearing Zone.
+func play_deck_draw() -> void:
+	_play_sfx(DECK_DRAW_SFX, DECK_DRAW_DB)
+
+# The Level or Round title card, right as the board appears.
+func play_level_start() -> void:
+	_play_sfx(LEVEL_START_SFX, LEVEL_START_DB)
+
+# A Level or Round won, whatever the number of stars.
+func play_level_complete() -> void:
+	_play_sfx(LEVEL_COMPLETE_SFX, LEVEL_COMPLETE_DB)
+
+# A Level lost (time out or an unwinnable board).
+func play_level_failed() -> void:
+	_play_sfx(LEVEL_FAILED_SFX, LEVEL_FAILED_DB)
+
+# A Power button: Hold and Undo have their own activation sound, Refresh the shuffle one.
+func play_power(power: String) -> void:
+	match power:
+		"refresh":
+			_play_sfx(POWER_REFRESH_SFX, POWER_REFRESH_DB)
+		"undo":
+			_play_sfx(POWER_UNDO_SFX, POWER_UNDO_DB)
+		_:
+			_play_sfx(POWER_HOLD_SFX, POWER_HOLD_DB)
+
+# Any button of the menu screens (main menu, Level selector, Options).
+func play_ui_click() -> void:
+	_play_sfx(UI_CLICK_SFX, UI_CLICK_DB)
+
+# The gear that opens the in-game settings during a Level or Round.
+func play_ui_setting() -> void:
+	_play_sfx(UI_SETTING_SFX, UI_SETTING_DB)
 
 # Gives the audio up, but only when this scene still owns it: a scene that already claimed
 # it (the one replacing this one, whichever order the tree frees them in) is untouched.
@@ -104,9 +177,9 @@ func is_playing() -> bool:
 
 # --- Mixing ----------------------------------------------------------------------------
 
-# Music bus gain in dB for a 0..1 volume and a mute flag. Pure, so the headless suite can
-# check the mapping without an audio device.
-static func music_db(volume: float, enabled: bool) -> float:
+# Bus gain in dB for a 0..1 volume and a mute flag. Pure, so the headless suite can check the
+# mapping without an audio device.
+static func bus_db(volume: float, enabled: bool) -> float:
 	if not enabled:
 		return SILENT_DB
 	var clamped := clampf(volume, 0.0, 1.0)
@@ -164,6 +237,19 @@ func _play(path: String, owner: Node) -> void:
 		_fade.chain().tween_callback(fading.stop)
 	track_changed.emit(path)
 
+# Plays one short effect on the next SFX voice; the SFX bus carries the player's volume/mute.
+func _play_sfx(path: String, volume_db: float) -> void:
+	if _sfx_players.is_empty():
+		return
+	var stream := _load_stream(path)
+	if stream == null:
+		return
+	var player := _sfx_players[_sfx_next]
+	_sfx_next = (_sfx_next + 1) % _sfx_players.size()
+	player.stream = stream
+	player.volume_db = volume_db
+	player.play()
+
 # Brings `player` back to full music level and fades out any other track that was still
 # audible (a crossfade interrupted by the player coming back to the previous screen).
 func _fade_in(player: AudioStreamPlayer) -> void:
@@ -206,7 +292,7 @@ func _sync_volume() -> void:
 	if _game != null and is_instance_valid(_game):
 		enabled = bool(_game.call("sound_enabled"))
 		volume = float(_game.call("volume"))
-	var db := music_db(volume, enabled)
+	var db := bus_db(volume, enabled)
 	if is_equal_approx(db, _last_bus_db):
 		return
 	_last_bus_db = db

@@ -1593,6 +1593,7 @@ func _close_help() -> void:
 func _on_settings() -> void:
 	if _settings_open or _help_shown or _ended or controller == null:
 		return
+	_play_effect("play_ui_setting")
 	_settings_open = true
 	controller.pause()
 	if mascot != null:
@@ -1748,7 +1749,10 @@ func _on_card(card_id: String) -> void:
 	var source_rect := _board_card_rect(card)
 	var snap := _snapshot_zone()
 	var result := controller.select_card(card_id)
-	_apply_move(card.type, card_id, source_rect, snap, result)
+	# A card taken from the Board has its own landing sound; a refused tap plays nothing.
+	if bool(result.get("ok", false)):
+		_play_effect("play_card_select")
+	_apply_move(card.type, card_id, source_rect, snap, result, false)
 
 func _on_deck(deck_id: String) -> void:
 	if not _accepts_taps():
@@ -1758,7 +1762,10 @@ func _on_deck(deck_id: String) -> void:
 	var source_rect := _deck_face_rect(deck_a_btn if deck_id == "a" else deck_b_btn)
 	var snap := _snapshot_zone()
 	var result := controller.use_deck(deck_id)
-	_apply_move(card_type, "", source_rect, snap, result)
+	# A draw from a Support Deck has its own sound; a refused draw plays nothing.
+	if bool(result.get("ok", false)):
+		_play_effect("play_deck_draw")
+	_apply_move(card_type, "", source_rect, snap, result, false)
 
 func _on_reserve_return(card_id: String) -> void:
 	if not _accepts_taps():
@@ -1773,7 +1780,8 @@ func _on_reserve_return(card_id: String) -> void:
 
 # Redraws from the new state at once, then launches the visuals of the move. `card_id` is ""
 # for a deck draw (the controller makes the card up). `snap` is the zone before the move.
-func _apply_move(card_type: String, card_id: String, source_rect: Rect2, snap: Dictionary, result: Dictionary) -> void:
+# `select_sfx` is false when the caller already played the move's own sound (Board, Deck).
+func _apply_move(card_type: String, card_id: String, source_rect: Rect2, snap: Dictionary, result: Dictionary, select_sfx: bool = true) -> void:
 	if not bool(result["ok"]):
 		# A refused tap must never look like a frozen game: say why when the zone is full.
 		if controller.status == GameController.Status.PLAYING and controller.zone.is_full():
@@ -1781,7 +1789,8 @@ func _apply_move(card_type: String, card_id: String, source_rect: Rect2, snap: D
 			_say("zone_warning")
 		_check_end()
 		return
-	_play_sfx("select")
+	if select_sfx:
+		_play_sfx("select")
 	var matched: Array = result["matched_ids"]
 	# Score right away: a winning move ends the round once its flash has played.
 	_record_endless_match(matched.size())
@@ -1843,7 +1852,7 @@ func _drawn_card_id(snap_ids: Array, matched: Array, target_index: int) -> Strin
 func _on_power(power: String) -> void:
 	if not _accepts_taps():
 		return
-	_play_sfx("select")
+	_play_effect("play_power", power)
 	# Hold, Undo and Refresh move or remove zone cards: land the cards still flying in first,
 	# so no ghost or hidden slot outlives the zone it was heading for.
 	_cancel_zone_flights()
@@ -2264,6 +2273,17 @@ func _play_card_impact(center: Vector2) -> void:
 	tween.tween_property(impact, "modulate", Color(1, 0.88, 0.35, 0), 0.16)
 	tween.chain().tween_callback(impact.queue_free)
 
+# Plays one of the real effects owned by the Audio autoload (Board, Deck, win, lose).
+func _play_effect(method_name: String, argument = null) -> void:
+	var audio := get_node_or_null("/root/Audio")
+	if audio == null:
+		return
+	if argument == null:
+		audio.call(method_name)
+	else:
+		audio.call(method_name, argument)
+
+# Short synthesized beeps still used by the match/puff/reserve visuals, until those get art too.
 func _play_sfx(kind: String) -> void:
 	if not Game.sound_enabled():
 		return
@@ -2290,12 +2310,6 @@ func _play_sfx(kind: String) -> void:
 		"match":
 			frequency = 760.0
 			duration = 0.16
-		"win":
-			frequency = 920.0
-			duration = 0.22
-		"lose":
-			frequency = 180.0
-			duration = 0.20
 		"puff":
 			frequency = 260.0
 			duration = 0.12
@@ -2334,7 +2348,7 @@ func _show_end(win: bool) -> void:
 		mascot.visible = false
 	if _instruction_bubble != null and is_instance_valid(_instruction_bubble):
 		_instruction_bubble.queue_free()
-	_play_sfx("win" if win else "lose")
+	_play_effect("play_level_complete" if win else "play_level_failed")
 	if _endless != null:
 		_show_endless_end(win)
 		return
@@ -2622,6 +2636,7 @@ func _reveal_plaque(plaque: Control) -> void:
 	t.tween_property(plaque, "scale", Vector2.ONE, 0.45).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 func _play_intro() -> void:
+	_play_effect("play_level_start")
 	var overlay := Control.new()
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.z_index = 1500

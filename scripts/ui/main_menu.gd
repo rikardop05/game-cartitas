@@ -149,13 +149,27 @@ func _build() -> void:
 		child.queue_free()
 	if _screen == Screen.MENU:
 		_build_menu()
-		return
-	add_child(UiHelpers.make_background(_landscape()))
-	match _screen:
-		Screen.LEVELS:
-			_build_levels()
-		_:
-			_build_options()
+	else:
+		add_child(UiHelpers.make_background(_landscape()))
+		match _screen:
+			Screen.LEVELS:
+				_build_levels()
+			_:
+				_build_options()
+	_connect_click_sounds(self)
+
+# Every button of the menu screens (main menu, Level selector, Options) clicks. Connected once
+# per rebuild: the nodes are recreated each time, so nothing is connected twice.
+func _connect_click_sounds(node: Node) -> void:
+	for child in node.get_children():
+		if child is BaseButton:
+			(child as BaseButton).pressed.connect(_play_click)
+		_connect_click_sounds(child)
+
+func _play_click() -> void:
+	var audio := get_node_or_null("/root/Audio")
+	if audio != null:
+		audio.play_ui_click()
 
 func _landscape() -> bool:
 	var viewport_size := get_viewport_rect().size
