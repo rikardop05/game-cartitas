@@ -89,7 +89,7 @@ func test_fixed_seed_levels_are_deterministic() -> void:
 
 func test_each_attempt_builds_a_different_board() -> void:
 	LevelLoader.deterministic = false
-	for id in ["1", "4", "8", "11"]:
+	for id in ["1", "4", "8", "11", "15"]:
 		var a := LevelLoader.load_level(id, BOARD_SIZE)
 		var b := LevelLoader.load_level(id, BOARD_SIZE)
 		Assert.not_equals(int(a["generation_metrics"]["seed_used"]), int(b["generation_metrics"]["seed_used"]), "level %s draws a new seed per attempt" % id)

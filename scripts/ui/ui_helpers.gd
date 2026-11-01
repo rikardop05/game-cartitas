@@ -96,13 +96,17 @@ static func warm_theme() -> Theme:
 # the cards and HUD stay readable. Falls back to the flat warm colour without art.
 const KIT_DIR := "res://assets/ui/kit/"
 const HUD_DIR := "res://assets/ui/hud/"
-# Levels from this one on (and Endless) use the second background set.
+# Levels from this one on use the second (autumn) background set.
 const AUTUMN_FROM_LEVEL := 4
-# Endgame backdrop: the castle replaces the autumn town from L8 on, including Endless
-# (level 999), so the run finishes in the same place as the campaign.
+# Castle fallback for L8+ when no per-Level scene is delivered (L7-15 always ship one).
 const CASTLE_FROM_LEVEL := 8
 const CASTLE_LANDSCAPE := "res://assets/ui/background_castle.png"
 const CASTLE_PORTRAIT := "res://assets/ui/background_castle_portrait.png"
+# From L7 on every Level has its own painted scene in assets/ui/backgrounds/level_NN.png,
+# with a _portrait crop. Endless (999) clamps to the last one (the endgame scene).
+const LEVEL_BACKGROUND_DIR := "res://assets/ui/backgrounds/"
+const LEVEL_BACKGROUND_FROM := 7
+const LEVEL_BACKGROUND_MAX := 15
 
 # A piece of the pixel-art UI kit (assets/ui/kit/<name>.png), or null if missing.
 static func kit_texture(name: String) -> Texture2D:
@@ -383,6 +387,17 @@ static func background_path(landscape: bool, level: int = 0) -> String:
 	# The main menu has its own landscape city; portrait keeps the painted portrait.
 	if level <= 0 and landscape and ResourceLoader.exists("res://assets/ui/background_menu.png"):
 		return "res://assets/ui/background_menu.png"
+	# Levels 7-15 ship their own painted backdrop (portrait variant included). Endless
+	# (999) uses the last campaign one, the endgame scene, so runs stay coherent.
+	if level >= LEVEL_BACKGROUND_FROM:
+		var number := mini(level, LEVEL_BACKGROUND_MAX)
+		var suffix := "" if landscape else "_portrait"
+		var scene := "%slevel_%02d%s.png" % [LEVEL_BACKGROUND_DIR, number, suffix]
+		if ResourceLoader.exists(scene):
+			return scene
+		var scene_landscape := "%slevel_%02d.png" % [LEVEL_BACKGROUND_DIR, number]
+		if ResourceLoader.exists(scene_landscape):
+			return scene_landscape
 	if level >= CASTLE_FROM_LEVEL:
 		var castle := CASTLE_LANDSCAPE if landscape else CASTLE_PORTRAIT
 		if ResourceLoader.exists(castle):

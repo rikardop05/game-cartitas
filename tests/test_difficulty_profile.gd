@@ -38,7 +38,7 @@ func test_support_decks_are_small_and_never_close_a_trio() -> void:
 		var raw = JSON.parse_string(FileAccess.get_file_as_string(LevelLoader.level_path(id)))
 		var cfg := DifficultyProfile.for_level(int(raw["difficulty"]))
 		var deck := _deck_pool(id)
-		Assert.is_true(deck.size() >= 6 and deck.size() <= 24, "level %s deck has 6-24 cards (got %d)" % [id, deck.size()])
+		Assert.is_true(deck.size() >= 6 and deck.size() <= 30, "level %s deck has 6-30 cards (got %d)" % [id, deck.size()])
 		var counts := {}
 		for t in deck:
 			counts[t] = int(counts.get(t, 0)) + 1
@@ -80,7 +80,7 @@ func test_resolved_levels_keep_the_support_deck_rule() -> void:
 
 func test_available_types_separated_from_used_types() -> void:
 	var cfg := DifficultyProfile.for_level(10)
-	Assert.equals(cfg.available_card_types.size(), 12, "all 12 registry types available")
+	Assert.equals(cfg.available_card_types.size(), 15, "all 15 registry types available")
 	Assert.is_true(cfg.available_card_types.size() >= cfg.types_used_in_level.size(), "used is a subset of available")
 	for t in cfg.types_used_in_level:
 		Assert.is_true(cfg.available_card_types.has(t), "'%s' is an available card type" % t)

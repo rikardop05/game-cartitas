@@ -1,6 +1,26 @@
 # Changelog — Cartitas Infinity
 
-## Rodada de cartas e decks (Nexus) — 2026-10-30
+## Levels 12–15, cenários, heróis e frame — 2026-11-01
+
+### Jogo
+- **15 Levels e 15 tipos:** L12 174 cartas (150 board + 24 deck), L13 183 (156+27), L14 192 (162+30) e L15 198 (168+30). Novos tipos `cat_mage`, `rhino` e `sacer`; 14 tipos com arte e `crystal` ainda em placeholder.
+- **Decks:** 24 em L12, 27 em L13 e 30 em L14–L15; teto de **30 = 2 por tipo**. A regra (≤2 por tipo, tipo no board, board+deck múltiplo de 3) continua valendo.
+- **Estrelas e limites:** L12 265/455, L13 275/480, L14 290/500 e L15 300/515 (1,5 s/2,6 s por carta); `time_limit` 900 s em L10/L14 e 1080 s em L11/L15.
+- **Guardrails:** `MAX_COLUMNS 14`, `MAX_ROWS 7`, `MAX_BOARD_CARDS 168`, `MAX_LAYERS 5` (aberto; os níveis usam 4) e `MIN_CARD_SIZE_PX 24`. L12–L15 renderizam **25,3 px** no retrato (27,6 px na paisagem).
+- **Geração:** 15 Levels solucionáveis (60/60 seeds em cada) e probe em **~1,7 s** (budget 4000 ms).
+
+### Visual e assets
+- **Fundos:** cenas próprias por Level de **7 a 15** (`assets/ui/backgrounds/level_NN.png` + `_portrait`); campo em L1–3, outono em L4–6 e **Endless usa a cena do L15**. O castelo antigo fica como fallback.
+- **Heróis:** L12 `cat_mage`, L13 `rhino`, L14 `sacer` e L15 `wolf_knight` (retrato existente). Os três retratos novos são só de campanha; o Endless mantém o ciclo dos 9 heróis originais.
+- **Frame do retrato:** novo `panel_board_frame_portrait.png` (1166×1184) assado no tamanho exato da janela: furo **327×185**, board **323×181**; a paisagem mantém o frame atual.
+- **Board clip:** o offset passou a ser recalculado pelo bbox final (posição escalada + tamanho da carta) e limitado ao container; L14/L15 com `clip=0` em retrato, paisagem e desktops.
+
+### Ferramentas e qualidade
+- Suíte completa: **256 testes, 0 falhas**.
+- `repro_board_capture` OK (portrait board 323×181, landscape 448×193), `repro_hud_bounds` GREEN nas 6 views, `regression_board_layout` OK em L1–L15 × 6 views.
+- `probe_generation` OK nos 15 Levels (1,6–1,7 s; budget 4000 ms).
+
+## Rodada de cartas e decks (Nexus) — 2026-10-30 (checkpoint anterior)
 
 ### Jogo
 - **Totais por Level (tabuleiro+decks):** L1 27, L2 42, L3 48, L4 57, L5 78, L6 87, L7 105, L8 105, L9 150, L10 156, L11 168.
@@ -13,7 +33,7 @@
 - Suíte completa: **255 testes, 0 falhas** (Nexus).
 - `test_difficulty_profile` cobre a regra do deck (≤2 por tipo, tipos no board, board+deck múltiplo de 3); `test_star_thresholds` recalcula os limites; `test_progression` valida 60 seeds por Level.
 
-## Layout do retrato da tela do Level — 2026-10-30 (spec da Luna)
+## Layout do retrato da tela do Level — 2026-10-30 (spec da Luna; checkpoint anterior)
 
 ### Jogo
 - **Retrato:** o HUD passa a ocupar a altura toda da tela. Os **poderes** ficam no topo-esquerdo; o **herói grande** no topo-centro (atrás do HUD e do tabuleiro); a **barra da Clearing Zone** logo abaixo; o **tabuleiro na metade inferior**; **deck A, Reserve e deck B na mesma linha**; e o **rodapé** com engrenagem, som, placa de estrelas (ou pontuação no Endless) e o **logo Claw & Crown**.

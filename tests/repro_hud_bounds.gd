@@ -67,6 +67,10 @@ func _run() -> void:
 	var mascot_before: bool = bool(game.settings.get("mascot", true))
 	var sound_before: bool = bool(game.settings.get("sound", true))
 	var save_path_before: String = game.save_path
+	# The HUD contract includes enabled power buttons. The player's real inventory may have
+	# run out of one power, so use the fresh-player stock in memory for every view.
+	var inventory_before: Dictionary = game.progress.inventory.duplicate(true)
+	game.progress.inventory = ProgressManager.DEFAULT_INVENTORY.duplicate(true)
 	# Powers and the sound toggle persist through Game.save_path: keep them off the real save.
 	game.save_path = THROWAWAY_SAVE
 	for view in VIEWS:
@@ -74,6 +78,7 @@ func _run() -> void:
 	# In-memory only (never set_mascot(), which would persist to the user save).
 	game.settings["mascot"] = mascot_before
 	game.settings["sound"] = sound_before
+	game.progress.inventory = inventory_before
 	game.save_path = save_path_before
 	if FileAccess.file_exists(THROWAWAY_SAVE):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(THROWAWAY_SAVE))

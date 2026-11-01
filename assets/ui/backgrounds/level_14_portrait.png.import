@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://si8asnsv7pto"
-path="res://.godot/imported/bar_zone_portrait.png-bb3931e7130b8300166bd19f8269c64c.ctex"
+uid="uid://o5pqmnxfrai2"
+path="res://.godot/imported/level_14_portrait.png-5211126a478f1edcfb36580422e24ef5.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/kit/bar_zone_portrait.png"
-dest_files=["res://.godot/imported/bar_zone_portrait.png-bb3931e7130b8300166bd19f8269c64c.ctex"]
+source_file="res://assets/ui/backgrounds/level_14_portrait.png"
+dest_files=["res://.godot/imported/level_14_portrait.png-5211126a478f1edcfb36580422e24ef5.ctex"]
 
 [params]
 

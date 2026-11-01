@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dbilbersmysro"
-path="res://.godot/imported/panel_board.png-d3e68a1a05b884327354766694d08c92.ctex"
+uid="uid://c6hfyovbo68kq"
+path="res://.godot/imported/card_sacer.png-c0ac8ea5c3a81eabdc5a2f4c3bfcc149.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/kit/panel_board.png"
-dest_files=["res://.godot/imported/panel_board.png-d3e68a1a05b884327354766694d08c92.ctex"]
+source_file="res://assets/cards/card_sacer.png"
+dest_files=["res://.godot/imported/card_sacer.png-c0ac8ea5c3a81eabdc5a2f4c3bfcc149.ctex"]
 
 [params]
 

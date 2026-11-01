@@ -157,7 +157,7 @@ func _generate(spec: BoardSpec) -> BoardBuildResult:
 	# Even coordinates keep the base lattice flush with the board's left/top edge,
 	# so a board exactly N cards wide really holds N columns.
 	var center := Vector2i((cells_x / 2) - ((cells_x / 2) % 2), (cells_y / 2) - ((cells_y / 2) % 2))
-	var targets_per_layer := layer_targets(spec.card_count, spec.layers, spec.layer_ratio)
+	var targets_per_layer := _spec_layer_targets(spec)
 
 	var attempts := 0
 	var rejection_counts := {}
@@ -1207,5 +1207,11 @@ func _is_minimum_pyramid(spec: BoardSpec) -> bool:
 func _shape_gates_waived(spec: BoardSpec) -> bool:
 	if _is_minimum_pyramid(spec):
 		return true
-	var targets := layer_targets(spec.card_count, spec.layers, spec.layer_ratio)
+	var targets := _spec_layer_targets(spec)
 	return not targets.is_empty() and int(targets[0]) <= SMALL_BASE_CARDS
+
+# Explicit layer_counts in the spec win over the geometric layer_ratio split.
+func _spec_layer_targets(spec: BoardSpec) -> Array:
+	if not spec.layer_counts.is_empty():
+		return spec.layer_counts.duplicate()
+	return layer_targets(spec.card_count, spec.layers, spec.layer_ratio)

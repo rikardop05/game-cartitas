@@ -6,6 +6,14 @@ extends RefCounted
 # (the Mascot class itself is only compiled inside a running game with autoloads).
 
 const HEROES := ["cat", "wolf_ranger", "boar", "mouse", "owl", "frog", "knight", "bunny", "wolf_knight"]
+# Levels 12-15 heroes. L15 closes the campaign with the wolf knight; the new portraits do
+# not join the Endless rotation (it keeps its 9-hero cycle).
+const CAMPAIGN_OVERRIDES := {
+	"12": "cat_mage",
+	"13": "rhino",
+	"14": "sacer",
+	"15": "wolf_knight",
+}
 const FALLBACK_HERO := "menu_wolf"
 const DEFAULT_HERO := FALLBACK_HERO
 const BUNNY_LEVEL := 8
@@ -25,6 +33,8 @@ static func hero_for(level_id: String, endless_round: int = 0) -> String:
 	if endless_round > 0:
 		return HEROES[posmod(endless_round - 1, HEROES.size())]
 	var level := int(level_id) if level_id.is_valid_int() else 0
+	if CAMPAIGN_OVERRIDES.has(str(level)):
+		return str(CAMPAIGN_OVERRIDES[str(level)])
 	if level >= 1 and level <= HEROES.size():
 		return HEROES[level - 1]
 	return FALLBACK_HERO

@@ -15,8 +15,14 @@ const CAMPAIGN := {
 	"9": "wolf_knight",
 	"10": "menu_wolf",
 	"11": "menu_wolf",
+	"12": "cat_mage",
+	"13": "rhino",
+	"14": "sacer",
+	"15": "wolf_knight",
 }
 const HEROES := ["cat", "wolf_ranger", "boar", "mouse", "owl", "frog", "knight", "bunny", "wolf_knight"]
+# Portraits used only by the new campaign Levels (not part of the Endless 9-hero rotation).
+const NEW_PORTRAITS := ["cat_mage", "rhino", "sacer"]
 const EXPRESSIONS := ["hero_bunny_thinking", "hero_bunny_sequence", "hero_bunny_bad_choice", "hero_bunny_defeat"]
 
 func test_campaign_phase_map() -> void:
@@ -41,11 +47,15 @@ func test_every_hero_and_expression_asset_exists() -> void:
 	for hero in HEROES:
 		var path := "res://assets/ui/heroes/hero_%s.png" % hero
 		Assert.is_true(FileAccess.file_exists(path), "portrait exists: %s" % path)
+	for hero in NEW_PORTRAITS:
+		var path := "res://assets/ui/heroes/hero_%s.png" % hero
+		Assert.is_true(FileAccess.file_exists(path), "new campaign portrait exists: %s" % path)
 	Assert.is_true(FileAccess.file_exists("res://assets/ui/heroes/hero_menu_wolf.png"), "fallback portrait exists")
 	for expression in EXPRESSIONS:
 		var path := "res://assets/ui/heroes/%s.png" % expression
 		Assert.is_true(FileAccess.file_exists(path), "L8 expression exists: %s" % path)
-	Assert.equals(HEROES.size() + EXPRESSIONS.size() + 1, 14, "9 heroes + 4 expressions + 1 fallback")
+	Assert.equals(HEROES.size() + NEW_PORTRAITS.size() + EXPRESSIONS.size() + 1, 17,
+		"9 heroes + 3 new campaign portraits + 4 expressions + 1 fallback")
 
 func test_bunny_expression_for_each_mood() -> void:
 	Assert.equals(HeroRoster.bunny_expression_for(0), "hero_bunny_thinking", "idle uses thinking")

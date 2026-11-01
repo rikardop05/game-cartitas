@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bjl0p8wc64q3b"
-path="res://.godot/imported/panel_menu.png-8f9410a6256bdca452c2389599f1c9ed.ctex"
+uid="uid://ck4yytvp2ji8i"
+path="res://.godot/imported/level_08_portrait.png-6d01c6a1641a4819256c80a90d407c39.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/kit/panel_menu.png"
-dest_files=["res://.godot/imported/panel_menu.png-8f9410a6256bdca452c2389599f1c9ed.ctex"]
+source_file="res://assets/ui/backgrounds/level_08_portrait.png"
+dest_files=["res://.godot/imported/level_08_portrait.png-6d01c6a1641a4819256c80a90d407c39.ctex"]
 
 [params]
 

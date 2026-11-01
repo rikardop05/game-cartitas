@@ -18,6 +18,13 @@ const BOARD_PAD := 2.0
 # painted bevel from eating the play area. Drop the cleaned art's 9-slice margin here
 # once the Atelie delivers it.
 const BOARD_FRAME_BORDER_MAX := 6.0
+# The portrait window has its own painted frame (near-square art). It is baked once to the
+# exact 339x196 window with the border squeezed into the same 6/5 px band the landscape frame
+# shows, so the play hole stays Luna's 327x185 (board 323x181).
+const BOARD_FRAME_PORTRAIT_ART := "res://assets/ui/kit/panel_board_frame_portrait.png"
+const PORT_FRAME_BORDER_LR := 6
+const PORT_FRAME_BORDER_TOP := 5
+const PORT_FRAME_BORDER_BOTTOM := 6
 # Painted UI pieces delivered by the Atelie. Margins are fractions of the cropped
 # texture and keep the carved corners/ornaments from being cut by the 9-slice.
 const RESERVE_FIELD_ART := "res://assets/ui/kit/panel_reserve_field.png"
@@ -181,6 +188,8 @@ static var _portrait_frame_cache: ImageTexture
 static var _sound_icon_cache := {}
 # Visible (alpha bbox) rect of each painted FX inside its texture, in texture px.
 static var _fx_optical_cache := {}
+# The portrait board frame baked once to the exact window size (see _portrait_frame_texture).
+static var _portrait_board_frame: Texture2D
 
 # The three cards of one match, flashed together once the last of them has landed.
 class MatchGroup extends RefCounted:
@@ -799,17 +808,109 @@ func _make_flat_button_compact(button: Button) -> void:
 	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
 		button.add_theme_stylebox_override(state, empty)
 
+# The portrait frame art is almost square: 9-slicing it straight to the wide 339x196 window
+# would either stretch the carved corners or shrink the play hole. Bake it once to the exact
+# window size with each source region (border arms and corners) squeezed into the landscape
+# frame's 6/5 px band, so the portrait keeps Luna's 327x185 hole (board 323x181).
+static func _portrait_frame_texture() -> Texture2D:
+	if _portrait_board_frame != null:
+		return _portrait_board_frame
+	var source := UiHelpers.hires_texture(BOARD_FRAME_PORTRAIT_ART)
+	if source == null:
+		return null
+	var image := source.get_image()
+	if image == null:
+		return null
+	image = image.duplicate()
+	if image.is_compressed():
+		image.decompress()
+	image.convert(Image.FORMAT_RGBA8)
+	var w := image.get_width()
+	var h := image.get_height()
+	if w < 16 or h < 16:
+		return source
+	# The transparent hole is centred: grow out from the middle to find its rectangular bounds.
+	var cx := w / 2
+	var cy := h / 2
+	var opaque := func(x: int, y: int) -> bool: return image.get_pixel(x, y).a > 0.0625
+	if not opaque.call(cx, cy):
+		var hx0 := cx
+		while hx0 > 0 and not opaque.call(hx0 - 1, cy):
+			hx0 -= 1
+		var hx1 := cx
+		while hx1 < w - 1 and not opaque.call(hx1 + 1, cy):
+			hx1 += 1
+		var hy0 := cy
+		while hy0 > 0 and not opaque.call(cx, hy0 - 1):
+			hy0 -= 1
+		var hy1 := cy
+		while hy1 < h - 1 and not opaque.call(cx, hy1 + 1):
+			hy1 += 1
+		var hole := Rect2i(hx0, hy0, hx1 - hx0 + 1, hy1 - hy0 + 1)
+		if hole.size.x > w / 10 and hole.size.y > h / 10:
+			var left := hole.position.x
+			var top := hole.position.y
+			var right := w - hole.end.x
+			var bottom := h - hole.end.y
+			var target := Image.create(
+				int(PORT_BOARD_FRAME.size.x), int(PORT_BOARD_FRAME.size.y), false, Image.FORMAT_RGBA8)
+			target.fill(Color(0, 0, 0, 0))
+			var ml := PORT_FRAME_BORDER_LR
+			var mt := PORT_FRAME_BORDER_TOP
+			var mr := PORT_FRAME_BORDER_LR
+			var mb := PORT_FRAME_BORDER_BOTTOM
+			var tw := target.get_width()
+			var th := target.get_height()
+			var span_x := tw - ml - mr
+			var span_y := th - mt - mb
+			_blit_frame_region(target, image, Rect2i(0, 0, left, top), Rect2i(0, 0, ml, mt))
+			_blit_frame_region(target, image, Rect2i(left, 0, hole.size.x, top), Rect2i(ml, 0, span_x, mt))
+			_blit_frame_region(target, image, Rect2i(hole.end.x, 0, right, top), Rect2i(tw - mr, 0, mr, mt))
+			_blit_frame_region(target, image, Rect2i(0, top, left, hole.size.y), Rect2i(0, mt, ml, span_y))
+			_blit_frame_region(target, image, Rect2i(hole.end.x, top, right, hole.size.y), Rect2i(tw - mr, mt, mr, span_y))
+			_blit_frame_region(target, image, Rect2i(0, hole.end.y, left, bottom), Rect2i(0, th - mb, ml, mb))
+			_blit_frame_region(target, image, Rect2i(left, hole.end.y, hole.size.x, bottom), Rect2i(ml, th - mb, span_x, mb))
+			_blit_frame_region(target, image, Rect2i(hole.end.x, hole.end.y, right, bottom), Rect2i(tw - mr, th - mb, mr, mb))
+			target.generate_mipmaps()
+			_portrait_board_frame = ImageTexture.create_from_image(target)
+			return _portrait_board_frame
+	# Not a transparent-centre frame: fall back to the landscape art.
+	return UiHelpers.kit_texture("panel_board_frame")
+
+static func _blit_frame_region(target: Image, source: Image, from: Rect2i, to: Rect2i) -> void:
+	if to.size.x <= 0 or to.size.y <= 0 or from.size.x <= 0 or from.size.y <= 0:
+		return
+	var region := source.get_region(from)
+	region.resize(to.size.x, to.size.y, Image.INTERPOLATE_BILINEAR)
+	target.blit_rect(region, Rect2i(Vector2i.ZERO, to.size), to.position)
+
 # The board window: a darkened copy of the background inside the kit frame, the cards on top.
 func _build_board_frame(parent: Control) -> void:
 	var rect: Rect2 = _pick(LAND_BOARD_FRAME, PORT_BOARD_FRAME)
-	# The visible border of the current PNG decides the real hole; the constants are
-	# only the fallback when the art is missing. This keeps the interior centred even
-	# when the painted frame changes (new art, cleaned shadow, thicker bevel).
-	var frame_data := UiHelpers.alpha_nine_patch(
-		UiHelpers.kit_texture("panel_board_frame"), rect.size, BOARD_FRAME_BORDER_MAX)
+	# Landscape keeps the delivered wide frame; portrait uses the new vertical art baked to
+	# the exact window. The constants are only the fallback when the art is missing.
 	var inner: Rect2 = _pick(LAND_BOARD_INNER, PORT_BOARD_INNER)
-	if not frame_data.is_empty():
-		inner = frame_data["inner"]
+	var frame_art: Control = null
+	if _is_landscape:
+		var frame_data := UiHelpers.alpha_nine_patch(
+			UiHelpers.kit_texture("panel_board_frame"), rect.size, BOARD_FRAME_BORDER_MAX)
+		if not frame_data.is_empty():
+			inner = frame_data["inner"]
+			frame_art = _make_nine_patch_art("BoardArt", frame_data, rect)
+	else:
+		var portrait_frame := _portrait_frame_texture()
+		if portrait_frame != null:
+			inner = Rect2(
+				PORT_FRAME_BORDER_LR, PORT_FRAME_BORDER_TOP,
+				rect.size.x - PORT_FRAME_BORDER_LR * 2.0,
+				rect.size.y - PORT_FRAME_BORDER_TOP - PORT_FRAME_BORDER_BOTTOM)
+			frame_art = _make_art("BoardArt", portrait_frame, Rect2(Vector2.ZERO, rect.size), true)
+		else:
+			var frame_data := UiHelpers.alpha_nine_patch(
+				UiHelpers.kit_texture("panel_board_frame"), rect.size, BOARD_FRAME_BORDER_MAX)
+			if not frame_data.is_empty():
+				inner = frame_data["inner"]
+				frame_art = _make_nine_patch_art("BoardArt", frame_data, rect)
 	var frame := Control.new()
 	frame.name = "BoardFrame"
 	frame.z_index = 0
@@ -822,8 +923,8 @@ func _build_board_frame(parent: Control) -> void:
 	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_place(shade, inner)
 	frame.add_child(shade)
-	if not frame_data.is_empty():
-		frame.add_child(_make_nine_patch_art("BoardArt", frame_data, rect))
+	if frame_art != null:
+		frame.add_child(frame_art)
 	board_container = Control.new()
 	board_container.name = "Board"
 	board_container.clip_contents = true
@@ -1219,6 +1320,26 @@ func _board_layout() -> Dictionary:
 			(c.position.x - fit["origin"].x) * position_scale.x,
 			(c.position.y - fit["origin"].y) * position_scale.y
 		)
+	# BoardLayout.compute sizes the *logical* span, but the final node rect is the scaled
+	# position plus the rendered card size (and the max-scale cap can re-centre it). Measure
+	# that real bbox and re-centre the offset so no card can ever leave the container:
+	# min >= 0 and max <= board_container.size, with the same uniform scale/pitches.
+	var scale: float = float(fit["scale"])
+	var card_size := CARD_DISPLAY_SIZE * scale * BOARD_CARD_SCALE
+	var content_min := Vector2(INF, INF)
+	var content_max := Vector2(-INF, -INF)
+	for p: Vector2 in grid_positions.values():
+		var scaled := p * scale
+		content_min = Vector2(minf(content_min.x, scaled.x), minf(content_min.y, scaled.y))
+		content_max = Vector2(maxf(content_max.x, scaled.x + card_size.x), maxf(content_max.y, scaled.y + card_size.y))
+	var content := content_max - content_min
+	var target := (board_container.size - content) * 0.5 - content_min
+	# When the board fits, pin it inside (lower bound keeps min >= 0; upper keeps max <= size).
+	if content.x <= board_container.size.x:
+		target.x = clampf(target.x, -content_min.x, board_container.size.x - content_max.x)
+	if content.y <= board_container.size.y:
+		target.y = clampf(target.y, -content_min.y, board_container.size.y - content_max.y)
+	fit["offset"] = target
 	return {
 		"offset": fit["offset"],
 		"scale": fit["scale"],

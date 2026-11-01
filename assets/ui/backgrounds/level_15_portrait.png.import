@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://eaq8nhr0ljf1"
-path="res://.godot/imported/panel_board_portrait.png-0d5e0fdfaddf9a5ee7c549a8097b8efa.ctex"
+uid="uid://d00htr6gfe34p"
+path="res://.godot/imported/level_15_portrait.png-1661846888b9cd035b5f7ff286d2eb1a.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/kit/panel_board_portrait.png"
-dest_files=["res://.godot/imported/panel_board_portrait.png-0d5e0fdfaddf9a5ee7c549a8097b8efa.ctex"]
+source_file="res://assets/ui/backgrounds/level_15_portrait.png"
+dest_files=["res://.godot/imported/level_15_portrait.png-1661846888b9cd035b5f7ff286d2eb1a.ctex"]
 
 [params]
 

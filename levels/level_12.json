@@ -1,0 +1,8 @@
+{
+  "id": "12",
+  "difficulty": 12,
+  "clearing_capacity": 7,
+  "deck": ["cat", "cat", "wolf", "wolf", "owl", "owl", "whale", "whale", "mouse", "mouse", "frog", "frog", "boar", "boar", "duck", "duck", "leaf", "leaf", "heart", "heart", "gem", "gem", "cat_mage", "cat_mage"],
+  "time_thresholds": { "three_stars": 265, "two_stars": 455 },
+  "rewards": [{ "type": "hold", "quantity": 2 }]
+}

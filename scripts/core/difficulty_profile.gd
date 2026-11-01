@@ -16,7 +16,7 @@ extends RefCounted
 # below (BoardPipeline.layer_targets) - lower means more cards free at the start;
 # aspect_min (optional, default 1.15) = narrowest base (width / height) accepted -
 # L5+ ask for clearly wide bases; free_ratio[_min/_max] = wanted share of free cards
-# at the start; complexity = informative 1..11 rating; seed = base seed.
+# at the start; complexity = informative 1..15 rating; seed = base seed.
 const LEVELS := {
 	1: {
 		"board_types": ["cat", "wolf", "owl", "mouse", "gem", "crystal"],
@@ -169,6 +169,62 @@ const LEVELS := {
 		"free_ratio_max": 0.41,
 		"complexity": 11.0,
 		"seed": 11004,
+	},
+	12: {
+		"board_types": ["cat", "wolf", "owl", "whale", "mouse", "frog", "boar", "duck", "leaf", "heart", "gem", "crystal", "cat_mage"],
+		"board_cards": 150,
+		"columns": 13,
+		"rows": 7,
+		"layers": 4,
+		"layer_ratio": 0.5,
+		"aspect_min": 1.6,
+		"free_ratio": 0.30,
+		"free_ratio_min": 0.18,
+		"free_ratio_max": 0.42,
+		"complexity": 12.0,
+		"seed": 12001,
+	},
+	13: {
+		"board_types": ["cat", "wolf", "owl", "whale", "mouse", "frog", "boar", "duck", "leaf", "heart", "gem", "crystal", "cat_mage", "rhino"],
+		"board_cards": 156,
+		"columns": 13,
+		"rows": 7,
+		"layers": 4,
+		"layer_ratio": 0.5,
+		"aspect_min": 1.6,
+		"free_ratio": 0.29,
+		"free_ratio_min": 0.17,
+		"free_ratio_max": 0.41,
+		"complexity": 13.0,
+		"seed": 13001,
+	},
+	14: {
+		"board_types": ["cat", "wolf", "owl", "whale", "mouse", "frog", "boar", "duck", "leaf", "heart", "gem", "crystal", "cat_mage", "rhino", "sacer"],
+		"board_cards": 162,
+		"columns": 14,
+		"rows": 7,
+		"layers": 4,
+		"layer_ratio": 0.5,
+		"aspect_min": 1.6,
+		"free_ratio": 0.28,
+		"free_ratio_min": 0.16,
+		"free_ratio_max": 0.40,
+		"complexity": 14.0,
+		"seed": 14001,
+	},
+	15: {
+		"board_types": ["cat", "wolf", "owl", "whale", "mouse", "frog", "boar", "duck", "leaf", "heart", "gem", "crystal", "cat_mage", "rhino", "sacer"],
+		"board_cards": 168,
+		"columns": 14,
+		"rows": 7,
+		"layers": 4,
+		"layer_ratio": 0.5,
+		"aspect_min": 1.6,
+		"free_ratio": 0.27,
+		"free_ratio_min": 0.16,
+		"free_ratio_max": 0.40,
+		"complexity": 15.0,
+		"seed": 15001,
 	},
 }
 

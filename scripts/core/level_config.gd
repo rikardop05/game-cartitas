@@ -7,7 +7,7 @@ const DEFAULT_CARD_SIZE := 48.0
 # generator (logical space) and the renderer (level_screen / BoardLayout).
 const CARD_LOGICAL_SIZE := 48.0
 # Smallest rendered board card = MIN_CARD_SCALE x CARD_LOGICAL_SIZE (30 px, a touch target).
-const MIN_CARD_SCALE := 0.625
+const MIN_CARD_SCALE := 0.5
 const RESERVE_CARD_SCALE := 0.80
 const BOARD_PADDING := 8.0
 const HEADER_HEIGHT := 40.0
@@ -20,17 +20,17 @@ const MAX_VISIBLE_LAYERS := 4
 # kit's 352x192 window) and landscape (640x360) leaves 448x193 inside the 464x208
 # window. Configs that cannot keep the minimum rendered card size are MARKED
 # (fits_landscape=false), not rejected. Guardrails live here and are enforced by
-# validate(): 13x7 base grid, 4 layers, 144 board cards, min rendered card size.
+# validate(): 14x7 base grid, 5 layers, 168 board cards, min rendered card size.
 # Boards are wide with many small cards: the renderer never draws a board card
 # larger than MAX_BOARD_CARD_PX (small boards stay centered at that size).
 const PORTRAIT_BOARD_ENVELOPE := Vector2(336, 177)
 const LANDSCAPE_BOARD_ENVELOPE := Vector2(448, 193)
 const MAX_BOARD_CARD_PX := 46.0
 const MIN_CARD_SIZE_PX := 24.0
-const MAX_COLUMNS := 13
+const MAX_COLUMNS := 14
 const MAX_ROWS := 7
-const MAX_LAYERS := 4
-const MAX_BOARD_CARDS := 144
+const MAX_LAYERS := 5
+const MAX_BOARD_CARDS := 168
 
 var difficulty: int = 1
 var board_types: Array[String] = []
@@ -50,6 +50,8 @@ var rows: int = 5
 var layers: int = 2
 # Fraction of the lower layer held by each upper layer (see BoardPipeline.layer_targets).
 var layer_ratio: float = BoardPipeline.LAYER_RATIO
+# Optional explicit cards per layer (base first); empty = geometric layer_ratio.
+var layer_counts: Array[int] = []
 # Base layer aspect (width / height): wide ~2:1 boards (many small cards, like the
 # reference). The pipeline steers growth toward aspect_target and rejects bases
 # outside [aspect_min, aspect_max] (bases of up to 3 cards are exempt); rows raise
@@ -98,6 +100,9 @@ static func create(params: Dictionary) -> LevelConfig:
 	cfg.rows = int(params.get("rows", 5))
 	cfg.layers = int(params.get("layers", 2))
 	cfg.layer_ratio = float(params.get("layer_ratio", BoardPipeline.LAYER_RATIO))
+	cfg.layer_counts = []
+	for raw_layer_count in params.get("layer_counts", []):
+		cfg.layer_counts.append(int(raw_layer_count))
 	cfg.aspect_target = float(params.get("aspect_target", DEFAULT_ASPECT_TARGET))
 	cfg.aspect_min = float(params.get("aspect_min", DEFAULT_ASPECT_MIN))
 	cfg.aspect_max = float(params.get("aspect_max", DEFAULT_ASPECT_MAX))
@@ -221,8 +226,10 @@ func board_width() -> float:
 func board_height() -> float:
 	return maxf(card_size, rows * card_size)
 
-# Cards per layer, base first (the BoardPipeline pyramid distribution).
+# Cards per layer, base first (explicit layer_counts win over the geometric split).
 func layer_targets() -> Array:
+	if not layer_counts.is_empty():
+		return layer_counts.duplicate()
 	return BoardPipeline.layer_targets(board_cards(), layers, layer_ratio)
 
 # Rendered card size (px) when a board of the given size (default: the largest
@@ -248,6 +255,7 @@ func build_spec(geometry_seed: int, symbol_seed: int) -> BoardSpec:
 		"board_height": board_height(),
 		"layers": layers,
 		"layer_ratio": layer_ratio,
+		"layer_counts": layer_counts,
 		"aspect_target": aspect_target,
 		"aspect_min": aspect_min,
 		"aspect_max": aspect_max,

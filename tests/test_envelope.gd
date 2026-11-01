@@ -47,7 +47,7 @@ func test_envelope_rejects_out_of_envelope_with_diagnostics() -> void:
 	Assert.is_true(_errors_mention(deep.validate()["errors"], "layers"), "diagnostic names layers")
 	# too many board cards
 	var tall := LevelConfig.create({
-		"difficulty": 11, "board_types": ["cat", "wolf", "owl", "whale", "mouse", "frog", "boar", "duck", "leaf", "heart", "gem", "crystal"], "board_cards": 147,
+		"difficulty": 11, "board_types": ["cat", "wolf", "owl", "whale", "mouse", "frog", "boar", "duck", "leaf", "heart", "gem", "crystal"], "board_cards": 171,
 		"columns": 9, "rows": 5, "layers": 4, "seed": 1,
 	})
 	Assert.is_true(_errors_mention(tall.validate()["errors"], "board cards"), "diagnostic names board cards")
@@ -80,7 +80,7 @@ func test_same_seed_reproduces_board_and_decks() -> void:
 
 func test_each_attempt_gets_a_new_solvable_board() -> void:
 	LevelLoader.deterministic = false
-	for id in ["1", "6", "11"]:
+	for id in ["1", "6", "11", "15"]:
 		var a := LevelLoader.load_level(id)
 		var b := LevelLoader.load_level(id)
 		Assert.is_false(a.has("error") or b.has("error"), "level %s loads with a random seed" % id)
@@ -103,7 +103,7 @@ func test_no_level_returned_unsolvable() -> void:
 		Assert.is_true(SolvabilityChecker.is_solvable(level), "level %s actually solvable" % id)
 
 func test_no_silent_fallback_as_success() -> void:
-	for id in range(1, 11):
+	for id in range(1, DifficultyProfile.max_level() + 1):
 		var cfg := DifficultyProfile.for_level(id)
 		var res := cfg.generate()
 		Assert.is_true(res["ok"], "level %d generates" % id)

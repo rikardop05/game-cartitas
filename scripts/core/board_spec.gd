@@ -15,6 +15,8 @@ var layers: int = 1
 # Each upper layer targets about this fraction of the cards of the layer below
 # (BoardPipeline.layer_targets); smaller ratios leave more cards free.
 var layer_ratio: float = BoardPipeline.LAYER_RATIO
+# Optional explicit cards per layer (base first). Empty = geometric layer_ratio.
+var layer_counts: Array[int] = []
 # Base-layer aspect (width / height): growth steers toward aspect_target and the base
 # must end inside [aspect_min, aspect_max] (bases of up to 3 cards are exempt).
 var aspect_target: float = BoardPipeline.ASPECT_TARGET
@@ -37,6 +39,8 @@ static func create(params: Dictionary) -> BoardSpec:
 	spec.board_height = float(params.get("board_height", 0.0))
 	spec.layers = int(params.get("layers", 1))
 	spec.layer_ratio = float(params.get("layer_ratio", BoardPipeline.LAYER_RATIO))
+	for raw_count in params.get("layer_counts", []):
+		spec.layer_counts.append(int(raw_count))
 	spec.aspect_target = float(params.get("aspect_target", BoardPipeline.ASPECT_TARGET))
 	spec.aspect_min = float(params.get("aspect_min", BoardPipeline.ASPECT_MIN))
 	spec.aspect_max = float(params.get("aspect_max", BoardPipeline.ASPECT_MAX))
@@ -71,6 +75,19 @@ func validate() -> Dictionary:
 	var minimum_layer_cards := layers * (layers + 1) / 2
 	if layers > 1 and card_count < minimum_layer_cards:
 		errors.append("card_count %d is too small for %d strictly-decreasing positive layer counts (need >= %d)" % [card_count, layers, minimum_layer_cards])
+	if not layer_counts.is_empty():
+		if layer_counts.size() != layers:
+			errors.append("layer_counts has %d entries for %d layers" % [layer_counts.size(), layers])
+		var layer_sum := 0
+		for i in layer_counts.size():
+			var count := int(layer_counts[i])
+			layer_sum += count
+			if count < 1:
+				errors.append("layer_counts must be positive")
+			if i > 0 and count >= int(layer_counts[i - 1]):
+				errors.append("layer_counts must decrease strictly")
+		if layer_sum != card_count:
+			errors.append("layer_counts add up to %d, not card_count %d" % [layer_sum, card_count])
 	if not card_types.is_empty():
 		if card_count % 3 != 0:
 			errors.append("card_count must be a multiple of 3 when card_types are provided")
@@ -105,7 +122,7 @@ func validate() -> Dictionary:
 		# layers are scattered over it on a quarter-card lattice inside its footprint.
 		var lattice_columns := floori(board_width / card_size)
 		var lattice_rows := floori(board_height / card_size)
-		var targets := BoardPipeline.layer_targets(card_count, layers, layer_ratio)
+		var targets := layer_counts.duplicate() if not layer_counts.is_empty() else BoardPipeline.layer_targets(card_count, layers, layer_ratio)
 		var base_cards := int(targets[0]) if not targets.is_empty() else card_count
 		if lattice_columns * lattice_rows < base_cards:
 			errors.append("card lattice %dx%d cannot hold the %d base cards" % [lattice_columns, lattice_rows, base_cards])

@@ -81,7 +81,7 @@ func test_progression_table_and_growth() -> void:
 			str(id), int(m["board_cards"]), int(m["types"]), cfg.columns, cfg.rows, cfg.layers, free, blocked,
 			float(m["free_ratio"]), occ, str(m["cards_per_layer"]),
 		])
-	Assert.equals(DifficultyProfile.max_level(), 11, "exactly 11 parametric difficulty profiles")
+	Assert.equals(DifficultyProfile.max_level(), 15, "exactly 15 parametric difficulty profiles")
 
 func test_statistical_layouts_per_level() -> void:
 	print("STATS (min / mean / max over %d samples per level)" % SAMPLES_PER_LEVEL)
