@@ -13,7 +13,6 @@ const TYPES := {
 	"leaf": {"symbol": "🍀", "color": "#6bc98a"},
 	"heart": {"symbol": "❤️", "color": "#e06a6a"},
 	"gem": {"symbol": "💎", "color": "#6ac9d9"},
-	"crystal": {"symbol": "🔮", "color": "#9a7ae0"},
 	"cat_mage": {"symbol": "🧙", "color": "#b06ac9"},
 	"rhino": {"symbol": "🦏", "color": "#9a8f7a"},
 	"sacer": {"symbol": "🕯️", "color": "#e0d06a"},

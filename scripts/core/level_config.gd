@@ -20,17 +20,17 @@ const MAX_VISIBLE_LAYERS := 4
 # kit's 352x192 window) and landscape (640x360) leaves 448x193 inside the 464x208
 # window. Configs that cannot keep the minimum rendered card size are MARKED
 # (fits_landscape=false), not rejected. Guardrails live here and are enforced by
-# validate(): 14x7 base grid, 5 layers, 168 board cards, min rendered card size.
+# validate(): 14x7 base grid, 5 layers, 180 board cards, min rendered card size.
 # Boards are wide with many small cards: the renderer never draws a board card
 # larger than MAX_BOARD_CARD_PX (small boards stay centered at that size).
 const PORTRAIT_BOARD_ENVELOPE := Vector2(336, 177)
 const LANDSCAPE_BOARD_ENVELOPE := Vector2(448, 193)
-const MAX_BOARD_CARD_PX := 46.0
+const MAX_BOARD_CARD_PX := 60.0
 const MIN_CARD_SIZE_PX := 24.0
 const MAX_COLUMNS := 14
 const MAX_ROWS := 7
 const MAX_LAYERS := 5
-const MAX_BOARD_CARDS := 168
+const MAX_BOARD_CARDS := 180
 
 var difficulty: int = 1
 var board_types: Array[String] = []

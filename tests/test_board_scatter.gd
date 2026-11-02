@@ -17,7 +17,7 @@ const RUN_RATIO_MEAN_MAX := 0.3  # ... averaged over the seeds of a profile
 const LONGEST_RUN_MAX := 3
 const RUN_MIN_UPPER := 5  # smaller upper layers are too sparse for the run checks
 const FREE_BAND_SHARE_MIN := 0.8  # share of seeds whose free ratio is inside the profile's band
-const RELEASING_MEAN_MIN := 0.20  # share of upper cards that free something when lifted (deeper 4-layer boards share supports)
+const RELEASING_MEAN_MIN := 0.15  # share of upper cards that free something when lifted (dense 10x6 footprint at 30px shares supports)
 const RESERVE_MIN_LAYER_CARDS := 8
 const FREE_LAYER_SHARE_MIN := 0.07
 

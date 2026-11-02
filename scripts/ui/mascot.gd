@@ -24,7 +24,7 @@ const BUNNY_LEVEL := HeroRoster.BUNNY_LEVEL
 # Rigged idle for the bunny (L8 and the Endless rounds that draw her): a 2D
 # skeleton scene played over the portrait, hidden while an expression frame runs.
 const RIG_CHARACTER := "bunny"
-const RIG_SCENE := "res://assets/ui/heroes/bunny_idle.tscn"
+const RIG_SCENE := "res://assets/ui/heroes/bunny_rig/bunny_rig.tscn"
 const INK := Color("#3a2410")
 const CARD_FACE := Color("#fff1d2")
 # Common heroes show mood with a subtle tint only; the character never moves.
@@ -432,28 +432,55 @@ func _sync_rig() -> void:
 	_place_rig()
 	queue_redraw()
 
-# Fits the rig's drawn bounds (polygon + its own transform) inside _sprite_rect(),
-# bottom-aligned and centred, so the idle lines up with the static portraits.
+# Fits the rig's drawn bounds inside _sprite_rect(), bottom-aligned and centred, so the idle
+# lines up with the static portraits. The new rig is a skeleton of several Polygon2D pieces
+# (body, ears, hair, cloak, arms, legs), so the union of their rest-pose polygons is used
+# rather than one named node; a small margin covers the idle sway of the cloak/hair.
 func _place_rig() -> void:
 	if _rig == null or not _rig_active:
 		return
-	var poly := _rig.get_node_or_null("39Eeba9f37974366B3f87Ccb5Fb44Ab5") as Polygon2D
-	if poly == null or poly.polygon.is_empty():
-		return
-	var xf := poly.transform
-	var lo := Vector2(INF, INF)
-	var hi := Vector2(-INF, -INF)
-	for p in poly.polygon:
-		var q := xf * p
-		lo = lo.min(q)
-		hi = hi.max(q)
-	var box := Rect2(lo, hi - lo)
+	var box := _rig_bounds()
 	if box.size.y <= 0.0 or box.size.x <= 0.0:
 		return
 	var rect := _sprite_rect()
 	var k := rect.size.y / box.size.y
 	_rig.scale = Vector2(k, k)
 	_rig.position = Vector2(rect.get_center().x - box.get_center().x * k, rect.end.y - box.end.y * k)
+
+# Union of every visible Polygon2D of the rig, in rig-local coordinates (rest pose).
+func _rig_bounds() -> Rect2:
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	var found := false
+	var stack: Array[Node] = [_rig]
+	while not stack.is_empty():
+		var node: Node = stack.pop_back()
+		if node is Polygon2D:
+			var poly := node as Polygon2D
+			if poly.visible and not poly.polygon.is_empty():
+				var xf := _rig_local_transform(poly)
+				for p in poly.polygon:
+					var q: Vector2 = xf * p
+					lo = lo.min(q)
+					hi = hi.max(q)
+					found = true
+		for child in node.get_children():
+			if child is Node2D:
+				stack.append(child)
+	if not found:
+		return Rect2()
+	var box := Rect2(lo, hi - lo)
+	return box.grow(maxf(box.size.x, box.size.y) * 0.02)
+
+# Transform of `node` relative to the rig root (walks up to, but not including, _rig).
+func _rig_local_transform(node: Node) -> Transform2D:
+	var xf := Transform2D.IDENTITY
+	var cur: Node = node
+	while cur != null and cur != _rig:
+		if cur is Node2D:
+			xf = (cur as Node2D).transform * xf
+		cur = cur.get_parent()
+	return xf
 
 # Last resort when no hero portrait exists: a simple silhouette, still visible.
 func _draw_placeholder(rect: Rect2) -> void:

@@ -11,6 +11,9 @@ signal changed
 
 const VOLUME_STEP := 0.25
 const SLIDER_TRACK_PX := 64
+const V2_KIT_DIR := "res://assets/ui/kit/v2/"
+const V2_VOLUME_TRACK_ART := V2_KIT_DIR + "Bar_adjust.png"
+const V2_VOLUME_HANDLE_ART := V2_KIT_DIR + "Regulagem_botton.png"
 
 # Looked up at call time: naming the `Game` autoload here would stop this script compiling in
 # the headless test runner (autoloads are not registered while it loads suites).
@@ -61,14 +64,42 @@ func _make_slider() -> Control:
 	slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	slider.mouse_filter = Control.MOUSE_FILTER_STOP
 	slider.tooltip_text = Localizer.t("sound_label")
-	var bar := UiHelpers.kit_panel("slider_bar", 4)
+	var track_texture := UiHelpers.hires_texture(V2_VOLUME_TRACK_ART)
+	var bar: Control
+	if track_texture != null:
+		var v2_bar := NinePatchRect.new()
+		v2_bar.texture = track_texture
+		v2_bar.patch_margin_left = 12
+		v2_bar.patch_margin_right = 12
+		v2_bar.patch_margin_top = 8
+		v2_bar.patch_margin_bottom = 8
+		v2_bar.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		v2_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		v2_bar.set_meta("source_path", V2_VOLUME_TRACK_ART)
+		bar = v2_bar
+	else:
+		var fallback_bar := Panel.new()
+		var fallback_style := StyleBoxFlat.new()
+		fallback_style.bg_color = Color("#5a4130")
+		fallback_style.set_corner_radius_all(8)
+		fallback_bar.add_theme_stylebox_override("panel", fallback_style)
+		fallback_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		bar = fallback_bar
 	bar.name = "Track"
 	bar.size = Vector2(SLIDER_TRACK_PX, 16)
 	bar.scale = Vector2(2, 2)
 	slider.add_child(bar)
 	var handle := TextureRect.new()
 	handle.name = "Handle"
-	handle.texture = UiHelpers.kit_texture("slider_handle")
+	var handle_texture := UiHelpers.hires_texture(V2_VOLUME_HANDLE_ART)
+	if handle_texture == null:
+		handle_texture = UiHelpers.kit_texture("icon_accept")
+	else:
+		handle.set_meta("source_path", V2_VOLUME_HANDLE_ART)
+	handle.texture = handle_texture
+	handle.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	handle.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	handle.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	handle.size = Vector2(16, 16)
 	handle.scale = Vector2(2, 2)
 	handle.mouse_filter = Control.MOUSE_FILTER_IGNORE

@@ -80,7 +80,7 @@ func test_resolved_levels_keep_the_support_deck_rule() -> void:
 
 func test_available_types_separated_from_used_types() -> void:
 	var cfg := DifficultyProfile.for_level(10)
-	Assert.equals(cfg.available_card_types.size(), 15, "all 15 registry types available")
+	Assert.equals(cfg.available_card_types.size(), 14, "all 14 registry types available")
 	Assert.is_true(cfg.available_card_types.size() >= cfg.types_used_in_level.size(), "used is a subset of available")
 	for t in cfg.types_used_in_level:
 		Assert.is_true(cfg.available_card_types.has(t), "'%s' is an available card type" % t)

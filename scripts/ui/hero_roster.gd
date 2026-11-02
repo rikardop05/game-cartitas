@@ -28,6 +28,15 @@ const BUNNY_FRAMES := {
 	2: "hero_bunny_bad_choice",
 	3: "hero_bunny_defeat",
 }
+# Large defeat-screen plates. Everything without a dedicated plate uses the archer;
+# the screen falls back to the archer file if the mapped PNG is missing.
+const DEFEAT_ART_BY_HERO := {
+	"bunny": "defeat_bunny.png",
+	"cat": "defeat_cat.png",
+	"cat_mage": "defeat_cat.png",
+	"sacer": "defeat_sacer.png",
+}
+const DEFEAT_FALLBACK_ART := "defeat_archer.png"
 
 static func hero_for(level_id: String, endless_round: int = 0) -> String:
 	if endless_round > 0:
@@ -41,6 +50,9 @@ static func hero_for(level_id: String, endless_round: int = 0) -> String:
 
 static func bunny_expression_for(mood: int) -> String:
 	return str(BUNNY_FRAMES.get(mood, BUNNY_FRAMES[0]))
+
+static func defeat_character_file(hero_id: String) -> String:
+	return str(DEFEAT_ART_BY_HERO.get(hero_id, DEFEAT_FALLBACK_ART))
 
 static func texture_path(hero_or_frame: String) -> String:
 	return HERO_DIR % hero_or_frame

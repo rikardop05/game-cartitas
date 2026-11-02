@@ -32,14 +32,14 @@ const RESERVE_FIELD_MARGINS := Rect2(0.07, 0.11, 0.07, 0.11)
 const POWERS_BOARD_ART := "res://assets/ui/kit/panel_powers_board.png"
 const POWERS_BOARD_MARGINS := Rect2(0.09, 0.05, 0.09, 0.05)
 # The square wooden plate is the table under each Support Deck's pile.
-const DECK_TABLE_ART := "res://assets/ui/kit/card_available_frame.png"
+const DECK_TABLE_ART := "res://assets/ui/kit/v2/card_available_frame.png"
 const MATCH_BURST_ART := "res://assets/ui/fx/match_burst.png"
 const MATCH_SMOKE_ART := "res://assets/ui/fx/match_smoke.png"
 const MATCH_FX_CARD_SPAN := 2.0
 const MATCH_FX_SECONDS := 0.34
 # The Clearing Zone bar's painted body inside its file (the file has wide transparent margins)
 # and the share of the width its carved end caps take when 9-sliced.
-const ZONE_BAR_ART := "res://assets/ui/kit/bar_zone.png"
+const ZONE_BAR_ART := "res://assets/ui/kit/v2/bar_zone.png"
 # Fractions of the cropped bar: the dark bevel and the carved end caps stay intact,
 # the slots sit inside the wooden hole.
 const ZONE_BAR_MARGINS := Rect2(0.025, 0.10, 0.025, 0.10)
@@ -49,6 +49,15 @@ const SOUND_ICON_PX := 72
 const ENDLESS_BACKGROUND_LEVEL := 999
 # Frame thickness (source px) when a kit panel is 9-sliced: border plus its shadow line.
 const FRAME_MARGIN := 7
+# v2 art kit. The landscape board frame, zone bar, deck table, HUD icons and settings
+# header come from here; the portrait board keeps its baked near-square frame.
+const V2_KIT_DIR := "res://assets/ui/kit/v2/"
+const V2_BOARD_FRAME_ART := V2_KIT_DIR + "panel_board_frame.png"
+const V2_ZONE_BAR_ART := V2_KIT_DIR + "bar_zone.png"
+const V2_DECK_TABLE_ART := V2_KIT_DIR + "card_available_frame.png"
+const V2_GEAR_ART := V2_KIT_DIR + "Config_Icon.png"
+const V2_HELP_ART := V2_KIT_DIR + "interrog.png"
+const V2_SETTINGS_TITLE_ART := {"pt": "config_2.png", "en": "Configu.png"}
 
 # Layout, in logical px. Landscape (640x360) follows the owner's mockup; portrait (360x640)
 # stacks the same pieces. Every piece is a kit panel at an exact position, nothing reflows.
@@ -128,12 +137,33 @@ const END_PLAQUE_PORTRAIT := Vector2(230, 92)
 # tight on 360 px, so there it tucks in further behind the panel.
 const END_STARS_OVERLAP_LANDSCAPE := 0.22
 const END_STARS_OVERLAP_PORTRAIT := 0.2
+# The v2 plates replace the old text buttons on the end panel. The v2 kit only has an
+# English "EXIT"/"NEW GAME" pair, so PT keeps the matching v2 menu plates (SAIR/INICIAR)
+# instead of showing English over a Portuguese result.
+const END_CONTINUE_ART := {"pt": "Continuar_.png", "en": "Layer 2.png"}
+const END_NEW_GAME_ART := {"pt": "Iniciar).png", "en": "Layer 3.png"}
+const END_EXIT_ART := {"pt": "sair_.png", "en": "Layer 1.png"}
+# Defeat screen: a full-screen result composition. The stone window is nearly square; the
+# character is drawn behind it, large enough to read around its edges without covering the
+# two localised plates. Both rects are logical px (360x640 portrait / 640x360 landscape).
+const DEFEAT_DIR := "res://assets/ui/defeat/"
+const DEFEAT_PANEL_ART := DEFEAT_DIR + "defeat_panel.png"
+const DEFEAT_TITLE_ART := {"pt": "defeat_title_pt.png", "en": "defeat_title_en.png"}
+const DEFEAT_RETRY_ART := {"pt": "defeat_retry_pt.png", "en": "defeat_retry_en.png"}
+const DEFEAT_QUIT_ART := {"pt": "defeat_quit_pt.png", "en": "defeat_quit_en.png"}
+const DEFEAT_PANEL_LANDSCAPE := Rect2(348, 48, 268, 275)
+const DEFEAT_PANEL_PORTRAIT := Rect2(45, 180, 270, 276)
+const DEFEAT_OVERLAY_Z := 9
+# The HUD is lifted above the defeat shade so the menu/help/sound controls stay usable.
+const DEFEAT_HUD_Z := 10
 # The inside of a 64x64 slot (deck piles are centred in it).
 const SLOT_INNER := Rect2(5, 6, 54, 52)
 const POWER_BUTTON_LANDSCAPE := Vector2(54, 36)
-const LANDSCAPE_ZONE_CARD_SIZE := Vector2(46.0, 46.0)
-# The zone row fills the whole bar: 7 slots + 6 computed gaps, centered.
-const PORTRAIT_ZONE_CARD_SIZE := Vector2(42.0, 42.0)
+# The zone row fills the whole bar: 7 large slots with a computed step. The cards float
+# slightly above the painted surface; when 7 do not fit, the step is negative (overlap).
+const LANDSCAPE_ZONE_CARD_SIZE := Vector2(64.0, 64.0)
+const PORTRAIT_ZONE_CARD_SIZE := Vector2(60.0, 60.0)
+const ZONE_CARD_FLOAT_LIFT := 2.0
 const LANDSCAPE_RESERVE_CARD_SIZE := Vector2(34.0, 34.0)
 const PORTRAIT_RESERVE_CARD_SIZE := Vector2(42.0, 42.0)
 const DECK_CARD_SIZE := Vector2(42.0, 42.0)
@@ -654,7 +684,7 @@ func _build_hud(parent: Control) -> void:
 	back.pressed.connect(_on_back)
 	hud.add_child(back)
 
-	# The Endless label ("Endless · Round 12") is wider than "Level 6": in the narrow portrait
+	# The Endless label ("Endless Â· Round 12") is wider than "Level 6": in the narrow portrait
 	# title slot it wraps onto two lines.
 	level_label = Label.new()
 	level_label.name = "Title"
@@ -674,35 +704,16 @@ func _build_hud(parent: Control) -> void:
 
 	_build_hud_pills(hud)
 
-	var help := Button.new()
-	help.name = "HelpButton"
-	help.text = "?"
-	help.focus_mode = Control.FOCUS_NONE
-	help.add_theme_font_size_override("font_size", 12)
-	help.add_theme_color_override("font_color", TEXT_PRIMARY)
-	help.add_theme_color_override("font_hover_color", Color.WHITE)
-	help.add_theme_color_override("font_pressed_color", TEXT_MUTED)
-	help.add_theme_color_override("font_outline_color", Color(0.14, 0.07, 0.03, 0.92))
-	help.add_theme_constant_override("outline_size", 2)
-	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
-		var style := UiHelpers.kit_stylebox("pill", 8, 0)
-		if state == "hover":
-			style.modulate_color = Color(1.14, 1.14, 1.14)
-		elif state == "pressed":
-			style.modulate_color = Color(0.82, 0.82, 0.82)
-		help.add_theme_stylebox_override(state, style)
+	var help_texture := UiHelpers.hires_texture(V2_HELP_ART)
+	var help := _make_icon_button(
+		"HelpButton", help_texture, _pick(LAND_HELP, PORT_HELP), true, 2.0)
+	help.tooltip_text = Localizer.t("help")
 	help.pressed.connect(_on_help)
-	var help_rect: Rect2 = _pick(LAND_HELP, PORT_HELP)
-	_place(help, help_rect)
-	var help_shadow := _make_drop_shadow(
-		UiHelpers.kit_texture("pill"),
-		Rect2(help_rect.position + Vector2(1, 1), help_rect.size), 1.5, 0.35)
-	if help_shadow != null:
-		hud.add_child(help_shadow)
 	hud.add_child(help)
 
 	# The gear opens the in-game settings; it has the sound toggle's footprint and style.
-	var gear := _make_icon_button("SettingsButton", UiHelpers.hud_texture("icon_gear"), _pick(LAND_GEAR, PORT_GEAR), true, 3.0)
+	var gear_texture := UiHelpers.hires_texture(V2_GEAR_ART)
+	var gear := _make_icon_button("SettingsButton", gear_texture, _pick(LAND_GEAR, PORT_GEAR), true, 3.0)
 	gear.tooltip_text = Localizer.t("settings")
 	gear.pressed.connect(_on_settings)
 	hud.add_child(gear)
@@ -874,8 +885,9 @@ static func _portrait_frame_texture() -> Texture2D:
 			target.generate_mipmaps()
 			_portrait_board_frame = ImageTexture.create_from_image(target)
 			return _portrait_board_frame
-	# Not a transparent-centre frame: fall back to the landscape art.
-	return UiHelpers.kit_texture("panel_board_frame")
+	# Not a transparent-centre frame: fall back to the portrait art (the v2 landscape frame
+	# is 9-sliced by the caller when it is available).
+	return UiHelpers.kit_texture("panel_board_frame_portrait")
 
 static func _blit_frame_region(target: Image, source: Image, from: Rect2i, to: Rect2i) -> void:
 	if to.size.x <= 0 or to.size.y <= 0 or from.size.x <= 0 or from.size.y <= 0:
@@ -893,7 +905,7 @@ func _build_board_frame(parent: Control) -> void:
 	var frame_art: Control = null
 	if _is_landscape:
 		var frame_data := UiHelpers.alpha_nine_patch(
-			UiHelpers.kit_texture("panel_board_frame"), rect.size, BOARD_FRAME_BORDER_MAX)
+			UiHelpers.hires_texture(V2_BOARD_FRAME_ART), rect.size, BOARD_FRAME_BORDER_MAX)
 		if not frame_data.is_empty():
 			inner = frame_data["inner"]
 			frame_art = _make_nine_patch_art("BoardArt", frame_data, rect)
@@ -907,7 +919,7 @@ func _build_board_frame(parent: Control) -> void:
 			frame_art = _make_art("BoardArt", portrait_frame, Rect2(Vector2.ZERO, rect.size), true)
 		else:
 			var frame_data := UiHelpers.alpha_nine_patch(
-				UiHelpers.kit_texture("panel_board_frame"), rect.size, BOARD_FRAME_BORDER_MAX)
+				UiHelpers.hires_texture(V2_BOARD_FRAME_ART), rect.size, BOARD_FRAME_BORDER_MAX)
 			if not frame_data.is_empty():
 				inner = frame_data["inner"]
 				frame_art = _make_nine_patch_art("BoardArt", frame_data, rect)
@@ -1019,7 +1031,7 @@ func _build_zone_panel(parent: Control) -> void:
 	zone_container.add_theme_constant_override("v_separation", 3)
 	_place(zone_container, Rect2(
 		slots_rect.position.x,
-		slots_rect.position.y + floorf((slots_rect.size.y - card.y) * 0.5),
+		slots_rect.position.y + floorf((slots_rect.size.y - card.y) * 0.5) - ZONE_CARD_FLOAT_LIFT,
 		slots_rect.size.x,
 		card.y))
 	zone.add_child(zone_container)
@@ -1151,7 +1163,7 @@ func render() -> void:
 	var origin: Vector2 = layout["origin"]
 	var position_scale: Vector2 = layout["position_scale"]
 	var grid_positions: Dictionary = layout["grid_positions"]
-	var card_size: Vector2 = CARD_DISPLAY_SIZE * scale * BOARD_CARD_SCALE
+	var card_size := Vector2(_card_size, _card_size) * scale * BOARD_CARD_SCALE
 	_show_layout_warning_if_needed()
 
 	var depths := _blocked_depths()
@@ -1170,13 +1182,16 @@ func render() -> void:
 		board_container.add_child(node)
 
 	var zone_card_size := _zone_card_size()
-	# Fill the whole bar: distribute the leftover width into equal gaps between slots
-	# (the container's ALIGNMENT_CENTER then keeps the row optically centred).
+	# Fill the whole bar: distribute the leftover width into the slot step. When the seven
+	# larger cards do not fit, the step goes negative so they overlap and still occupy one
+	# row (the container's ALIGNMENT_CENTER keeps the overlapped row centred).
 	var slots := maxi(1, controller.clearing_capacity)
 	var gap := 2
 	if slots > 1:
 		var usable: float = zone_container.size.x
-		gap = maxi(2, floori((usable - slots * zone_card_size.x) / float(slots - 1)))
+		gap = floori((usable - slots * zone_card_size.x) / float(slots - 1))
+		if gap > 0:
+			gap = maxi(2, gap)
 	zone_container.add_theme_constant_override("h_separation", gap)
 	for i in controller.clearing_capacity:
 		if i < controller.zone.cards.size():
@@ -1296,7 +1311,7 @@ func _board_layout() -> Dictionary:
 		return {"offset": Vector2.ZERO, "scale": 1.0, "origin": Vector2.ZERO, "position_scale": Vector2.ONE, "grid_positions": {}}
 	# Single source of scale: logical positions are mapped to the container by
 	# BoardLayout.compute with a uniform scale. Positions are NOT snapped to a
-	# fixed pitch — snapping scaled positions collapses distinct slots. The
+	# fixed pitch â€” snapping scaled positions collapses distinct slots. The
 	# scale never goes below LevelConfig.MIN_CARD_SCALE; if the container is too
 	# small the layout is flagged (scale_limited) and surfaced as a warning.
 	var card := _card_size * BOARD_CARD_SCALE
@@ -1304,7 +1319,7 @@ func _board_layout() -> Dictionary:
 	_scale_limited = bool(fit["scale_limited"])
 	# Boards are wide with many small cards: a board card is never drawn larger than
 	# LevelConfig.MAX_BOARD_CARD_PX. Small boards keep that size and are re-centered.
-	var max_scale := LevelConfig.MAX_BOARD_CARD_PX / maxf(1.0, CARD_DISPLAY_SIZE.y * BOARD_CARD_SCALE)
+	var max_scale := LevelConfig.MAX_BOARD_CARD_PX / maxf(1.0, _card_size * BOARD_CARD_SCALE)
 	if float(fit["scale"]) > max_scale:
 		fit["scale"] = max_scale
 		fit["offset"] = Vector2(
@@ -1325,7 +1340,7 @@ func _board_layout() -> Dictionary:
 	# that real bbox and re-centre the offset so no card can ever leave the container:
 	# min >= 0 and max <= board_container.size, with the same uniform scale/pitches.
 	var scale: float = float(fit["scale"])
-	var card_size := CARD_DISPLAY_SIZE * scale * BOARD_CARD_SCALE
+	var card_size := Vector2(_card_size, _card_size) * scale * BOARD_CARD_SCALE
 	var content_min := Vector2(INF, INF)
 	var content_max := Vector2(-INF, -INF)
 	for p: Vector2 in grid_positions.values():
@@ -1412,14 +1427,14 @@ func _make_card_rect(type: String, depth: int, card_size: Vector2, shadow: bool 
 		# Painted cards use their own alpha silhouette, never a transparent rectangle.
 		var card_tex := UiHelpers.card_texture(type)
 		var shadow_tex := UiHelpers.shadow_texture(
-			card_tex, 2.0 if zone_shadow else 1.5, 0.35 if zone_shadow else 0.30)
+			card_tex, 2.4 if zone_shadow else 1.5, 0.42 if zone_shadow else 0.30)
 		if shadow_tex != null:
 			var shadow_node := Control.new()
 			shadow_node.name = "CardShadow"
 			shadow_node.custom_minimum_size = card_size
 			shadow_node.size = card_size
 			shadow_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			var shadow_offset := Vector2(2.0, 2.0) if zone_shadow else Vector2(1.0, 2.0)
+			var shadow_offset := Vector2(2.0, 3.0) if zone_shadow else Vector2(1.0, 2.0)
 			shadow_node.draw.connect(func():
 				shadow_node.draw_texture_rect(shadow_tex, Rect2(shadow_offset, card_size), false))
 			root.add_child(shadow_node)
@@ -1624,11 +1639,11 @@ func _power_name(p: String) -> String:
 func _power_icon(p: String) -> String:
 	match p:
 		"hold":
-			return "📥"
+			return "ðŸ“¥"
 		"undo":
-			return "↩️"
+			return "â†©ï¸"
 		"refresh":
-			return "🔀"
+			return "ðŸ”€"
 	return "?"
 
 func _on_help() -> void:
@@ -1760,16 +1775,34 @@ func _build_settings_overlay() -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 6 if _is_landscape else 8)
 	panel.add_child(col)
-	# Heading with the kit's green close icon in the top-right corner.
+	# Heading with the kit's green close icon in the top-right corner. The v2 settings
+	# plate is localised (config_2/Configu); the text Label is only a missing-art fallback.
 	var header := HBoxContainer.new()
 	col.add_child(header)
-	var heading := Label.new()
-	heading.text = Localizer.t("settings")
-	heading.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	heading.add_theme_font_size_override("font_size", 16)
-	heading.add_theme_color_override("font_color", TEXT_PRIMARY)
-	header.add_child(heading)
+	var title_art: String = str(V2_SETTINGS_TITLE_ART["pt" if Localizer.current == "pt" else "en"])
+	var title_texture := UiHelpers.hires_texture(V2_KIT_DIR + title_art)
+	if title_texture != null:
+		var heading_art := TextureRect.new()
+		heading_art.name = "SettingsTitle"
+		heading_art.texture = title_texture
+		heading_art.set_meta("source_path", V2_KIT_DIR + title_art)
+		heading_art.set_meta("locale", "pt" if Localizer.current == "pt" else "en")
+		heading_art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		heading_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		heading_art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		heading_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		heading_art.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		heading_art.custom_minimum_size = Vector2(0, 30 if _is_landscape else 36)
+		header.add_child(heading_art)
+	else:
+		var heading := Label.new()
+		heading.name = "SettingsTitle"
+		heading.text = Localizer.t("settings")
+		heading.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		heading.add_theme_font_size_override("font_size", 16)
+		heading.add_theme_color_override("font_color", TEXT_PRIMARY)
+		header.add_child(heading)
 	var corner_close := TextureButton.new()
 	corner_close.name = "SettingsCornerClose"
 	corner_close.texture_normal = UiHelpers.kit_texture("icon_close_green")
@@ -2016,7 +2049,7 @@ func _board_card_rect(card: Card) -> Rect2:
 	var origin: Vector2 = layout["origin"]
 	var position_scale: Vector2 = layout["position_scale"]
 	var grid_positions: Dictionary = layout["grid_positions"]
-	var card_size := CARD_DISPLAY_SIZE * scale * BOARD_CARD_SCALE
+	var card_size := Vector2(_card_size, _card_size) * scale * BOARD_CARD_SCALE
 	var fallback_position := Vector2(
 		(card.position.x - origin.x) * position_scale.x,
 		(card.position.y - origin.y) * position_scale.y
@@ -2392,7 +2425,7 @@ func _spawn_match_fx(path: String, center: Vector2, side: float, start_scale: fl
 	tween.chain().tween_callback(node.queue_free)
 
 func _play_card_impact(center: Vector2) -> void:
-	var impact := UiHelpers.symbol_label("✦", 24)
+	var impact := UiHelpers.symbol_label("âœ¦", 24)
 	impact.size = Vector2(24, 24)
 	impact.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	impact.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -2480,6 +2513,11 @@ func _show_end(win: bool) -> void:
 	if _instruction_bubble != null and is_instance_valid(_instruction_bubble):
 		_instruction_bubble.queue_free()
 	_play_effect("play_level_complete" if win else "play_level_failed")
+	# A very fast defeat can land while the level-name intro is still on screen; it sits at
+	# z1500 and would cover the result plates.
+	var intro := find_child("IntroOverlay", true, false)
+	if intro != null:
+		intro.queue_free()
 	if _endless != null:
 		_show_endless_end(win)
 		return
@@ -2489,6 +2527,10 @@ func _show_end(win: bool) -> void:
 	else:
 		# Powers spent during a lost attempt are already gone from the inventory.
 		Game.save_progress()
+		# A campaign defeat has its own composition: the stage stays visible behind the
+		# stone window and the HUD remains available for menu/help.
+		_show_defeat_screen()
+		return
 
 	var info := _open_end_panel()
 
@@ -2534,11 +2576,181 @@ func _show_end(win: bool) -> void:
 	})
 
 	var buttons := _add_end_buttons(info)
-	if win and LevelLoader.level_exists(int(controller.level_id) + 1):
-		buttons.add_child(_make_end_button(Localizer.t("next_level"), func(): Game.start_level(int(controller.level_id) + 1)))
-	if not win:
-		buttons.add_child(_make_end_button(Localizer.t("retry"), func(): Game.restart_level()))
-	buttons.add_child(_make_end_button(Localizer.t("menu"), func(): Game.go_to_menu()))
+	if LevelLoader.level_exists(int(controller.level_id) + 1):
+		buttons.add_child(_make_end_art_button("continue", "next_level", func(): Game.start_level(int(controller.level_id) + 1)))
+	buttons.add_child(_make_end_art_button("exit", "menu", func(): Game.go_to_menu()))
+
+# The campaign defeat composition. The stage (background and HUD) stays behind a lighter
+# shade; the hero is mapped from HeroRoster and drawn large behind the stone window, which
+# carries the localised title and the two real retry/quit plates. The HUD is lifted above
+# the shade so Back/Help/Sound keep working.
+func _show_defeat_screen() -> void:
+	var hud := find_child("Hud", true, false) as Control
+	if hud != null:
+		hud.z_index = DEFEAT_HUD_Z
+
+	var overlay := Control.new()
+	overlay.name = "DefeatOverlay"
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.z_index = DEFEAT_OVERLAY_Z
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(overlay)
+
+	var shade := ColorRect.new()
+	shade.name = "DefeatShade"
+	shade.color = Color(0, 0, 0, 0.46)
+	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shade.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.add_child(shade)
+
+	var hero_id := HeroRoster.hero_for(_level_id)
+	var character_file := defeat_character_file(hero_id)
+	var character_texture := _defeat_texture(character_file)
+	if character_texture == null:
+		character_file = "defeat_archer.png"
+		character_texture = _defeat_texture(character_file)
+	if character_texture != null:
+		var character := TextureRect.new()
+		character.name = "DefeatCharacter"
+		character.texture = character_texture
+		character.set_meta("source_path", DEFEAT_DIR + character_file)
+		character.set_meta("hero", hero_id)
+		character.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		character.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		character.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		character.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		character.z_index = 1
+		_place(character, _defeat_character_rect(character_texture))
+		overlay.add_child(character)
+
+	var panel := Control.new()
+	panel.name = "DefeatPanel"
+	panel.z_index = 2
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(panel, _defeat_panel_rect())
+	overlay.add_child(panel)
+
+	var panel_texture := _defeat_texture("defeat_panel.png")
+	if panel_texture != null:
+		var shadow := _make_drop_shadow(panel_texture, Rect2(Vector2(2, 4), panel.size), 2.2, 0.5)
+		if shadow != null:
+			shadow.name = "DefeatPanelShadow"
+			shadow.z_index = 0
+			panel.add_child(shadow)
+		var art := TextureRect.new()
+		art.name = "DefeatPanelArt"
+		art.texture = panel_texture
+		art.set_meta("source_path", DEFEAT_PANEL_ART)
+		art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		art.z_index = 1
+		_place(art, Rect2(Vector2.ZERO, panel.size))
+		panel.add_child(art)
+	else:
+		var fallback := Panel.new()
+		fallback.name = "DefeatPanelArt"
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color("#5b4a42")
+		style.border_color = Color("#d9a441")
+		style.set_border_width_all(4)
+		style.set_corner_radius_all(12)
+		fallback.add_theme_stylebox_override("panel", style)
+		fallback.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		fallback.z_index = 1
+		_place(fallback, Rect2(Vector2.ZERO, panel.size))
+		panel.add_child(fallback)
+
+	var locale := _defeat_locale()
+	var title_texture := _defeat_texture(str(DEFEAT_TITLE_ART[locale]))
+	if title_texture != null:
+		var title := TextureRect.new()
+		title.name = "DefeatTitle"
+		title.texture = title_texture
+		title.set_meta("source_path", DEFEAT_DIR + str(DEFEAT_TITLE_ART[locale]))
+		title.set_meta("locale", locale)
+		title.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		title.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		title.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		title.z_index = 2
+		_place(title, _defeat_title_rect())
+		panel.add_child(title)
+	else:
+		var fallback_title := Label.new()
+		fallback_title.name = "DefeatTitle"
+		fallback_title.text = Localizer.t("defeat")
+		fallback_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		fallback_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		fallback_title.add_theme_font_size_override("font_size", 28 if _is_landscape else 30)
+		fallback_title.add_theme_color_override("font_color", Color("#ffd86b"))
+		UiHelpers.add_text_shadow(fallback_title, 4)
+		fallback_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		fallback_title.z_index = 2
+		_place(fallback_title, _defeat_title_rect())
+		panel.add_child(fallback_title)
+
+	var retry := _make_defeat_button(
+		"DefeatRetry", str(DEFEAT_RETRY_ART[locale]), _defeat_retry_rect(),
+		"retry", func(): Game.restart_level())
+	retry.z_index = 2
+	panel.add_child(retry)
+	var quit := _make_defeat_button(
+		"DefeatQuit", str(DEFEAT_QUIT_ART[locale]), _defeat_quit_rect(),
+		"menu", _on_back)
+	quit.z_index = 2
+	panel.add_child(quit)
+
+# Hero -> defeat art, per the HeroRoster contract. Everything that is not bunny/cat/sacer
+# uses the archer plate; the caller falls back to the archer file if a PNG is missing.
+static func defeat_character_file(hero_id: String) -> String:
+	return HeroRoster.defeat_character_file(hero_id)
+
+func _defeat_locale() -> String:
+	return "pt" if Localizer.current == "pt" else "en"
+
+func _defeat_texture(file_name: String) -> Texture2D:
+	var path := DEFEAT_DIR + file_name
+	if not ResourceLoader.exists(path):
+		return null
+	return UiHelpers.hires_texture(path)
+
+func _defeat_panel_rect() -> Rect2:
+	return _pick(DEFEAT_PANEL_LANDSCAPE, DEFEAT_PANEL_PORTRAIT)
+
+func _defeat_title_rect() -> Rect2:
+	return Rect2(24, 24, 220, 81) if _is_landscape else Rect2(30, 26, 210, 78)
+
+func _defeat_retry_rect() -> Rect2:
+	return Rect2(39, 112, 190, 56) if _is_landscape else Rect2(45, 112, 180, 53)
+
+func _defeat_quit_rect() -> Rect2:
+	return Rect2(39, 176, 190, 56) if _is_landscape else Rect2(45, 174, 180, 53)
+
+func _defeat_character_rect(texture: Texture2D) -> Rect2:
+	var aspect := float(texture.get_width()) / float(maxi(1, texture.get_height()))
+	if _is_landscape:
+		var width := minf(300.0, 300.0 * aspect)
+		var height := width / aspect
+		return Rect2(22.0, 340.0 - height, width, height)
+	var width := minf(340.0, 560.0 * aspect)
+	var height := width / aspect
+	return Rect2(0.0, 56.0, width, height)
+
+# A localised defeat plate. If the PNG is missing, the old text button is used as a safe
+# fallback; the art itself carries the label, so no duplicate Label is drawn over it.
+func _make_defeat_button(node_name: String, file_name: String, rect: Rect2, label_key: String, callback: Callable) -> Button:
+	var texture := _defeat_texture(file_name)
+	if texture == null:
+		var fallback := _make_end_button(Localizer.t(label_key), callback)
+		fallback.name = node_name
+		_place(fallback, rect)
+		return fallback
+	var btn := _make_face_button(node_name, texture, rect.size, Localizer.t(label_key), callback)
+	btn.set_meta("source_path", DEFEAT_DIR + file_name)
+	_place(btn, rect)
+	return btn
 
 # Endless end panels: a cleared round (the run goes on) or the end of the run.
 func _show_endless_end(win: bool) -> void:
@@ -2554,20 +2766,20 @@ func _show_endless_end(win: bool) -> void:
 		info.add_child(_make_end_label("%s: %d" % [Localizer.t("score"), _endless.score], 15, TEXT_PRIMARY))
 		_add_end_mascot(info, true, "round_intro", {})
 		buttons = _add_end_buttons(info)
-		buttons.add_child(_make_end_button(Localizer.t("next_round"), func(): Game.restart_level()))
+		buttons.add_child(_make_end_art_button("continue", "next_round", func(): Game.restart_level()))
 	else:
 		var result := _finish_endless_run()
 		info.add_child(_make_end_label(Localizer.t("run_over"), 22, TEXT_MUTED))
 		info.add_child(_make_end_label(str(result["score"]), 40, TEXT_PRIMARY))
 		info.add_child(_make_end_label("%s: %d" % [Localizer.t("rounds_cleared"), int(result["rounds_cleared"])], 14, TEXT_PRIMARY))
 		if bool(result["new_best"]):
-			info.add_child(_make_end_label("★ %s" % Localizer.t("new_best"), 18, GOLD, true))
+			info.add_child(_make_end_label("â˜… %s" % Localizer.t("new_best"), 18, GOLD, true))
 		else:
 			info.add_child(_make_end_label("%s: %d" % [Localizer.t("best_score"), Game.progress.endless_best], 14, TEXT_MUTED))
 		_add_end_mascot(info, false, "lose", {})
 		buttons = _add_end_buttons(info)
-		buttons.add_child(_make_end_button(Localizer.t("play_again"), func(): Game.start_endless()))
-	buttons.add_child(_make_end_button(Localizer.t("menu"), _on_back))
+		buttons.add_child(_make_end_art_button("new_game", "play_again", func(): Game.start_endless()))
+	buttons.add_child(_make_end_art_button("exit", "menu", _on_back))
 
 # Shared end-of-round panel shell: dark shade + centered warm panel. Returns the
 # VBox the caller fills with rows.
@@ -2722,7 +2934,7 @@ func _record_endless_match(card_count: int) -> void:
 	_pop_score(points)
 
 func _score_text() -> String:
-	return "✦ %d" % _endless.score
+	return "âœ¦ %d" % _endless.score
 
 func _refresh_score() -> void:
 	if score_label != null and _endless != null:
@@ -2756,6 +2968,63 @@ func _make_end_button(text: String, callback: Callable) -> Button:
 	btn.pressed.connect(callback)
 	return btn
 
+# End-panel action plate from the v2 kit. The art carries the label; the fallback text
+# button is only used when the PNG is unavailable.
+func _make_end_art_button(kind: String, label_key: String, callback: Callable) -> Button:
+	var locale := "pt" if Localizer.current == "pt" else "en"
+	var art := ""
+	match kind:
+		"continue":
+			art = str(END_CONTINUE_ART[locale])
+		"new_game":
+			art = str(END_NEW_GAME_ART[locale])
+		"exit":
+			art = str(END_EXIT_ART[locale])
+	var texture := UiHelpers.hires_texture(V2_KIT_DIR + art) if not art.is_empty() else null
+	if texture == null:
+		return _make_end_button(Localizer.t(label_key), callback)
+	var aspect := float(texture.get_width()) / float(maxi(1, texture.get_height()))
+	var btn := _make_face_button("End" + kind.capitalize(), texture, Vector2(104, 104.0 / aspect), Localizer.t(label_key), callback)
+	btn.set_meta("source_path", V2_KIT_DIR + art)
+	btn.set_meta("locale", locale)
+	return btn
+
+# A flat button with a painted face (no text). The face is centred in the hit box, so a
+# taller plate such as the PT retry banner never distorts; hover brightens and press dips it.
+func _make_face_button(node_name: String, texture: Texture2D, size: Vector2, label: String, callback: Callable) -> Button:
+	var btn := Button.new()
+	btn.name = node_name
+	btn.custom_minimum_size = size
+	btn.size = size
+	btn.flat = true
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	btn.tooltip_text = label
+	btn.set_meta("label", label)
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		btn.add_theme_stylebox_override(state, StyleBoxEmpty.new())
+	btn.pressed.connect(callback)
+	var shadow := _make_drop_shadow(texture, Rect2(Vector2(2, 3), size), 1.8, 0.45)
+	if shadow != null:
+		shadow.name = "Shadow"
+		shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		shadow.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+		btn.add_child(shadow)
+	var face := TextureRect.new()
+	face.name = "Face"
+	face.texture = texture
+	face.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	face.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	face.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(face, Rect2(Vector2.ZERO, size))
+	btn.add_child(face)
+	btn.button_down.connect(func(): face.position.y = 1.0)
+	btn.button_up.connect(func(): face.position.y = 0.0)
+	btn.mouse_entered.connect(func(): face.modulate = Color(1.12, 1.12, 1.12))
+	btn.mouse_exited.connect(func(): face.modulate = Color.WHITE)
+	return btn
+
 # The earned plaque pops in with a little overshoot.
 func _reveal_plaque(plaque: Control) -> void:
 	await get_tree().process_frame
@@ -2769,13 +3038,14 @@ func _reveal_plaque(plaque: Control) -> void:
 func _play_intro() -> void:
 	_play_effect("play_level_start")
 	var overlay := Control.new()
+	overlay.name = "IntroOverlay"
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.z_index = 1500
 	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(overlay)
 
 	var center := get_viewport_rect().size * 0.5
-	var burst := UiHelpers.symbol_label("✦", 120)
+	var burst := UiHelpers.symbol_label("âœ¦", 120)
 	burst.position = center - Vector2(60, 60)
 	burst.size = Vector2(120, 120)
 	burst.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -2914,7 +3184,7 @@ func _puff_star(index: int) -> void:
 	pop.tween_property(stars_row, "scale", Vector2.ONE, 0.16)
 	_play_sfx("puff")
 	var fx := _fx()
-	var flash := UiHelpers.symbol_label("✦", 22)
+	var flash := UiHelpers.symbol_label("âœ¦", 22)
 	flash.size = Vector2(22, 22)
 	flash.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	flash.vertical_alignment = VERTICAL_ALIGNMENT_CENTER

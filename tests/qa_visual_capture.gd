@@ -113,8 +113,8 @@ func _capture_view(view: Dictionary) -> void:
 			_capture_reserve(scene)
 			await _frames(4)
 			await _shot("%s_reserve_full" % tag)
-			# heart + gem side by side at the real zone card size (46 px landscape /
-			# 42 px portrait) to judge whether the two card faces read apart in play.
+			# heart + gem side by side at the enlarged zone card size (64 px landscape /
+			# 60 px portrait) to judge whether the two card faces read apart in play.
 			await _shot("%s_zone_compare" % tag)
 			await _shot("%s_powers" % tag)
 
@@ -192,13 +192,13 @@ func _capture_reserve(scene) -> void:
 	c.deck_a.current_index = c.deck_a.card_types.size()
 	c.deck_b.current_index = c.deck_b.card_types.size()
 	c.zone.cards.clear()
-	var types := ["heart", "gem", "heart", "gem", "leaf", "frog", "crystal"]
+	var types := ["heart", "gem", "heart", "gem", "leaf", "frog", "sacer"]
 	for i in types.size():
 		var z := Card.new("qa_zone_%d" % i, types[i])
 		z.source = Card.Source.DECK_A
 		c.zone.add(z)
 	c.reserve.clear()
-	var reserve_types := ["heart", "gem", "frog", "leaf", "crystal"]
+	var reserve_types := ["heart", "gem", "frog", "leaf", "sacer"]
 	for i in reserve_types.size():
 		var r := Card.new("qa_res_%d" % i, reserve_types[i])
 		r.source = Card.Source.DECK_A
@@ -231,7 +231,7 @@ func _capture_match_fx() -> void:
 	var center := Vector2(320, 170)
 	var group = load("res://scripts/ui/level_screen.gd").MatchGroup.new()
 	for i in 3:
-		group.rects.append(Rect2(center + Vector2(-54 + i * 48, -23), Vector2(46, 46)))
+		group.rects.append(Rect2(center + Vector2(-66 + i * 64, -30), Vector2(60, 60)))
 	scene.call("_play_match", group)
 	await process_frame
 	await process_frame

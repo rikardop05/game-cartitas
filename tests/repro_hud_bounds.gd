@@ -16,6 +16,10 @@ extends SceneTree
 
 const LEVEL_ID := "6"
 const EPSILON := 0.01
+# The enlarged Clearing Zone cards intentionally overhang the painted bar by a few px
+# so they read as floating above its surface; the slot row still has to stay one row.
+const ZONE_FLOAT_OVERHANG := 10.0
+const ZONE_MIN_CARD_PX := 59.0
 const COMMON_REQUIRED := ["Layout", "Hud", "BoardFrame", "DeckA", "DeckB", "Reserve", "ClearingZone", "Powers", "MascotArea", "BackButton", "HelpButton", "SettingsButton", "SoundButton", "ClockPill", "Stopwatch"]
 const LANDSCAPE_EXTRA := []
 const PORTRAIT_EXTRA := []
@@ -149,7 +153,10 @@ func _run_view(game, view: Dictionary) -> void:
 	# Relevant visual groups must also contain their own descendants.
 	for owner_name in ["BoardFrame", "DeckA", "DeckB", "Reserve", "ClearingZone", "Powers", "Hud"]:
 		var owner: Control = nodes[owner_name]
-		_audit_subtree_against(owner, owner.get_global_rect(), "visual-vs-%s" % owner_name, scene, false)
+		var bounds := owner.get_global_rect()
+		if owner_name == "ClearingZone":
+			bounds = bounds.grow(ZONE_FLOAT_OVERHANG)
+		_audit_subtree_against(owner, bounds, "visual-vs-%s" % owner_name, scene, false)
 
 	if scene.find_child("InstructionOverlay", true, false) != null:
 		_fail("instruction", "the instruction strip over the cards (InstructionOverlay) is back")
@@ -569,11 +576,15 @@ func _assert_zone_single_row(zone: Control, scene) -> void:
 	if visible_children.is_empty():
 		return
 	var expected_y := visible_children[0].get_global_rect().position.y
-	var zone_bounds := zone.get_global_rect()
+	var zone_bounds := zone.get_global_rect().grow(ZONE_FLOAT_OVERHANG)
 	for child in visible_children:
 		var rect := child.get_global_rect()
 		if rect.size.x <= 0.0 or rect.size.y <= 0.0:
 			_fail("zone-size", "path=%s has non-positive rect=%s" % [str(scene.get_path_to(child)), str(rect)])
+		elif rect.size.x < ZONE_MIN_CARD_PX - EPSILON or rect.size.y < ZONE_MIN_CARD_PX - EPSILON:
+			_fail("zone-size", "path=%s is %.1fx%.1f, below the enlarged %.0f px cards" % [
+				str(scene.get_path_to(child)), rect.size.x, rect.size.y, ZONE_MIN_CARD_PX,
+			])
 		if absf(rect.position.y - expected_y) > EPSILON:
 			_fail("zone-row", "path=%s y=%.3f expected_y=%.3f" % [str(scene.get_path_to(child)), rect.position.y, expected_y])
 		var overflow := _overflow(rect, zone_bounds)

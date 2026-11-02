@@ -72,7 +72,7 @@ Level 8 (bunny) also has four expression variants, same size and framing as `her
 
 The menu hero is `assets/ui/heroes/hero_menu_wolf.png` (rear-view wolf knight). The game logo is `assets/ui/branding/logo_claw_and_crown.png` (transparent, 1748×866).
 
-The bunny also has a rigged idle: `assets/ui/heroes/bunny_idle.tscn` (2D bones + `AnimationPlayer`, loop `new_animation`, 4 s) over `bunny_idle_atlas.png` (1024×1536, same painted art, mipmaps on). It plays where the bunny is the mascot (L8 idle and the Endless rounds) and hides while one of the four painted expression frames is showing.
+The bunny also has a rigged idle: `assets/ui/heroes/bunny_rig/bunny_rig.tscn` (2D skeleton + `AnimationPlayer`, autoplay `Idle`, 4 s, layered `Polygon2D` body parts in `bunny_rig/`). It plays where the bunny is the mascot (L8 idle and the Endless rounds) and hides while one of the four painted expression frames is showing.
 
 ## 3d. Match FX
 

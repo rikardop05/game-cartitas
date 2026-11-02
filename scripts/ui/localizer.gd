@@ -20,6 +20,7 @@ const STRINGS := {
 	"level": {"en": "Level", "pt": "Level"},
 	"instruction": {"en": "Match 3 in the Clearing Zone!", "pt": "Junte 3 na Clearing Zone!"},
 	"close": {"en": "Close", "pt": "Fechar"},
+	"help": {"en": "Help", "pt": "Ajuda"},
 	"help_text": {
 		"en": "Match three identical cards to clear them in the Clearing Zone.\n\nTap an available card to send it to the Clearing Zone. If it fills up without a match, you lose.\n\nThe two Support Decks give extra cards. Hold moves the 3 oldest cards to the Reserve, Undo returns the last card and Refresh reshuffles the board.",
 		"pt": "Combine três cartas iguais para limpá-las na Clearing Zone.\n\nToque numa carta disponível para enviá-la à Clearing Zone. Se ela encher sem uma combinação, você perde.\n\nOs dois Support Decks dão cartas extras. Hold move as 3 cartas mais antigas para a Reserve, Undo devolve a última carta e Refresh reembaralha o tabuleiro.",
@@ -37,6 +38,7 @@ const STRINGS := {
 	"reset_confirm": {"en": "Tap again to erase all progress", "pt": "Toque de novo para apagar todo o progresso"},
 	"level_complete": {"en": "Level complete!", "pt": "Level completo!"},
 	"no_moves": {"en": "No moves!", "pt": "Sem movimentos!"},
+	"defeat": {"en": "Defeat", "pt": "Derrota"},
 	"stage_reward": {"en": "Stage Reward", "pt": "Recompensa do Level"},
 	"time": {"en": "Time", "pt": "Tempo"},
 	"next_level": {"en": "Next level", "pt": "Próximo level"},

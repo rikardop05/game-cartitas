@@ -111,6 +111,7 @@ O runner roda 256 testes unitários, incluindo `test_level_boards.gd` e `test_bo
 | `smoke_stars.gd` | a estrela da vez vira pedra, faz pluff no tempo certo e a placa passa de 3★ a 1★; a primeira estrela fica dourada |
 | `smoke_settings.gd` | a engrenagem pausa o jogo e muda idioma, orientação, mascote e volume sem perder a partida |
 | `smoke_mascot_heroes.gd` | herói por fase, expressões do L8 e fala neutra no balão |
+| `smoke_bunny_rig.gd` | rig novo da coelha: cena carrega, Idle de 4 s toca, polígonos válidos e o L8 alterna rig (idle) ↔ expressões pintadas |
 | `regression_board_layout.gd` | posições das cartas de todos os Levels em todas as resoluções (retrato, paisagem e desktop) |
 | `probe_generation.gd` | tempo de geração e qualidade dos tabuleiros (validador, solucionável; orçamento 4000 ms) |
 | `repro_hud_bounds.gd` | HUD inteiro dentro da tela em 6 views: campanha e Endless, retrato e paisagem, mais as views com o mascote desligado; no retrato confere o HUD de tela cheia, o rodapé e o logo |

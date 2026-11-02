@@ -1,19 +1,26 @@
 extends SceneTree
 
-# Main menu smoke test, driven through the real scene: the three main buttons exist and are
-# clickable in both locales (Portuguese uses the baked kit artwork, English the blank plate with
-# localized text), Play opens the level list and Back returns, Options shows the Sound toggle
-# (which flips Game.sound_enabled()), and "Reset progress" needs its confirm step.
+# Main menu smoke test, driven through the real scene: the three v2 banner buttons exist and are
+# clickable in both locales (both use the delivered Portuguese art, with the localized wording
+# kept as tooltip/accessible label), Play opens the level list and Back returns, Options shows the
+# v2 title plate, the Sound toggle (which flips Game.sound_enabled()), the Regulagem handle and the
+# "Continuar" plate back to the menu, and the "?" badge opens the help overlay.
 # The scene saves through Game.save_path, which is pointed at a throwaway user:// file before
 # anything runs; the real save is also checked byte-for-byte at the end.
 
 const STEP_TIMEOUT_MS := 20000
 const THROWAWAY_SAVE := "user://smoke_main_menu_save.json"
+const V2_DIR := "res://assets/ui/kit/v2/"
 const MAIN_BUTTONS := {
-	"PlayButton": {"key": "play", "pt_texture": "btn_menu_jogar.png"},
-	"OptionsButton": {"key": "options", "pt_texture": "btn_menu_opcoes.png"},
-	"QuitButton": {"key": "quit", "pt_texture": "btn_menu_sair.png"},
+	"PlayButton": {"key": "play", "art": "Iniciar).png"},
+	"OptionsButton": {"key": "options", "art": "Opcoes_.png"},
+	"QuitButton": {"key": "quit", "art": "sair_.png"},
 }
+const MENU_V2_ASSETS := [
+	"menu_.png", "panel_menu_board.png", "Iniciar).png", "Opcoes_.png", "sair_.png",
+	"Continuar_.png", "Layer 2.png", "Configu.png", "config_2.png", "Config_Icon.png",
+	"Regulagem_botton.png", "interrog.png",
+]
 
 var _failures: Array[String] = []
 var _save_before: Dictionary
@@ -44,6 +51,9 @@ func _scenario(game) -> void:
 	var menu = await _wait_scene("MainMenu")
 	if menu == null:
 		return
+	# Every v2 plate the menu maps must exist on disk (none of the mapped ones may be loose).
+	for art in MENU_V2_ASSETS:
+		_check(ResourceLoader.exists(V2_DIR + art), "v2 asset exists: %s" % art)
 
 	for locale in ["pt", "en"]:
 		game.set_locale(locale)
@@ -81,16 +91,33 @@ func _scenario(game) -> void:
 	var board_shadow := menu.find_child("BoardShadow", true, false) as TextureRect
 	_check(board_shadow != null and board_shadow.material == null, "menu shadow is pre-rendered (no per-pixel shader)")
 
-	# Options: volume row (minus, slider, plus, mute glyph).
+	# Options: v2 title plate, Continuar plate, volume row (minus, slider, plus, mute glyph).
 	_press(menu, "OptionsButton")
 	await _frames(3)
-	_check(_find_label(menu, Localizer.t("options")) != null, "options screen shows its heading")
-	for node_name in ["LanguageButton", "OrientationButton", "MascotButton", "VolumeRow", "VolumeDown", "VolumeSlider", "VolumeUp", "SoundButton", "ResetButton"]:
+	var title := menu.find_child("OptionsTitle", true, false) as TextureRect
+	_check(title != null and title.texture != null, "options screen shows the v2 title plate")
+	if title != null and title.texture != null:
+		if Localizer.current == "pt":
+			_check(str(title.get_meta("source_path", "")).ends_with("config_2.png"),
+				"PT options title uses config_2.png")
+		else:
+			_check(str(title.get_meta("source_path", "")).ends_with("Configu.png"),
+				"EN options title uses Configu.png")
+	_check(menu.find_child("Window", true, false) != null, "options sit on the v2 window")
+	for node_name in ["LanguageButton", "OrientationButton", "MascotButton", "VolumeRow", "VolumeDown", "VolumeSlider", "VolumeUp", "SoundButton", "ResetButton", "BackButton"]:
 		_check(menu.find_child(node_name, true, false) != null, "options has %s" % node_name)
+	var back := menu.find_child("BackButton", true, false) as Button
+	if back != null:
+		var back_art := "Continuar_.png" if Localizer.current == "pt" else "Layer 2.png"
+		_check(str(back.get_meta("source_path", "")).ends_with(back_art),
+			"options back uses the v2 %s plate" % back_art)
 	var mute := menu.find_child("SoundButton", true, false) as TextureButton
 	var slider := menu.find_child("VolumeSlider", true, false) as Control
 	if mute == null or slider == null:
 		return
+	var v2_handle := slider.find_child("Handle", true, false) as TextureRect
+	_check(v2_handle != null and str(v2_handle.get_meta("source_path", "")).ends_with("Regulagem_botton.png"),
+		"volume handle uses Regulagem_botton.png")
 	_check(is_equal_approx(game.volume(), 1.0) and game.sound_enabled(), "sound starts at full volume")
 	_check(_sound_icon_is(menu, "icon_sound_on.png"), "volume row shows the 'on' glyph")
 	var handle := slider.find_child("Handle", true, false) as Control
@@ -148,6 +175,28 @@ func _scenario(game) -> void:
 	await _frames(2)
 	_check(menu.find_child("ResetConfirm", true, false) == null, "leaving Options disarms the reset")
 
+	# v2 "Continuar" plate leaves Options; the gear/help badges live on the menu.
+	_press(menu, "BackButton")
+	await _frames(2)
+	_check(menu.find_child("PlayButton", true, false) != null, "Continuar plate returns to the menu")
+	_check(menu.find_child("ConfigButton", true, false) != null, "menu has the v2 gear shortcut")
+	_check(menu.find_child("HelpButton", true, false) != null, "menu has the v2 help badge")
+	_press(menu, "ConfigButton")
+	await _frames(2)
+	_check(menu.find_child("OptionsTitle", true, false) != null, "gear shortcut opens Options")
+	_press(menu, "BackButton")
+	await _frames(2)
+	# Help overlay from the "?" badge: localized rules, v2 interrog art and the plate closes it.
+	_press(menu, "HelpButton")
+	await _frames(3)
+	_check(_find_label(menu, Localizer.t("help_text")) != null, "help overlay shows the localized rules")
+	var help_icon := menu.find_child("HelpIcon", true, false) as TextureRect
+	_check(help_icon != null and str(help_icon.get_meta("source_path", "")).ends_with("interrog.png"),
+		"help overlay uses interrog.png")
+	_press(menu, "BackButton")
+	await _frames(3)
+	_check(menu.find_child("PlayButton", true, false) != null, "help plate returns to the main menu")
+
 # One locale of the main menu: the three buttons exist, are clickable, and show the right face.
 func _check_menu(menu, locale: String) -> void:
 	var logo := menu.find_child("Logo", true, false) as TextureRect
@@ -159,6 +208,16 @@ func _check_menu(menu, locale: String) -> void:
 		_check(logo.size.y >= 40.0, "[%s] logo is legible (height %.1f)" % [locale, logo.size.y])
 	_check(menu.find_child("MenuHero", true, false) != null, "[%s] menu shows the decorative hero" % locale)
 	_check(menu.find_child("TotalStars", true, false) != null, "[%s] menu shows the total stars line" % locale)
+	var gear := menu.find_child("ConfigButton", true, false) as TextureButton
+	_check(gear != null and str(gear.get_meta("source_path", "")).ends_with("Config_Icon.png"),
+		"[%s] menu gear uses Config_Icon.png" % locale)
+	var help_badge := menu.find_child("HelpButton", true, false) as TextureButton
+	_check(help_badge != null and str(help_badge.get_meta("source_path", "")).ends_with("interrog.png"),
+		"[%s] menu help badge uses interrog.png" % locale)
+	var board_art := "menu_.png" if bool(menu.call("_landscape")) else "panel_menu_board.png"
+	var board_node := menu.get("_board") as TextureRect
+	_check(board_node != null and str(board_node.get_meta("source_path", "")).ends_with(board_art),
+		"[%s] menu plaque uses the v2 %s" % [locale, board_art])
 	for node_name in MAIN_BUTTONS:
 		var spec: Dictionary = MAIN_BUTTONS[node_name]
 		var btn := menu.find_child(node_name, true, false) as Button
@@ -167,19 +226,18 @@ func _check_menu(menu, locale: String) -> void:
 			continue
 		_check(not btn.disabled and btn.is_visible_in_tree(), "[%s] %s is enabled and visible" % [locale, node_name])
 		_check(btn.mouse_filter == Control.MOUSE_FILTER_STOP, "[%s] %s receives clicks" % [locale, node_name])
-		_check(btn.size.x >= 128.0 and btn.size.y >= 64.0, "[%s] %s is drawn at 2x (got %s)" % [locale, node_name, btn.size])
+		_check(btn.size.x >= 150.0 and btn.size.y >= 45.0, "[%s] %s is legible (got %s)" % [locale, node_name, btn.size])
 		_check(btn.tooltip_text == Localizer.t(str(spec["key"]) + "_tip"), "[%s] %s keeps its tooltip" % [locale, node_name])
 		var face := btn.get_node_or_null("Face") as TextureRect
 		_check(face != null and face.texture != null, "[%s] %s has a texture face" % [locale, node_name])
 		var label := btn.find_child("FaceText", true, false) as Label
-		var face_path := face.texture.resource_path if face != null and face.texture != null else ""
 		# Both locales use the delivered Portuguese PNGs (the user wants to see them); the
 		# localized wording stays available as tooltip/accessibility text.
-		_check(face_path.ends_with(str(spec["pt_texture"])),
-			"[%s] %s uses %s (got '%s')" % [locale, node_name, spec["pt_texture"], face_path])
+		_check(str(btn.get_meta("source_path", "")).ends_with(str(spec["art"])),
+			"[%s] %s uses %s (got '%s')" % [locale, node_name, spec["art"], btn.get_meta("source_path", "")])
 		_check(label == null, "[%s] %s draws no extra text over the baked artwork" % [locale, node_name])
-		_check(face != null and face.texture_filter == CanvasItem.TEXTURE_FILTER_NEAREST,
-			"[%s] %s keeps the pixel art crisp (nearest)" % [locale, node_name])
+		_check(face != null and face.texture_filter == CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS,
+			"[%s] %s uses the painted-art filter (linear + mipmaps)" % [locale, node_name])
 		_check(str(btn.get_meta("label", "")) == Localizer.t(str(spec["key"])),
 			"[%s] %s keeps its localized accessible label" % [locale, node_name])
 	_check(logo != null and logo.size.y >= 40.0, "[%s] menu logo is legible" % locale)
@@ -189,7 +247,7 @@ func _check_menu(menu, locale: String) -> void:
 	if logo != null and not bool(menu.call("_landscape")):
 		_check(board != null and board_layer != null, "[%s] portrait menu has the sign" % locale)
 		if board != null and board_layer != null:
-			var art_top := board.position.y + board_layer.position.y + (72.0 / 1499.0) * board.size.y
+			var art_top := board.position.y + board_layer.position.y + (8.0 / 1387.0) * board.size.y
 			_check(logo.global_position.y + logo.size.y <= art_top + 0.5,
 				"[%s] logo sits above the plaque (logo bottom %.1f, plaque top %.1f)" % [
 					locale, logo.global_position.y + logo.size.y, art_top])
@@ -223,7 +281,7 @@ func _click_slider(slider: Control, fraction: float) -> void:
 		slider.gui_input.emit(e)
 
 func _press(menu: Node, node_name: String) -> void:
-	var btn := menu.find_child(node_name, true, false) as Button
+	var btn := menu.find_child(node_name, true, false) as BaseButton
 	if btn == null:
 		_fail("no button named %s" % node_name)
 		return

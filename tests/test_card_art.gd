@@ -1,9 +1,9 @@
 extends RefCounted
 
-# Card faces: 14 of the 15 types have painted square art (art 960 px, frame included); crystal
-# keeps the emoji placeholder until its art arrives. Update both lists when art is added.
+# Every registry type has painted square art (960 px, frame included); there is no
+# emoji placeholder left. Update both lists when art is added.
 const WITH_ART := ["boar", "cat", "cat_mage", "duck", "frog", "gem", "heart", "leaf", "mouse", "owl", "rhino", "sacer", "whale", "wolf"]
-const PLACEHOLDER := ["crystal"]
+const PLACEHOLDER: Array = []
 
 func test_every_type_is_either_art_or_placeholder() -> void:
 	var listed: Array = WITH_ART + PLACEHOLDER

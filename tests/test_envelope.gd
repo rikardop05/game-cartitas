@@ -47,7 +47,7 @@ func test_envelope_rejects_out_of_envelope_with_diagnostics() -> void:
 	Assert.is_true(_errors_mention(deep.validate()["errors"], "layers"), "diagnostic names layers")
 	# too many board cards
 	var tall := LevelConfig.create({
-		"difficulty": 11, "board_types": ["cat", "wolf", "owl", "whale", "mouse", "frog", "boar", "duck", "leaf", "heart", "gem", "crystal"], "board_cards": 171,
+		"difficulty": 11, "board_types": ["cat", "wolf", "owl", "whale", "mouse", "frog", "boar", "duck", "leaf", "heart", "gem"], "board_cards": 183,
 		"columns": 9, "rows": 5, "layers": 4, "seed": 1,
 	})
 	Assert.is_true(_errors_mention(tall.validate()["errors"], "board cards"), "diagnostic names board cards")
@@ -113,7 +113,7 @@ func test_no_silent_fallback_as_success() -> void:
 
 func test_safe_config_50_loads_no_fallback_all_solvable() -> void:
 	var cfg := LevelConfig.create({
-		"difficulty": 11, "board_types": ["cat", "wolf", "owl", "whale", "mouse", "frog", "boar", "duck", "leaf", "heart", "gem", "crystal"],
+		"difficulty": 11, "board_types": ["cat", "wolf", "owl", "whale", "mouse", "frog", "boar", "duck", "leaf", "heart", "gem"],
 		"count_per_type": 3, "board_cards": 36, "columns": 7, "rows": 5, "layers": 4,
 		"free_ratio": 0.35, "free_ratio_min": 0.20, "free_ratio_max": 0.50, "seed": 11001, "max_attempts": 80,
 	})

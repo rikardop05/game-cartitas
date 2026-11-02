@@ -1,15 +1,22 @@
 extends Control
 
-enum Screen { MENU, LEVELS, OPTIONS }
+enum Screen { MENU, LEVELS, OPTIONS, HELP }
 
 # Same warm palette as the level screen, so menu and game read as one product.
 const WARM_BACKGROUND := UiHelpers.WARM_BACKGROUND
 const TEXT_MUTED := UiHelpers.TEXT_MUTED
 const GOLD := UiHelpers.GOLD
 
-# The kit panel and its buttons are drawn at exactly 2x their 64x32 source size.
-const MENU_PANEL_SIZE := Vector2(128, 192)
-const MENU_BUTTON_SIZE := Vector2(128, 64)
+# The v2 art kit carries the whole menu now. Its painted banners are ~3.44:1, so the
+# button box matches that ratio exactly and is drawn with linear filtering + mipmaps.
+const V2_DIR := "res://assets/ui/kit/v2/"
+const MENU_BUTTON_SIZE := Vector2(190, 55)
+const MENU_BUTTON_ART := {
+	"play": "Iniciar).png",
+	"options": "Opcoes_.png",
+	"quit": "sair_.png",
+}
+const MENU_ICON_SIZE := 36.0
 
 # Portrait stacks logo, plaque and stars with fixed gaps; landscape pins the logo/stars
 # to the top-left and the plaque to the right.
@@ -17,19 +24,41 @@ const MENU_GAP_LOGO := 10.0
 const MENU_GAP_STARS := 6.0
 const MENU_EDGE := 14.0
 const STARS_BAND := 22.0
-const LANDSCAPE_MARGIN := 10.0
+const LANDSCAPE_MARGIN := 6.0
 
-# Painted hanging sign that carries the menu. The rectangle below is its inner plank (fractions
-# of the 1049x1499 art), so the buttons land on wood and never over the leaves or the lantern.
-const MENU_BOARD_ART := "res://assets/ui/kit/panel_menu_board.png"
-const MENU_BOARD_PLANK := Rect2(0.185, 0.209, 0.588, 0.538)
-const MENU_BOARD_ASPECT := 1049.0 / 1499.0
-const MENU_BOARD_ART_TOP := 72.0 / 1499.0
-const MENU_BOARD_ART_BOTTOM := 1328.0 / 1499.0
-const MENU_BOARD_ART_LEFT := 12.0 / 1049.0
-const MENU_BOARD_ART_RIGHT := 1040.0 / 1049.0
-const MENU_BOARD_SHADOW_OFFSET := Vector2(0, 12)
-const MENU_BOARD_SHADOW_SCALE := 1.015
+# v2 menu boards: the tall stone/banner board in portrait and the square three-slot
+# wooden board in landscape. The rectangles below are the safe button areas (fractions
+# of each art), so the plates sit on stone/wood and never over the carved frames.
+const BOARDS := {
+	"portrait": {
+		"art": "panel_menu_board.png",
+		"aspect": 1134.0 / 1387.0,
+		"art_top": 8.0 / 1387.0,
+		"art_bottom": 1234.0 / 1387.0,
+		"art_left": 15.0 / 1134.0,
+		"art_right": 1118.0 / 1134.0,
+		"stone": Rect2(0.216, 0.216, 0.570, 0.508),
+	},
+	"landscape": {
+		"art": "menu_.png",
+		"aspect": 969.0 / 920.0,
+		"art_top": 0.0,
+		"art_bottom": 1.0,
+		"art_left": 10.0 / 969.0,
+		"art_right": 953.0 / 969.0,
+		"slots_x": Vector2(0.2270, 0.7627),
+		"slots_y": [0.3446, 0.5033, 0.6609],
+	},
+}
+const BOARD_SHADOW_OFFSET := Vector2(0, 10)
+const BOARD_SHADOW_SCALE := 1.012
+
+# Options screen and help overlay art.
+const OPTIONS_TITLE_ART := {"pt": "config_2.png", "en": "Configu.png"}
+const CONTINUE_ART := {"pt": "Continuar_.png", "en": "Layer 2.png"}
+const GEAR_ART := "Config_Icon.png"
+const HELP_ART := "interrog.png"
+const VOLUME_HANDLE_ART := "Regulagem_botton.png"
 
 # Branding and the decorative hero behind the sign.
 const LOGO_ART := "res://assets/ui/branding/logo_claw_and_crown.png"
@@ -69,6 +98,7 @@ var _logo: Control
 var _panel: Control
 var _stars: Label
 var _menu_buttons: Array[Button] = []
+var _menu_icons: Array[Control] = []
 var _content_base := Vector2.ZERO
 var _pointer := Vector2.ZERO
 var _pointer_goal := Vector2.ZERO
@@ -138,6 +168,7 @@ func _build() -> void:
 	_panel = null
 	_stars = null
 	_menu_buttons.clear()
+	_menu_icons.clear()
 	# Reset the parallax on every rebuild: coming back from Options must not inherit
 	# the pointer/offset of the screen that was just torn down. Keep the manual test
 	# hook state so a scripted set_parallax() stays stable across the rebuild.
@@ -154,6 +185,8 @@ func _build() -> void:
 		match _screen:
 			Screen.LEVELS:
 				_build_levels()
+			Screen.HELP:
+				_build_help()
 			_:
 				_build_options()
 	_connect_click_sounds(self)
@@ -220,24 +253,52 @@ func _build_menu() -> void:
 	else:
 		_stars.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_content.add_child(_stars)
+	# v2 shortcuts: the gear opens Options and the "?" opens the help overlay.
+	_menu_icons.clear()
+	_menu_icons.append(_make_v2_icon_button("ConfigButton", GEAR_ART, Localizer.t("options"), _on_options))
+	_menu_icons.append(_make_v2_icon_button("HelpButton", HELP_ART, Localizer.t("help"), _on_help))
+	for icon in _menu_icons:
+		_content.add_child(icon)
 	_layout_after_frame()
+
+# Small painted v2 icon (gear/settings, question mark/help) used as a menu shortcut.
+func _make_v2_icon_button(node_name: String, art_name: String, label: String, callback: Callable) -> TextureButton:
+	var btn := TextureButton.new()
+	btn.name = node_name
+	btn.texture_normal = _v2_texture(art_name)
+	btn.set_meta("source_path", V2_DIR + art_name)
+	btn.ignore_texture_size = true
+	btn.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
+	btn.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	btn.custom_minimum_size = Vector2(MENU_ICON_SIZE, MENU_ICON_SIZE)
+	btn.size = Vector2(MENU_ICON_SIZE, MENU_ICON_SIZE)
+	btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	btn.tooltip_text = label
+	btn.set_meta("label", label)
+	btn.pressed.connect(callback)
+	btn.button_down.connect(func(): btn.modulate = Color(0.82, 0.82, 0.82))
+	btn.button_up.connect(func(): btn.modulate = Color.WHITE)
+	btn.mouse_entered.connect(func(): btn.modulate = Color(1.12, 1.12, 1.12))
+	btn.mouse_exited.connect(func(): btn.modulate = Color.WHITE)
+	return btn
+
+# Loads a texture straight from the v2 kit (mipmapped/cached), or null when missing.
+func _v2_texture(art_name: String) -> Texture2D:
+	var path := V2_DIR + art_name
+	if not ResourceLoader.exists(path):
+		return null
+	return UiHelpers.hires_texture(path)
 
 func _make_menu_panel() -> Control:
 	var panel := Control.new()
 	panel.name = "MenuPanel"
-	panel.custom_minimum_size = MENU_PANEL_SIZE
-	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	var buttons := VBoxContainer.new()
-	buttons.set_anchors_preset(Control.PRESET_FULL_RECT)
-	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
-	buttons.add_theme_constant_override("separation", 0)
-	panel.add_child(buttons)
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_menu_buttons.clear()
-	_menu_buttons.append(_make_menu_button("PlayButton", "play", "btn_menu_jogar", _on_play))
-	_menu_buttons.append(_make_menu_button("OptionsButton", "options", "btn_menu_opcoes", _on_options))
-	_menu_buttons.append(_make_menu_button("QuitButton", "quit", "btn_menu_sair", _on_quit))
+	_menu_buttons.append(_make_menu_button("PlayButton", "play", MENU_BUTTON_ART["play"], _on_play))
+	_menu_buttons.append(_make_menu_button("OptionsButton", "options", MENU_BUTTON_ART["options"], _on_options))
+	_menu_buttons.append(_make_menu_button("QuitButton", "quit", MENU_BUTTON_ART["quit"], _on_quit))
 	for btn in _menu_buttons:
-		buttons.add_child(btn)
+		panel.add_child(btn)
 	return panel
 
 func _make_total_stars(font_size: int) -> Label:
@@ -280,16 +341,23 @@ func _layout_after_frame() -> void:
 		return
 	_layout_board()
 
+func _board_spec() -> Dictionary:
+	return BOARDS["landscape" if _landscape() else "portrait"]
+
 func _make_menu_board() -> void:
 	_make_hero()
-	var texture := UiHelpers.hires_texture(MENU_BOARD_ART)
-	_board_shadow = _make_shadow_rect(texture, 16.0, 0.6)
+	var spec := _board_spec()
+	var texture := _v2_texture(str(spec["art"]))
+	if texture == null:
+		return
+	_board_shadow = _make_shadow_rect(texture, 14.0, 0.55)
 	_board_shadow.name = "BoardShadow"
-	_board_shadow.scale = Vector2(MENU_BOARD_SHADOW_SCALE, MENU_BOARD_SHADOW_SCALE)
+	_board_shadow.scale = Vector2(BOARD_SHADOW_SCALE, BOARD_SHADOW_SCALE)
 	_board_layer.add_child(_board_shadow)
 
 	_board = _make_texture_rect(texture)
 	_board.name = "Board"
+	_board.set_meta("source_path", V2_DIR + str(spec["art"]))
 	_board_layer.add_child(_board)
 
 # Decorative wolf knight in the board parallax layer, mouse-ignore. Landscape keeps
@@ -345,10 +413,11 @@ func _make_shadow_rect(texture: Texture2D, softness: float, strength: float) -> 
 	rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	return rect
 
-# Lays out the whole menu in view coordinates: first the plaque is fitted around the
-# button column, then the panel is pinned to the plank's centre, the logo sits above the
-# plaque (portrait) or in the top-left corner (landscape), and the stars go under the
-# plaque/logo. Running from untransformed space keeps it stable under parallax.
+# Lays out the whole v2 menu in view coordinates: the plaque is fitted to the screen,
+# the button plates are pinned to its stone/wood safe area (portrait) or to the three
+# painted slots (landscape), the logo sits above the plaque in portrait / top-left in
+# landscape, the stars go under the plaque/logo and the gear/help badges are kept clear
+# of the plates. Everything is measured in untransformed space so parallax never drifts.
 func _layout_board() -> void:
 	if not is_instance_valid(_board) or not is_instance_valid(_board_shadow):
 		return
@@ -358,40 +427,37 @@ func _layout_board() -> void:
 		return
 	var view := get_viewport_rect().size
 	var landscape := _landscape()
-	var button_size := Vector2(
-		maxf(_menu_buttons[0].size.x, MENU_BUTTON_SIZE.x),
-		maxf(_menu_buttons[0].size.y, MENU_BUTTON_SIZE.y) * _menu_buttons.size())
-	var pad := Vector2(30, 42) if landscape else Vector2(28, 44)
-	var wanted := button_size + pad * 2.0
-	var height := maxf(wanted.y / MENU_BOARD_PLANK.size.y, wanted.x / MENU_BOARD_PLANK.size.x)
-	height = minf(height, view.x * 0.90 / MENU_BOARD_ASPECT)
-	var visible_fraction := MENU_BOARD_ART_BOTTOM - MENU_BOARD_ART_TOP
+	var spec := _board_spec()
+	var aspect: float = spec["aspect"]
+	var art_top: float = spec["art_top"]
+	var art_bottom: float = spec["art_bottom"]
+	var visible_fraction: float = art_bottom - art_top
 	var logo_size: Vector2 = _logo.custom_minimum_size
+	var board_size: Vector2
 	if landscape:
-		height = minf(height, (view.y - 8.0) / visible_fraction)
+		var height := minf((view.y - 8.0) / visible_fraction, view.x * 0.60 / aspect)
+		board_size = Vector2(height * aspect, height)
 	else:
-		# Leave room for the logo above and the stars below: the plaque may never cover them.
+		# Leave room for the logo above and the stars below: the plaque never covers them.
 		var reserved := logo_size.y + MENU_GAP_LOGO + MENU_GAP_STARS + STARS_BAND + MENU_EDGE * 2.0
-		height = minf(height, maxf(180.0, (view.y - reserved) / visible_fraction))
-	var board_size := Vector2(height * MENU_BOARD_ASPECT, height)
-	var visible_height := visible_fraction * height
+		var height := minf((view.y - reserved) / visible_fraction, (view.x - 12.0) / aspect)
+		board_size = Vector2(height * aspect, height)
+	var visible_height := visible_fraction * board_size.y
 	var origin := Vector2.ZERO
 	var logo_pos := Vector2.ZERO
 	var stars_pos := Vector2.ZERO
 	if landscape:
-		origin.x = view.x - board_size.x - LANDSCAPE_MARGIN
-		origin.y = (view.y - board_size.y) * 0.5
+		origin = Vector2(view.x - board_size.x - LANDSCAPE_MARGIN, (view.y - board_size.y) * 0.5)
 		logo_pos = Vector2(20.0, 14.0)
 		stars_pos = Vector2(20.0, logo_pos.y + logo_size.y + 4.0)
 	else:
 		var total := logo_size.y + MENU_GAP_LOGO + visible_height + MENU_GAP_STARS + STARS_BAND
 		var top := maxf(MENU_EDGE, (view.y - total) * 0.5)
-		origin.x = (view.x - board_size.x) * 0.5
-		origin.y = top + logo_size.y + MENU_GAP_LOGO - MENU_BOARD_ART_TOP * height
+		origin = Vector2((view.x - board_size.x) * 0.5, top + logo_size.y + MENU_GAP_LOGO - art_top * board_size.y)
 		logo_pos = Vector2((view.x - logo_size.x) * 0.5, top)
 		stars_pos = Vector2(0.0, top + logo_size.y + MENU_GAP_LOGO + visible_height + MENU_GAP_STARS)
-	origin.x = _clamp_inside(origin.x, view.x, MENU_BOARD_ART_LEFT, MENU_BOARD_ART_RIGHT, board_size.x)
-	origin.y = _clamp_inside(origin.y, view.y, MENU_BOARD_ART_TOP, MENU_BOARD_ART_BOTTOM, board_size.y)
+	origin.x = _clamp_inside(origin.x, view.x, spec["art_left"], spec["art_right"], board_size.x)
+	origin.y = _clamp_inside(origin.y, view.y, art_top, art_bottom, board_size.y)
 	# Both the sign and its shadow live in the parallax layer; subtract the layer's
 	# current offset so the origin stays expressed in the untransformed layout space.
 	var layer_offset := _board_layer.position
@@ -399,18 +465,60 @@ func _layout_board() -> void:
 	_board.position = origin - layer_offset
 	_board.pivot_offset = board_size * 0.5
 	_board_shadow.size = board_size
-	_board_shadow.position = origin + MENU_BOARD_SHADOW_OFFSET - layer_offset
+	_board_shadow.position = origin + BOARD_SHADOW_OFFSET - layer_offset
 	_board_shadow.pivot_offset = board_size * 0.5
-	# The button column is pinned to the painted plank, not to the whole art.
-	var plank_center := (MENU_BOARD_PLANK.position + MENU_BOARD_PLANK.size * 0.5) * board_size
-	_panel.size = MENU_PANEL_SIZE
-	_panel.position = origin + plank_center - MENU_PANEL_SIZE * 0.5
+
+	# Buttons: the panel is a full-board container, so plates are placed in board space.
+	_panel.size = board_size
+	_panel.position = origin
+	var button_size := MENU_BUTTON_SIZE
+	if landscape:
+		var slots_x: Vector2 = spec["slots_x"]
+		var slots_y: Array = spec["slots_y"]
+		button_size.x = minf(MENU_BUTTON_SIZE.x, (slots_x.y - slots_x.x) * board_size.x - 3.0)
+		button_size.y = button_size.x / (float(MENU_BUTTON_SIZE.x) / MENU_BUTTON_SIZE.y)
+		for i in _menu_buttons.size():
+			var btn := _menu_buttons[i]
+			btn.size = button_size
+			btn.position = Vector2(
+				(board_size.x - button_size.x) * 0.5,
+				float(slots_y[i]) * board_size.y - button_size.y * 0.5)
+	else:
+		var stone: Rect2 = spec["stone"]
+		var area := Rect2(stone.position * board_size, stone.size * board_size)
+		button_size.x = minf(MENU_BUTTON_SIZE.x, area.size.x - 8.0)
+		button_size.y = button_size.x / (float(MENU_BUTTON_SIZE.x) / MENU_BUTTON_SIZE.y)
+		var gap := 8.0
+		var stack := button_size.y * _menu_buttons.size() + gap * (_menu_buttons.size() - 1)
+		var y := area.position.y + (area.size.y - stack) * 0.5 - 8.0
+		for i in _menu_buttons.size():
+			var btn := _menu_buttons[i]
+			btn.size = button_size
+			btn.position = Vector2((board_size.x - button_size.x) * 0.5, y)
+			y += button_size.y + gap
 	_logo.size = logo_size
 	_logo.position = logo_pos
 	_stars.size = Vector2(view.x, STARS_BAND)
 	_stars.position = stars_pos
 	if landscape:
 		_stars.size.x = 240.0
+		# Badges live on the empty wood above the first slot.
+		var badge_y := origin.y + 46.0 / 920.0 * board_size.y + 8.0
+		_place_icons(Vector2(origin.x + (board_size.x - _icons_width()) * 0.5, badge_y))
+	else:
+		# Portrait keeps the badges in the free top-right corner, beside the logo.
+		_place_icons(Vector2(view.x - 8.0 - _icons_width(), 14.0))
+
+func _icons_width() -> float:
+	var gap := 10.0
+	return MENU_ICON_SIZE * _menu_icons.size() + gap * maxf(0.0, _menu_icons.size() - 1.0)
+
+func _place_icons(at: Vector2) -> void:
+	var x := at.x
+	for icon in _menu_icons:
+		icon.size = Vector2(MENU_ICON_SIZE, MENU_ICON_SIZE)
+		icon.position = Vector2(x, at.y)
+		x += MENU_ICON_SIZE + 10.0
 
 func _clamp_inside(origin: float, extent: float, art_from: float, art_to: float, board_extent: float) -> float:
 	var low := 6.0 - art_from * board_extent
@@ -419,18 +527,16 @@ func _clamp_inside(origin: float, extent: float, art_from: float, art_to: float,
 		return (extent - (art_to - art_from) * board_extent) * 0.5 - art_from * board_extent
 	return clampf(origin, low, high)
 
-# A kit button drawn at 2x. Both locales use the baked Portuguese artwork for now (the
-# delivered look), so the face is always the 64x32 PNG scaled 1:1 with nearest filtering;
-# the localized label stays available through the tooltip and the accessibility name.
+# v2 banner button. Both locales use the baked Portuguese artwork for now (the delivered
+# look), so no localized text is drawn over the plate; the wording stays available through
+# the tooltip, the meta label and the accessibility name.
 func _make_menu_button(node_name: String, key: String, art_name: String, callback: Callable) -> Button:
-	var texture: Texture2D = UiHelpers.kit_texture("pill")
-	var path := "res://assets/ui/branding/%s.png" % art_name
-	if ResourceLoader.exists(path):
-		var loaded := load(path) as Texture2D
-		if loaded != null:
-			texture = loaded
+	var texture := _v2_texture(art_name)
+	if texture == null:
+		texture = UiHelpers.kit_texture("pill")
 	var btn := _make_face_button(texture, MENU_BUTTON_SIZE)
 	btn.name = node_name
+	btn.set_meta("source_path", V2_DIR + art_name)
 	var label := Localizer.t(key)
 	btn.tooltip_text = Localizer.t(key + "_tip")
 	btn.set_meta("label", label)
@@ -460,8 +566,8 @@ func _make_face_button(texture: Texture2D, min_size: Vector2) -> Button:
 	face.texture = texture
 	face.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	face.stretch_mode = TextureRect.STRETCH_SCALE
-	# The menu buttons are pixel art drawn at exactly 2x; nearest keeps them crisp.
-	face.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	# The v2 plates are painted art; linear filtering + mipmaps keep them clean at any scale.
+	face.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	face.set_anchors_preset(Control.PRESET_FULL_RECT)
 	face.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	btn.add_child(face)
@@ -558,32 +664,151 @@ func _build_options() -> void:
 	var landscape := _landscape()
 	var margin := _make_margin(self)
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 6)
+	col.add_theme_constant_override("separation", 8)
 	margin.add_child(col)
-	col.add_child(_make_header(Localizer.t("options")))
+	col.add_child(_make_options_title())
 
 	var center := CenterContainer.new()
 	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	col.add_child(center)
 
-	var window := _make_window()
+	var window := _make_v2_window()
 	window.custom_minimum_size = Vector2(320, 0)
 	center.add_child(window)
 
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 6 if landscape else 10)
+	vbox.add_theme_constant_override("separation", 4 if landscape else 10)
 	window.add_child(vbox)
 
-	var row_height := 42 if landscape else 46
+	var row_height := 34 if landscape else 46
 	vbox.add_child(_make_option_row("LanguageButton", Localizer.t("language"), Localizer.t("language"), _on_toggle_language, row_height))
 	vbox.add_child(_make_option_row("OrientationButton", _orientation_label(), Localizer.t("orientation_label"), _on_toggle_orientation, row_height))
 	vbox.add_child(_make_option_row("MascotButton", _mascot_label(), Localizer.t("mascot_label"), _on_toggle_mascot, row_height))
-	vbox.add_child(VolumeRow.new(row_height))
+	var volume := VolumeRow.new(row_height)
+	_apply_v2_volume_handle(volume)
+	vbox.add_child(volume)
 
 	if _reset_armed:
 		vbox.add_child(_make_reset_confirm(row_height))
 	else:
 		vbox.add_child(_make_option_row("ResetButton", Localizer.t("reset"), Localizer.t("reset"), _on_reset, row_height))
+
+	# v2 "Continuar/CONTINUE" plate closes the settings and returns to the menu.
+	col.add_child(_make_continue_button(landscape))
+
+# v2 settings title plate, localized: "Configuração" (config_2) or "Settings" (Configu).
+func _make_options_title() -> Control:
+	var art: String = OPTIONS_TITLE_ART["pt" if Localizer.current == "pt" else "en"]
+	var texture := _v2_texture(art)
+	if texture == null:
+		var fallback := Label.new()
+		fallback.name = "OptionsTitle"
+		fallback.text = Localizer.t("options")
+		fallback.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		fallback.add_theme_font_size_override("font_size", 22)
+		return fallback
+	var title := TextureRect.new()
+	title.name = "OptionsTitle"
+	title.texture = texture
+	title.set_meta("source_path", V2_DIR + art)
+	title.set_meta("label", Localizer.t("options"))
+	title.tooltip_text = Localizer.t("options")
+	title.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	title.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	title.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var height := 34.0 if _landscape() else 46.0
+	var aspect := float(texture.get_width()) / float(maxi(1, texture.get_height()))
+	title.custom_minimum_size = Vector2(height * aspect, height)
+	return title
+
+# Stone/gold window that matches the v2 plaques (the old kit window is kept for Levels).
+func _make_v2_window() -> PanelContainer:
+	var window := PanelContainer.new()
+	window.name = "Window"
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color("#392e27")
+	style.border_color = Color("#d9a441")
+	style.set_border_width_all(3)
+	style.set_corner_radius_all(8)
+	style.content_margin_left = 12
+	style.content_margin_right = 12
+	style.content_margin_top = 10
+	style.content_margin_bottom = 10
+	style.shadow_color = Color(0, 0, 0, 0.35)
+	style.shadow_size = 8
+	style.shadow_offset = Vector2(0, 4)
+	window.add_theme_stylebox_override("panel", style)
+	return window
+
+# Wide v2 plate used to leave a screen: "Continuar" in PT, "CONTINUE" (Layer 2) in EN.
+func _make_continue_button(landscape: bool) -> Button:
+	var art: String = CONTINUE_ART["pt" if Localizer.current == "pt" else "en"]
+	var texture := _v2_texture(art)
+	var width := 200.0 if landscape else 250.0
+	var btn: Button
+	if texture == null:
+		btn = Button.new()
+		btn.text = Localizer.t("back")
+		btn.custom_minimum_size = Vector2(200, 44)
+		_apply_plate_style(btn)
+	else:
+		var aspect := float(texture.get_width()) / float(maxi(1, texture.get_height()))
+		btn = _make_face_button(texture, Vector2(width, width / aspect))
+		btn.set_meta("source_path", V2_DIR + art)
+	btn.name = "BackButton"
+	btn.tooltip_text = Localizer.t("back")
+	btn.set_meta("label", Localizer.t("back"))
+	btn.pressed.connect(_on_back)
+	return btn
+
+# Replaces the shared VolumeRow handle with the v2 green gem (kept vertical, centred in
+# the 32 px hit box). The row itself keeps working untouched for the in-game settings.
+func _apply_v2_volume_handle(row: Control) -> void:
+	var handle := row.find_child("Handle", true, false) as TextureRect
+	var texture := _v2_texture(VOLUME_HANDLE_ART)
+	if handle == null or texture == null:
+		return
+	handle.texture = texture
+	handle.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	handle.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	handle.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	handle.set_meta("source_path", V2_DIR + VOLUME_HANDLE_ART)
+
+# Help overlay reached from the menu "?" badge: the localized rules and a v2 return plate.
+func _build_help() -> void:
+	var margin := _make_margin(self)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 10)
+	margin.add_child(col)
+	var icon := TextureRect.new()
+	icon.name = "HelpIcon"
+	icon.texture = _v2_texture(HELP_ART)
+	icon.set_meta("source_path", V2_DIR + HELP_ART)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon.custom_minimum_size = Vector2(56, 56)
+	icon.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	col.add_child(icon)
+
+	var window := _make_v2_window()
+	window.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	col.add_child(window)
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	window.add_child(scroll)
+	var text := Label.new()
+	text.name = "HelpText"
+	text.text = Localizer.t("help_text")
+	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text.add_theme_font_size_override("font_size", 15)
+	scroll.add_child(text)
+
+	col.add_child(_make_continue_button(_landscape()))
 
 func _make_option_row(node_name: String, text: String, tooltip: String, callback: Callable, height: int) -> Button:
 	var btn := Button.new()
@@ -699,6 +924,10 @@ func _on_play() -> void:
 
 func _on_options() -> void:
 	_screen = Screen.OPTIONS
+	_build()
+
+func _on_help() -> void:
+	_screen = Screen.HELP
 	_build()
 
 func _on_quit() -> void:

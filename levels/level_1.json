@@ -2,7 +2,7 @@
   "id": "1",
   "difficulty": 1,
   "clearing_capacity": 7,
-  "deck": ["cat", "cat", "wolf", "wolf", "owl", "owl", "mouse", "mouse", "gem", "gem", "crystal", "crystal"],
+  "deck": ["cat", "cat", "wolf", "wolf", "owl", "owl", "mouse", "mouse", "gem", "gem", "heart", "heart"],
   "time_thresholds": { "three_stars": 45, "two_stars": 75 },
   "rewards": [{ "type": "hold", "quantity": 1 }]
 }

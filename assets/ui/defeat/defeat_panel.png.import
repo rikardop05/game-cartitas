@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://5sq8ta7yfsfj"
-path="res://.godot/imported/bunny_idle_atlas.png-97117ea744d8f3d2442a7ed46bc83baf.ctex"
+uid="uid://2fnxjn255bv8"
+path="res://.godot/imported/defeat_panel.png-7cb9591e2e2d0a740ffdebb1ccb409ae.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/heroes/bunny_idle_atlas.png"
-dest_files=["res://.godot/imported/bunny_idle_atlas.png-97117ea744d8f3d2442a7ed46bc83baf.ctex"]
+source_file="res://assets/ui/defeat/defeat_panel.png"
+dest_files=["res://.godot/imported/defeat_panel.png-7cb9591e2e2d0a740ffdebb1ccb409ae.ctex"]
 
 [params]
 

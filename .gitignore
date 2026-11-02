@@ -36,6 +36,5 @@ assets/ui/npc/
 # Exported builds (demo .exe)
 build/
 
-# New art staged for a later UI-v2/rig pass
+# New art staged for a later UI-v2 pass
 assets/ui/kit/v2/
-assets/ui/heroes/bunny_rig/
