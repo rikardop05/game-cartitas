@@ -31,7 +31,7 @@ Pronto! O jogo abre no menu. Escolha um level e jogue.
 - Junte **3 cartas iguais** para removê-las automaticamente. A zona não tem título: as cartas ficam centralizadas dentro da madeira da barra comprida e os slots vazios não mostram placas quadradas.
 - Cartas **escuras** estão bloqueadas por outras cartas em cima (quanto mais fundo na pilha, mais escuras).
 - Use os dois **decks** (pilhas de cartas embaixo do tabuleiro) quando não houver jogada; as placas quadradas de madeira são a mesa de cada deck, com a carta por cima. Cada tipo aparece no máximo 2 vezes nos decks, então um deck nunca fecha trio sozinho.
-- Poderes (painel vertical de madeira, com um ícone por poder e o estoque "xN"):
+- Poderes (painel de madeira vertical na paisagem e faixa horizontal no retrato, com um ícone por poder e o estoque "xN"):
   - **Hold** — guarda as 3 cartas mais antigas (da esquerda) na **Reserve**, liberando espaço. **Qualquer** carta da Reserve volta para a zona com um toque; com a zona cheia, ela pisca em vermelho e o herói avisa.
   - **Undo** — devolve a última carta ao tabuleiro/deck.
   - **Refresh** — reembaralha o tabuleiro e os decks.
@@ -81,15 +81,18 @@ São **15 tipos** (`CardTypeRegistry`): `cat`, `mouse`, `boar`, `owl`, `wolf`, `
 
 ## Visual
 
+- **Fonte de verdade visual:** `docs/visual-reference/` reúne as capturas aprovadas do menu (retrato e paisagem harbor/castle) e da tela do Level (retrato, paisagem e detalhe 2× do rodapé). Use essas imagens como referência antes de aceitar mudanças de layout ou arte.
 - **Fundos pintados:** o menu em **paisagem** usa `background_menu.png` (cidade); o menu em **retrato** mantém o fundo retrato atual. Nos Levels, campo nos **1–3**, cidade de outono nos **4–6** e **cenas próprias por Level de 7 a 15** (`assets/ui/backgrounds/level_NN.png` + `_portrait`); o **Endless usa a cena do L15**. O castelo antigo fica como fallback se um arquivo faltar.
-- **Filtro dos fundos:** mais leve para manter a definição — menu com blur **0,30** e brilho **0,90**; gameplay com blur **0,60** e brilho **0,82** (saturação 0,95/0,90, tint 0,05/0,08 e vinheta 0,25/0,35).
-- **Tamanhos de carta:** tabuleiro até **46 px** (lógico); Clearing Zone **46 px** em paisagem e **42 px** em retrato; Support Decks **42 px**; Reserve em grade que encolhe de **34 px** (paisagem) / **42 px** (retrato) até um mínimo de **18 px**, conforme a quantidade de cartas guardadas.
-- **Janela do tabuleiro** com moldura de madeira pintada; no retrato usa o **frame vertical novo** (`panel_board_frame_portrait.png`), assado no tamanho exato (furo 327×185, board 323×181), enquanto a paisagem mantém o frame atual. O posicionamento do board foi corrigido para nunca recortar cartas (L14/L15 com `clip=0`).
-- **Tela do Level (retrato):** poderes no **topo-esquerdo**; **herói grande no topo-centro** (na camada atrás do HUD e do tabuleiro); barra da Clearing Zone logo abaixo; **tabuleiro na metade inferior**; **deck A, Reserve e deck B na mesma linha**; rodapé com **engrenagem, som, placa de estrelas** (ou pontuação no Endless) **e logo Claw & Crown**. O **HUD ocupa a altura toda** da tela no retrato. Em **paisagem**, a barra de HUD continua com **48 px** e **sem logo**.
-- **Clearing Zone e decks:** a barra comprida (`bar_zone.png`) é esticada por 9-slice e as cartas ficam dentro do vão de madeira, centradas; as placas quadradas (`card_available_frame.png`) viraram a mesa dos dois Support Decks, com a pilha de cartas por cima.
-- **Menu:** logo **Claw & Crown** (topo-esquerda em paisagem, topo-centro em retrato), lobo cavaleiro de corpo inteiro (esquerda/centro em paisagem, canto inferior direito em retrato), placa de madeira com os três botões e o total de estrelas sob o logo (paisagem) ou sob a placa (retrato), e **parallax** em três camadas. Em **PT** os botões usam a arte pronta (`btn_menu_jogar/opcoes/sair`); em **EN** usam a placa vazia com o texto localizado.
+- **Filtro dos fundos:** arte pintada com mipmaps e filtro linear; mais leve para manter a definição — menu com blur **0,30** e brilho **0,90**; gameplay com blur **0,60** e brilho **0,82** (saturação 0,95/0,90, tint 0,05/0,08 e vinheta 0,25/0,35).
+- **Tamanhos de carta:** tabuleiro até **46 px** (lógico); Clearing Zone calculada pelo layout (**32–58 px**, 7 colunas na paisagem e 4 no retrato); Support Decks **42 px**; Reserve em grade que encolhe de **34 px** (paisagem) / **42 px** (retrato) até um mínimo de **18 px**, conforme a quantidade de cartas guardadas.
+- **Janela do tabuleiro** com moldura de madeira pintada e 9-slice oversampled: no retrato usa o **frame vertical** (`panel_board_frame_portrait.png`) e na paisagem o frame v2 (`assets/ui/kit/v2/panel_board_frame.png`). O furo acompanha o tamanho do board, o oversample mantém a moldura nítida em 2× e o posicionamento nunca recorta cartas.
+- **Layout responsivo:** stretch `canvas_items` + `aspect="expand"`, com a UI calculada em unidades de design pelo `LevelLayout` a partir do viewport lógico. Tamanhos suportados e capturados: **360×640, 360×780, 360×800, 480×640, 640×360, 780×360 e 640×480**.
+- **Tela do Level (retrato):** topo com voltar/som à esquerda, logo e placa de estrelas no centro e ajuda/engrenagem à direita; board na parte superior; relógio logo abaixo; faixa de ação com **deck A**, os três **poderes lado a lado** (painel girado) e **deck B**; Clearing Zone em **4 colunas**; Reserve no rodapé. O herói/mascote fica atrás da UI.
+- **Tela do Level (paisagem):** cabeçalho de **48 px**; board à esquerda/centro; painel de poderes vertical à direita; decks nos cantos inferiores; Reserve à esquerda e Clearing Zone de **7 colunas** no rodapé; herói na faixa livre à esquerda.
+- **Clearing Zone e decks:** a barra comprida (`assets/ui/kit/v2/bar_zone.png`) e as mesas dos decks (`assets/ui/kit/v2/card_available_frame.png`) usam 9-slice oversampled; as cartas ficam dentro do vão de madeira, centradas, e a pilha fica sobre a mesa.
+- **Menu (até 4 botões):** "Continuar" (quando há progresso), "Iniciar", "Opções" e "Sair", em placas v2. No retrato o board fica centralizado e sem herói em primeiro plano; na paisagem o board ancora à esquerda e dois heróis ocupam a metade direita. O menu tem parallax em três camadas e reflui ao redimensionar a janela.
 - **Reserve:** campo de **pedra** pintado (`panel_reserve_field`), sem header/contador, alinhado à barra da Clearing Zone em paisagem e com as cartas centradas no vão.
-- **Poderes:** painel vertical de madeira (`panel_powers_board`, 751×1453 px) usado sem rotação nas duas orientações, com ícone e estoque de cada poder.
+- **Poderes:** painel de madeira (`panel_powers_board`) vertical na paisagem e girado em faixa horizontal no retrato, sempre com 9-slice oversampled, ícone e estoque de cada poder.
 
 ## Como rodar os testes (opcional)
 
@@ -99,7 +102,7 @@ Abra o terminal (PowerShell) na pasta do projeto e rode os testes unitários:
 & "C:\caminho\para\Godot_v4.7-stable_win64_console.exe" --headless --path "E:\Cartitas" --script "res://tests/run_tests.gd"
 ```
 
-O runner roda 256 testes unitários, incluindo `test_level_boards.gd` e `test_board_scatter.gd` (tabuleiros gerados de todos os Levels e rodadas do Endless, incluindo o espalhamento das camadas de cima), `test_card_art.gd` (arte das cartas em alta resolução com mipmaps), `test_star_thresholds.gd` (limites de estrelas por carta), `test_audio.gd` (faixas e mixagem), `test_backgrounds.gd` (fundos por Level/orientação), `test_mascot_heroes.gd` (heróis por fase e expressões do L8) e `test_mascot_lines.gd`. Troque o caminho pelo executável `_console.exe` do seu Godot. O CI (`.github/workflows/ci.yml`) roda também estes scripts, do mesmo jeito (`--script res://tests/<nome>.gd`); o `smoke_mascot_heroes.gd` por enquanto é local:
+O runner roda a suíte unitária completa, incluindo `test_level_boards.gd` e `test_board_scatter.gd` (tabuleiros gerados de todos os Levels e rodadas do Endless, incluindo o espalhamento das camadas de cima), `test_level_layout.gd` (layouts responsivos nos 7 tamanhos suportados), `test_card_art.gd` (arte das cartas em alta resolução com mipmaps), `test_star_thresholds.gd` (limites de estrelas por carta), `test_audio.gd` (faixas e mixagem), `test_backgrounds.gd` (fundos por Level/orientação), `test_mascot_heroes.gd` (heróis por fase e expressões do L8) e `test_mascot_lines.gd`. A verificação de referências de assets fica em `test_asset_references.gd`. Troque o caminho pelo executável `_console.exe` do seu Godot. O CI (`.github/workflows/ci.yml`) roda também estes scripts, do mesmo jeito (`--script res://tests/<nome>.gd`); o `smoke_mascot_heroes.gd` por enquanto é local:
 
 | Script | O que verifica |
 |---|---|
@@ -117,15 +120,29 @@ O runner roda 256 testes unitários, incluindo `test_level_boards.gd` e `test_bo
 | `repro_hud_bounds.gd` | HUD inteiro dentro da tela em 6 views: campanha e Endless, retrato e paisagem, mais as views com o mascote desligado; no retrato confere o HUD de tela cheia, o rodapé e o logo |
 | `repro_board_capture.gd` | tabuleiro da cena igual ao do gerador, em retrato (336×177) e paisagem (448×193) |
 
+### Capturas de QA (visual)
+
+As capturas abrem uma janela real e exigem GPU; rode **sem** `--headless`:
+
+```powershell
+& "C:\caminho\para\Godot_v4.7-stable_win64_console.exe" --path "E:\Cartitas" --script "res://tests/qa_visual_capture.gd"
+& "C:\caminho\para\Godot_v4.7-stable_win64_console.exe" --path "E:\Cartitas" --script "res://tests/qa_responsive_capture.gd"
+& "C:\caminho\para\Godot_v4.7-stable_win64_console.exe" --path "E:\Cartitas" --script "res://tests/qa_card_hd_capture.gd"
+& "C:\caminho\para\Godot_v4.7-stable_win64_console.exe" --path "E:\Cartitas" --script "res://tests/qa_defeat_capture.gd"
+& "C:\caminho\para\Godot_v4.7-stable_win64_console.exe" --path "E:\Cartitas" --script "res://tests/qa_settings_capture.gd"
+```
+
+Os PNGs vão para `user://qa_shots` (no Windows, `%APPDATA%\Godot\app_userdata\Cartitas Infinity\qa_shots`); cada script imprime o caminho absoluto no final. `qa_responsive_capture.gd` cobre os 7 tamanhos suportados, menu, Level 6, crops 2× dos painéis e as variantes harbor/castle; `qa_visual_capture.gd` captura menu/Level em 2×. As capturas aprovadas ficam em `docs/visual-reference/`.
+
 ## Estrutura do projeto
 
 | Pasta        | O que contém                          |
 |--------------|---------------------------------------|
 | `scenes/`    | Cenas (menu principal e tela do level) |
 | `scripts/core/` | Lógica do jogo (sem UI); inclui `audio_manager.gd` |
-| `scripts/ui/`   | Interface, menu, heróis (`hero_roster.gd`) |
+| `scripts/ui/`   | Interface, menu, heróis (`hero_roster.gd`) e layout responsivo (`level_layout.gd`) |
 | `levels/`    | Arquivos JSON que definem os níveis   |
-| `assets/`    | Cartas (`cards/`, 882–957 px nativos), heróis (`ui/heroes/`), logo e botões PT (`ui/branding/`), FX (`ui/fx/`), ícones, kit de UI, fundos e músicas (`audio/music/`) |
+| `assets/`    | Cartas (`cards/`, 882–957 px nativos), heróis (`ui/heroes/`), logo (`ui/branding/`), FX (`ui/fx/`), ícones, kit de UI, fundos e músicas (`audio/music/`) |
 | `tests/`     | Testes automatizados                  |
-| `docs/`      | Spec, ADRs, guias de arte e `CHANGELOG.md` |
+| `docs/`      | Spec, ADRs, guias de arte, `visual-reference/` (fonte de verdade visual) e `CHANGELOG.md` |
 | `addons/godot_mcp/` | Addon Godot-MCP (C#, só no editor .NET) |

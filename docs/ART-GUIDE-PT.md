@@ -92,25 +92,27 @@ Mantenha contraste baixo e evite detalhe no centro: painéis escuros semitranspa
 
 ## 3f. Painéis pintados (kit de UI)
 
-Os painéis esticáveis ficam em `assets/ui/kit/`. Todos estão recortados na silhueta (margens transparentes removidas, sem sombra externa) e são desenhados como `NinePatchRect`, então a margem do 9-slice precisa preservar os cantos entalhados:
+Os painéis esticáveis ficam em `assets/ui/kit/`; a moldura do tabuleiro, a barra da Clearing Zone e a mesa dos decks agora ficam em `assets/ui/kit/v2/`. Todos estão recortados na silhueta (margens transparentes removidas, sem sombra externa) e são desenhados como `NinePatchRect`, então a margem do 9-slice precisa preservar os cantos entalhados:
 
 | Arquivo | Tamanho | Uso | Margem 9-slice |
 |---------|---------|-----|----------------|
-| `bar_zone.png` | 2162×314 | Barra da Clearing Zone (área útil x 56–2105, y 44–257) | 72 px (pontas) |
+| `assets/ui/kit/v2/bar_zone.png` | 1980×322 | Barra da Clearing Zone (v2; substitui a v1 `assets/ui/kit/bar_zone.png`, removida) | definida por `ZONE_BAR_MARGINS` no código |
 | `panel_powers_board.png` | 751×1453 | Board vertical dos poderes (área útil x 78–690, y 76–1368) | 96 px |
 | `panel_reserve_field.png` | 1829×741 | Campo da Reserve — o miolo de pedra faz parte da arte (as cartas vão por cima) | 192 px |
-| `card_available_frame.png` | 1160×1077 | Moldura de carta disponível (área útil x 75–1086, y 72–1004) | 96 px |
+| `assets/ui/kit/v2/card_available_frame.png` | 960×919 | Mesa sob cada pilha de Support Deck (v2; substitui a v1 `assets/ui/kit/card_available_frame.png`, removida) | desenhada esticada, sem 9-slice |
+
+As v1 `panel_board_frame.png` e `panel_menu_board.png` foram removidas em 2026-11-02; a moldura de paisagem e o board do menu agora usam `assets/ui/kit/v2/panel_board_frame.png` e `assets/ui/kit/v2/panel_menu_board.png`.
 
 ## 3g. Assets do menu
 
 | Arquivo | Tamanho | Observação |
 |---------|---------|------------|
 | `assets/ui/background_menu.png` | 640×360 | Fundo do menu, só paisagem (sem versão retrato) |
-| `assets/ui/branding/btn_menu_jogar.png` | 64×32 | Botão "JOGAR" em pixel art |
-| `assets/ui/branding/btn_menu_opcoes.png` | 64×32 | Botão "OPÇÕES" em pixel art |
-| `assets/ui/branding/btn_menu_sair.png` | 64×32 | Botão "SAIR" em pixel art |
+| `assets/ui/kit/v2/Iniciar).png` | 1133×329 | Placa "Iniciar" do menu (v2; substitui a `assets/ui/branding/btn_menu_jogar.png`, removida) |
+| `assets/ui/kit/v2/Opcoes_.png` | 1125×321 | Placa "Opções" do menu (v2; substitui a `assets/ui/branding/btn_menu_opcoes.png`, removida) |
+| `assets/ui/kit/v2/sair_.png` | 1133×326 | Placa "Sair" do menu (v2; substitui a `assets/ui/branding/btn_menu_sair.png`, removida) |
 
-Os botões são pixel art: desenhe em 1× ou múltiplos inteiros com filtro Nearest, mipmaps desligados e compressão lossless (já é o padrão de importação do projeto). O logo do jogo (`assets/ui/branding/logo_claw_and_crown.png`) fica separado dos botões.
+As placas atuais são arte pintada v2: desenhe em qualquer escala com filtro linear e mipmaps. Os antigos botões pixel art 64×32 `assets/ui/branding/btn_menu_*.png` foram removidos em 2026-11-02. O logo do jogo (`assets/ui/branding/logo_claw_and_crown.png`) fica separado das placas.
 
 ## 4. Paleta
 
@@ -195,7 +197,7 @@ cartitas_arte_v01_AAAA-MM-DD.zip
 
 ## 9. Importação no Godot (feito por quem integra)
 
-- **Cartas** (`assets/cards/`): basta copiar o PNG com o nome `card_<tipo>.png`. O jogo gera os mipmaps e usa filtro trilinear sozinho; não precisa mexer no painel *Import*. Artes antigas ficam em `assets/cards/legacy/` (pasta ignorada pelo Godot).
+- **Cartas** (`assets/cards/`): basta copiar o PNG com o nome `card_<tipo>.png`. O jogo gera os mipmaps e usa filtro trilinear sozinho; não precisa mexer no painel *Import*. A antiga pasta `assets/cards/legacy/` foi removida em 2026-11-02; restam apenas os `card_<tipo>.png` atuais.
 - **Kit de UI e ícones em pixel art** (`assets/ui/kit/`): Filter **Nearest** (padrão do projeto), Mipmaps **desligados**, Compress **Lossless**, desenhados em 1× ou múltiplos inteiros.
 - **Fundos pintados** (`assets/ui/`): o jogo aplica filtro linear e o shader de suavização.
 

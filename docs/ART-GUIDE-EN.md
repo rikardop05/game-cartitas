@@ -92,25 +92,27 @@ Keep contrast low and detail out of the centre: dark semi-transparent panels and
 
 ## 3f. Painted panels (UI kit)
 
-Stretchable panels live in `assets/ui/kit/`. All are cropped to the silhouette (transparent margins removed, no outer shadow) and are drawn as `NinePatchRect`, so the patch margins must keep the carved corners whole:
+Stretchable panels live in `assets/ui/kit/`; the board frame, Clearing Zone bar and deck table now live in `assets/ui/kit/v2/`. All are cropped to the silhouette (transparent margins removed, no outer shadow) and are drawn as `NinePatchRect`, so the patch margins must keep the carved corners whole:
 
 | File | Size | Use | 9-slice margin |
 |------|------|-----|----------------|
-| `bar_zone.png` | 2162×314 | Clearing Zone bar (clear area x 56–2105, y 44–257) | 72 px (end caps) |
+| `assets/ui/kit/v2/bar_zone.png` | 1980×322 | Clearing Zone bar (v2; replaces the removed v1 `assets/ui/kit/bar_zone.png`) | set by `ZONE_BAR_MARGINS` in code |
 | `panel_powers_board.png` | 751×1453 | Powers board, vertical (clear area x 78–690, y 76–1368) | 96 px |
 | `panel_reserve_field.png` | 1829×741 | Reserve field — stone interior is part of the art (cards are drawn on top) | 192 px |
-| `card_available_frame.png` | 1160×1077 | Available-card frame (clear area x 75–1086, y 72–1004) | 96 px |
+| `assets/ui/kit/v2/card_available_frame.png` | 960×919 | Deck table under each Support Deck pile (v2; replaces the removed v1 `assets/ui/kit/card_available_frame.png`) | drawn stretched, not 9-sliced |
+
+The v1 `panel_board_frame.png` and `panel_menu_board.png` were removed on 2026-11-02; the landscape board frame and menu board now use `assets/ui/kit/v2/panel_board_frame.png` and `assets/ui/kit/v2/panel_menu_board.png`.
 
 ## 3g. Menu assets
 
 | File | Size | Notes |
 |------|------|-------|
 | `assets/ui/background_menu.png` | 640×360 | Menu background, landscape only (no portrait variant) |
-| `assets/ui/branding/btn_menu_jogar.png` | 64×32 | Pixel-art "JOGAR" button |
-| `assets/ui/branding/btn_menu_opcoes.png` | 64×32 | Pixel-art "OPÇÕES" button |
-| `assets/ui/branding/btn_menu_sair.png` | 64×32 | Pixel-art "SAIR" button |
+| `assets/ui/kit/v2/Iniciar).png` | 1133×329 | "Iniciar" menu plate (v2; replaces the removed `assets/ui/branding/btn_menu_jogar.png`) |
+| `assets/ui/kit/v2/Opcoes_.png` | 1125×321 | "Opções" menu plate (v2; replaces the removed `assets/ui/branding/btn_menu_opcoes.png`) |
+| `assets/ui/kit/v2/sair_.png` | 1133×326 | "Sair" menu plate (v2; replaces the removed `assets/ui/branding/btn_menu_sair.png`) |
 
-The buttons are pixel art: draw them at 1× or whole multiples with Nearest filtering, mipmaps off and lossless compression (already the project import defaults). Keep the game logo (`assets/ui/branding/logo_claw_and_crown.png`) separate from the buttons.
+The current menu plates are painted v2 art: draw them at any scale with linear filtering and mipmaps. The old 64×32 pixel-art `assets/ui/branding/btn_menu_*.png` buttons were removed on 2026-11-02. Keep the game logo (`assets/ui/branding/logo_claw_and_crown.png`) separate from the plates.
 
 ## 4. Palette
 
@@ -195,7 +197,7 @@ cartitas_arte_v01_YYYY-MM-DD.zip
 
 ## 9. Godot import (done by the integrator)
 
-- **Cards** (`assets/cards/`): just copy the PNG as `card_<type>.png`. The game builds the mipmaps and uses trilinear filtering on its own; no *Import* panel changes needed. Older art lives in `assets/cards/legacy/` (a folder Godot ignores).
+- **Cards** (`assets/cards/`): just copy the PNG as `card_<type>.png`. The game builds the mipmaps and uses trilinear filtering on its own; no *Import* panel changes needed. The old `assets/cards/legacy/` folder was removed on 2026-11-02; only the current `card_<type>.png` files remain.
 - **Pixel-art UI kit and icons** (`assets/ui/kit/`): Filter **Nearest** (project default), Mipmaps **off**, Compress **Lossless**, drawn at 1x or whole multiples.
 - **Painted backgrounds** (`assets/ui/`): the game applies linear filtering and the softening shader.
 

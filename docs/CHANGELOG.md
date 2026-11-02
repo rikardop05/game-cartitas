@@ -1,5 +1,23 @@
 # Changelog — Cartitas Infinity
 
+## UI em alta resolução, layout responsivo e limpeza de assets — 2026-11-02
+
+### Jogo
+- **Layout responsivo:** `project.godot` agora combina stretch `canvas_items` com `aspect="expand"`; a UI é calculada em unidades de design pelo novo `scripts/ui/level_layout.gd` a partir do viewport lógico. Tamanhos suportados e capturados: **360×640, 360×780, 360×800, 480×640, 640×360, 780×360 e 640×480**. O board continua sendo o maior retângulo e os controles ficam dentro da tela, sem sobreposição (alvos ≥ 32 px).
+- **HUD retrato:** topo com voltar/som à esquerda, logo e placa de estrelas no centro e ajuda/engrenagem à direita; board na parte superior; relógio logo abaixo; faixa de ação com deck A, os três poderes lado a lado (painel girado) e deck B; Clearing Zone em 4 colunas; Reserve no rodapé. O herói/mascote continua atrás da UI.
+- **HUD paisagem:** cabeçalho de 48 px; board à esquerda/centro; painel de poderes vertical à direita; decks nos cantos inferiores; Reserve à esquerda e Clearing Zone de 7 colunas no rodapé; herói na faixa livre à esquerda.
+- **Menu de até 4 botões:** "Continuar" aparece quando há progresso, seguido de "Iniciar", "Opções" e "Sair". No retrato o board fica centralizado e sem herói em primeiro plano; na paisagem o board ancora à esquerda e dois heróis ocupam a metade direita. O menu reflui ao redimensionar a janela.
+
+### Visual e assets
+- **Filtro de textura:** `default_texture_filter=3` (linear com mipmaps) para a arte pintada; os imports de cartas, fundos, heróis, HUD, FX e kit v2 passaram a gerar mipmaps. `UiHelpers.hires_texture` usa o `CompressedTexture2D` importado (sem decodificar a imagem na CPU) e mantém fallback de runtime para texturas geradas ou sem import.
+- **9-slice nítido:** `UiHelpers.ui_oversample()` mede quantos pixels reais cabem por pixel de design (1–4, em passos de 0,5) e `_hires_nine_patch`/`nine_patch_rect` assam o painel nessa resolução e desenham com escala 1/fator. Reserve, barra da Clearing Zone, painel de poderes e moldura do board deixaram de ser assados no tamanho de design e ampliados pela GPU (que borrava). O cache é indexado pelo fator de oversample. `StyleBoxTexture` (linhas de opções e `kit_stylebox`) permanece no caminho design-size e depende dos mipmaps do import.
+- **Assets:** removidos 38 arquivos sem uso (**−16,7 MB**): 20 cartas em `assets/cards/legacy/`, 3 NPCs, 3 botões antigos de branding, `ui/hud/icon_gear.png` e 11 sobras do kit v1. Detalhes em `docs/ASSET-AUDIT.md`.
+
+### Ferramentas e qualidade
+- Novos testes: `tests/test_level_layout.gd` (7 tamanhos; retângulos dentro da tela, board maior, alvos ≥ 32 px, sem sobreposição, 4/7 colunas na zona), `tests/test_asset_references.gd` (referências `res://assets/...` e famílias dinâmicas de cartas/heróis/estrelas/poderes) e `tests/qa_responsive_capture.gd` (capturas em 7 tamanhos, menu + Level 6 + crops 2×, em `user://qa_shots`).
+- `tests/qa_visual_capture.gd` agora captura em 2× (720×1280 / 1280×720) para o oversample ficar visível.
+- `tests/run_tests.gd` inclui `test_level_layout.gd`.
+
 ## Levels 12–15, cenários, heróis e frame — 2026-11-01
 
 ### Jogo

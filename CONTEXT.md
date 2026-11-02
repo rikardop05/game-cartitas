@@ -11,6 +11,14 @@ _Avoid_: Stage, Phase, "fase" (in code)
 **Board**:
 The physical layout of cards in a level: a grid-aligned layered pyramid (upper layers sit on quarter-card offsets over the layer below), so cards overlap across layers but never within one.
 
+**Design Size**:
+The logical UI coordinate space (360×640 portrait, 640×360 landscape) used for layout rects and control sizes; the `canvas_items` stretch scales it to the real window. Touch targets are checked in design px.
+_Avoid_: screen size, resolution, window pixels
+
+**Oversample**:
+The factor (1–4, in half steps) between one design pixel and a real screen pixel. 9-slice panels are baked at design size × oversample and drawn back at 1/oversample so painted corners stay sharp on 2× windows.
+_Avoid_: upscale factor (the old design-size bake), zoom, DPI
+
 **Card**:
 A single playable tile on the board. Has a unique id, a type, a position, a layer, a state, and a source (board or support deck).
 
