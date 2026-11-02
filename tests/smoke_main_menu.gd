@@ -3,7 +3,8 @@ extends SceneTree
 # Main menu smoke test, driven through the real scene: the three v2 banner buttons exist and are
 # clickable in both locales (both use the delivered Portuguese art, with the localized wording
 # kept as tooltip/accessible label), Play opens the level list and Back returns, Options shows the
-# v2 title plate, the Sound toggle (which flips Game.sound_enabled()), the Regulagem handle and the
+# panel_options overlay with the config_row_1/2/3 row plates, the Sound toggle (which flips
+# Game.sound_enabled()), the Regulagem handle, the Accept/Close reset badges and the
 # "Continuar" plate back to the menu, and the "?" badge opens the help overlay.
 # The scene saves through Game.save_path, which is pointed at a throwaway user:// file before
 # anything runs; the real save is also checked byte-for-byte at the end.
@@ -19,7 +20,8 @@ const MAIN_BUTTONS := {
 const MENU_V2_ASSETS := [
 	"menu_.png", "panel_menu_board.png", "Iniciar).png", "Opcoes_.png", "sair_.png",
 	"Continuar_.png", "Layer 2.png", "Configu.png", "config_2.png", "Config_Icon.png",
-	"Regulagem_botton.png", "interrog.png",
+	"Regulagem_botton.png", "interrog.png", "panel_options.png", "config_row_1.png",
+	"config_row_2.png", "config_row_3.png", "icon_accept_v2.png", "icon_close_v2.png",
 ]
 
 var _failures: Array[String] = []
@@ -103,9 +105,32 @@ func _scenario(game) -> void:
 		else:
 			_check(str(title.get_meta("source_path", "")).ends_with("Configu.png"),
 				"EN options title uses Configu.png")
-	_check(menu.find_child("Window", true, false) != null, "options sit on the v2 window")
+	_check(menu.find_child("OptionsPanel", true, false) != null, "options sit on the v2 panel_options overlay")
+	var panel_art := menu.find_child("PanelArt", true, false) as TextureRect
+	_check(panel_art != null and str(panel_art.get_meta("source_path", "")).ends_with("panel_options.png"),
+		"options overlay background uses panel_options.png")
 	for node_name in ["LanguageButton", "OrientationButton", "MascotButton", "VolumeRow", "VolumeDown", "VolumeSlider", "VolumeUp", "SoundButton", "ResetButton", "BackButton"]:
 		_check(menu.find_child(node_name, true, false) != null, "options has %s" % node_name)
+	# The three config_row plates are the real skins of the language/orientation/mascot rows
+	# (and the volume panel reuses row 1), so none of them stays unreferenced.
+	var row_arts := {
+		"LanguageButton": "config_row_1.png",
+		"OrientationButton": "config_row_2.png",
+		"MascotButton": "config_row_3.png",
+		"ResetButton": "config_row_2.png",
+	}
+	for node_name in row_arts:
+		var row := menu.find_child(node_name, true, false) as Button
+		_check(row != null, "options row %s exists" % node_name)
+		if row != null:
+			var style := row.get_theme_stylebox("normal")
+			_check(style != null and str(style.get_meta("source_path", "")).ends_with(str(row_arts[node_name])),
+				"%s uses %s" % [node_name, row_arts[node_name]])
+	var volume_row := menu.find_child("VolumeRow", true, false) as PanelContainer
+	if volume_row != null:
+		var volume_style := volume_row.get_theme_stylebox("panel")
+		_check(volume_style != null and str(volume_style.get_meta("source_path", "")).ends_with("config_row_1.png"),
+			"volume row uses config_row_1.png")
 	var back := menu.find_child("BackButton", true, false) as Button
 	if back != null:
 		var back_art := "Continuar_.png" if Localizer.current == "pt" else "Layer 2.png"
@@ -153,8 +178,8 @@ func _scenario(game) -> void:
 	_check(menu.find_child("ResetButton", true, false) == null, "the plain Reset button is replaced by the confirm step")
 	if confirm == null or cancel == null:
 		return
-	_check(confirm.icon != null and confirm.icon.resource_path.ends_with("icon_accept.png"), "confirm uses icon_accept")
-	_check(cancel.icon != null and cancel.icon.resource_path.ends_with("icon_close_red.png"), "cancel uses icon_close_red")
+	_check(str(confirm.get_meta("source_path", "")).ends_with("icon_accept_v2.png"), "confirm uses icon_accept_v2")
+	_check(str(cancel.get_meta("source_path", "")).ends_with("icon_close_v2.png"), "cancel uses icon_close_v2")
 	cancel.pressed.emit()
 	await _frames(3)
 	_check(game.progress.get_stars("1") == 3, "Cancel keeps the progress")

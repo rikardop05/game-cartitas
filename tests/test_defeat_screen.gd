@@ -31,6 +31,8 @@ func test_v2_end_plates_exist() -> void:
 	for file_name in ["Continuar_.png", "Layer 1.png", "Layer 2.png", "Layer 3.png",
 			"config_2.png", "Configu.png", "Config_Icon.png", "interrog.png",
 			"Bar_adjust.png", "Regulagem_botton.png", "panel_board_frame.png",
-			"bar_zone.png", "card_available_frame.png"]:
+			"bar_zone.png", "card_available_frame.png", "panel_options.png",
+			"config_row_1.png", "config_row_2.png", "config_row_3.png",
+			"icon_accept_v2.png", "icon_close_v2.png"]:
 		Assert.is_true(FileAccess.file_exists("res://assets/ui/kit/v2/" + file_name),
 			"missing v2 %s" % file_name)

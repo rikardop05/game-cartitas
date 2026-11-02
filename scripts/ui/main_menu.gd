@@ -59,6 +59,12 @@ const CONTINUE_ART := {"pt": "Continuar_.png", "en": "Layer 2.png"}
 const GEAR_ART := "Config_Icon.png"
 const HELP_ART := "interrog.png"
 const VOLUME_HANDLE_ART := "Regulagem_botton.png"
+# New Atele additions: the Options overlay frame, its row plates and the confirm/close badges.
+const OPTIONS_PANEL_ART := "panel_options.png"
+const OPTIONS_PANEL_ASPECT := 1227.0 / 1202.0
+const CONFIG_ROW_ART := ["config_row_1.png", "config_row_2.png", "config_row_3.png"]
+const ACCEPT_V2_ART := "icon_accept_v2.png"
+const CLOSE_V2_ART := "icon_close_v2.png"
 
 # Branding and the decorative hero behind the sign.
 const LOGO_ART := "res://assets/ui/branding/logo_claw_and_crown.png"
@@ -664,40 +670,38 @@ func _build_options() -> void:
 	var landscape := _landscape()
 	var margin := _make_margin(self)
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 8)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_theme_constant_override("separation", 6)
 	margin.add_child(col)
-	col.add_child(_make_options_title())
+	if not landscape:
+		col.add_child(_make_options_title(46.0))
 
-	var center := CenterContainer.new()
-	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	col.add_child(center)
-
-	var window := _make_v2_window()
-	window.custom_minimum_size = Vector2(320, 0)
-	center.add_child(window)
-
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 4 if landscape else 10)
-	window.add_child(vbox)
-
-	var row_height := 34 if landscape else 46
-	vbox.add_child(_make_option_row("LanguageButton", Localizer.t("language"), Localizer.t("language"), _on_toggle_language, row_height))
-	vbox.add_child(_make_option_row("OrientationButton", _orientation_label(), Localizer.t("orientation_label"), _on_toggle_orientation, row_height))
-	vbox.add_child(_make_option_row("MascotButton", _mascot_label(), Localizer.t("mascot_label"), _on_toggle_mascot, row_height))
+	# panel_options.png is the Options overlay background; the rows live inside its stone.
+	var panel := _make_options_panel(landscape)
+	col.add_child(panel)
+	var vbox := panel.find_child("OptionsBody", true, false) as VBoxContainer
+	if vbox == null:
+		return
+	var row_height := 28 if landscape else 40
+	if landscape:
+		vbox.add_child(_make_options_title(20.0))
+	vbox.add_child(_make_option_row("LanguageButton", Localizer.t("language"), Localizer.t("language"), _on_toggle_language, row_height, CONFIG_ROW_ART[0]))
+	vbox.add_child(_make_option_row("OrientationButton", _orientation_label(), Localizer.t("orientation_label"), _on_toggle_orientation, row_height, CONFIG_ROW_ART[1]))
+	vbox.add_child(_make_option_row("MascotButton", _mascot_label(), Localizer.t("mascot_label"), _on_toggle_mascot, row_height, CONFIG_ROW_ART[2]))
 	var volume := VolumeRow.new(row_height)
-	_apply_v2_volume_handle(volume)
+	_style_v2_volume_row(volume, CONFIG_ROW_ART[0])
 	vbox.add_child(volume)
-
 	if _reset_armed:
 		vbox.add_child(_make_reset_confirm(row_height))
 	else:
-		vbox.add_child(_make_option_row("ResetButton", Localizer.t("reset"), Localizer.t("reset"), _on_reset, row_height))
-
-	# v2 "Continuar/CONTINUE" plate closes the settings and returns to the menu.
-	col.add_child(_make_continue_button(landscape))
+		vbox.add_child(_make_option_row("ResetButton", Localizer.t("reset"), Localizer.t("reset"), _on_reset, row_height, CONFIG_ROW_ART[1]))
+	if landscape:
+		vbox.add_child(_make_continue_button(true))
+	else:
+		col.add_child(_make_continue_button(false))
 
 # v2 settings title plate, localized: "Configuração" (config_2) or "Settings" (Configu).
-func _make_options_title() -> Control:
+func _make_options_title(height: float) -> Control:
 	var art: String = OPTIONS_TITLE_ART["pt" if Localizer.current == "pt" else "en"]
 	var texture := _v2_texture(art)
 	if texture == null:
@@ -718,12 +722,131 @@ func _make_options_title() -> Control:
 	title.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	title.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	var height := 34.0 if _landscape() else 46.0
 	var aspect := float(texture.get_width()) / float(maxi(1, texture.get_height()))
 	title.custom_minimum_size = Vector2(height * aspect, height)
 	return title
 
-# Stone/gold window that matches the v2 plaques (the old kit window is kept for Levels).
+# The Options overlay: panel_options.png scaled to its own aspect, with a body margin that
+# keeps every row on the painted stone (clear of the emblem and of the gold frame).
+func _make_options_panel(landscape: bool) -> Control:
+	var width := 351.0 if landscape else 344.0
+	var height := width / OPTIONS_PANEL_ASPECT
+	var frame := Control.new()
+	frame.name = "OptionsPanel"
+	frame.custom_minimum_size = Vector2(width, height)
+	frame.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var art := TextureRect.new()
+	art.name = "PanelArt"
+	art.texture = _v2_texture(OPTIONS_PANEL_ART)
+	art.set_meta("source_path", V2_DIR + OPTIONS_PANEL_ART)
+	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	art.stretch_mode = TextureRect.STRETCH_SCALE
+	art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	frame.add_child(art)
+	var body := MarginContainer.new()
+	body.name = "Body"
+	body.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var side := int(round(width * 0.117))
+	var vertical := int(round(height * 0.17))
+	body.add_theme_constant_override("margin_left", side)
+	body.add_theme_constant_override("margin_right", side)
+	body.add_theme_constant_override("margin_top", vertical)
+	body.add_theme_constant_override("margin_bottom", vertical)
+	frame.add_child(body)
+	var vbox := VBoxContainer.new()
+	vbox.name = "OptionsBody"
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 2 if landscape else 4)
+	body.add_child(vbox)
+	return frame
+
+# Option row on a config_row_N.png plate (9-sliced so the gem ends keep their shape).
+func _make_option_row(node_name: String, text: String, tooltip: String, callback: Callable, height: int, art_name: String) -> Button:
+	var btn := Button.new()
+	btn.name = node_name
+	btn.text = text
+	btn.custom_minimum_size = Vector2(0, height)
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.add_theme_font_size_override("font_size", 16 if height >= 36 else 12)
+	btn.tooltip_text = tooltip
+	btn.pressed.connect(callback)
+	_apply_v2_row_style(btn, art_name)
+	return btn
+
+func _apply_v2_row_style(btn: Button, art_name: String) -> void:
+	for state in ["normal", "hover", "pressed", "disabled"]:
+		var tint := Color.WHITE
+		match state:
+			"hover":
+				tint = Color(1.12, 1.12, 1.12)
+			"pressed":
+				tint = Color(0.82, 0.82, 0.82)
+			"disabled":
+				tint = Color(0.65, 0.65, 0.65, 0.85)
+		btn.add_theme_stylebox_override(state, _v2_row_style(art_name, tint))
+	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	btn.add_theme_color_override("font_color", UiHelpers.TEXT_PRIMARY)
+	btn.add_theme_color_override("font_hover_color", Color.WHITE)
+
+func _v2_row_style(art_name: String, tint := Color.WHITE) -> StyleBoxTexture:
+	var style := StyleBoxTexture.new()
+	style.texture = _v2_texture(art_name)
+	style.set_meta("source_path", V2_DIR + art_name)
+	# The rows are much shorter than the 1090x220 plate, so it is drawn as one stretched
+	# patch: 9-slicing with the plate's borders would collapse the middle at this height.
+	style.texture_margin_left = 0
+	style.texture_margin_right = 0
+	style.texture_margin_top = 0
+	style.texture_margin_bottom = 0
+	style.content_margin_left = 14
+	style.content_margin_right = 14
+	style.content_margin_top = 1
+	style.content_margin_bottom = 1
+	style.modulate_color = tint
+	return style
+
+# Volume gets the same config_row plate as the other rows, keeping its shared controls.
+func _style_v2_volume_row(row: Control, art_name: String) -> void:
+	row.custom_minimum_size.x = 0
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_theme_stylebox_override("panel", _v2_row_style(art_name))
+	_apply_v2_volume_handle(row)
+
+# Second step of "Reset progress": the warning plus the v2 Accept/Close badges.
+func _make_reset_confirm(height: int) -> PanelContainer:
+	var panel := PanelContainer.new()
+	panel.name = "ResetConfirmRow"
+	panel.custom_minimum_size = Vector2(0, height)
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.add_theme_stylebox_override("panel", _v2_row_style(CONFIG_ROW_ART[1]))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	panel.add_child(row)
+	var warning := Label.new()
+	warning.name = "ResetWarning"
+	warning.text = Localizer.t("reset_confirm")
+	warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	warning.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	warning.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	warning.add_theme_font_size_override("font_size", 11 if height >= 36 else 10)
+	row.add_child(warning)
+	row.add_child(_make_v2_action_icon("ResetConfirm", ACCEPT_V2_ART, Localizer.t("confirm"), _on_reset, height))
+	row.add_child(_make_v2_action_icon("ResetCancel", CLOSE_V2_ART, Localizer.t("cancel"), _on_reset_cancel, height))
+	return panel
+
+# Circular v2 badge button (Accept/Close) with the same hover/press feel as the banners.
+func _make_v2_action_icon(node_name: String, art_name: String, tooltip: String, callback: Callable, icon_size: int) -> Button:
+	var btn := _make_face_button(_v2_texture(art_name), Vector2(icon_size, icon_size))
+	btn.name = node_name
+	btn.set_meta("source_path", V2_DIR + art_name)
+	btn.tooltip_text = tooltip
+	btn.set_meta("label", tooltip)
+	btn.pressed.connect(callback)
+	return btn
+
+# Stone/gold dialog window of the Help overlay (the Options overlay uses panel_options.png).
 func _make_v2_window() -> PanelContainer:
 	var window := PanelContainer.new()
 	window.name = "Window"
@@ -746,7 +869,7 @@ func _make_v2_window() -> PanelContainer:
 func _make_continue_button(landscape: bool) -> Button:
 	var art: String = CONTINUE_ART["pt" if Localizer.current == "pt" else "en"]
 	var texture := _v2_texture(art)
-	var width := 200.0 if landscape else 250.0
+	var width := 180.0 if landscape else 250.0
 	var btn: Button
 	if texture == null:
 		btn = Button.new()
@@ -809,47 +932,6 @@ func _build_help() -> void:
 	scroll.add_child(text)
 
 	col.add_child(_make_continue_button(_landscape()))
-
-func _make_option_row(node_name: String, text: String, tooltip: String, callback: Callable, height: int) -> Button:
-	var btn := Button.new()
-	btn.name = node_name
-	btn.text = text
-	btn.custom_minimum_size = Vector2(280, height)
-	btn.tooltip_text = tooltip
-	btn.pressed.connect(callback)
-	_apply_plate_style(btn)
-	return btn
-
-# Second step of "Reset progress": the warning, a green check to erase and a red cross to keep.
-func _make_reset_confirm(height: int) -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.name = "ResetConfirmRow"
-	row.add_theme_constant_override("separation", 6)
-	var warning := Label.new()
-	warning.name = "ResetWarning"
-	warning.text = Localizer.t("reset_confirm")
-	warning.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	warning.custom_minimum_size = Vector2(170, 0)
-	warning.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	warning.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	warning.add_theme_font_size_override("font_size", 13)
-	row.add_child(warning)
-	row.add_child(_make_icon_button("ResetConfirm", "icon_accept", Localizer.t("confirm"), _on_reset, height))
-	row.add_child(_make_icon_button("ResetCancel", "icon_close_red", Localizer.t("cancel"), _on_reset_cancel, height))
-	return row
-
-func _make_icon_button(node_name: String, icon_name: String, tooltip: String, callback: Callable, size: int) -> Button:
-	var btn := Button.new()
-	btn.name = node_name
-	btn.icon = UiHelpers.kit_texture(icon_name)
-	btn.expand_icon = true
-	btn.add_theme_constant_override("icon_max_width", 24)
-	btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	btn.custom_minimum_size = Vector2(size + 8, size)
-	btn.tooltip_text = tooltip
-	btn.pressed.connect(callback)
-	_apply_plate_style(btn)
-	return btn
 
 # Flat button with a green chevron (dark outline), matching the level screen's back button.
 func _make_back_button() -> Button:

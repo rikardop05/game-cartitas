@@ -58,6 +58,15 @@ const V2_DECK_TABLE_ART := V2_KIT_DIR + "card_available_frame.png"
 const V2_GEAR_ART := V2_KIT_DIR + "Config_Icon.png"
 const V2_HELP_ART := V2_KIT_DIR + "interrog.png"
 const V2_SETTINGS_TITLE_ART := {"pt": "config_2.png", "en": "Configu.png"}
+const V2_OPTIONS_PANEL_ART := V2_KIT_DIR + "panel_options.png"
+const V2_OPTIONS_PANEL_ASPECT := 1227.0 / 1202.0
+const V2_CONFIG_ROW_ART := [
+	V2_KIT_DIR + "config_row_1.png",
+	V2_KIT_DIR + "config_row_2.png",
+	V2_KIT_DIR + "config_row_3.png",
+]
+const V2_ACCEPT_ART := V2_KIT_DIR + "icon_accept_v2.png"
+const V2_CLOSE_ART := V2_KIT_DIR + "icon_close_v2.png"
 
 # Layout, in logical px. Landscape (640x360) follows the owner's mockup; portrait (360x640)
 # stacks the same pieces. Every piece is a kit panel at an exact position, nothing reflows.
@@ -506,7 +515,7 @@ func _say(event: String, context: Dictionary = {}) -> void:
 # with the mascot turned off a standalone bubble in the same free area shows it instead.
 # Both go away by themselves after INSTRUCTION_SECONDS, so the board is never covered.
 func _say_instruction() -> void:
-	if _ended:
+	if _ended or _settings_open:
 		return
 	var text := Localizer.t("instruction")
 	if mascot != null:
@@ -1732,6 +1741,14 @@ func _on_settings() -> void:
 	_play_effect("play_ui_setting")
 	_settings_open = true
 	controller.pause()
+	# A quick gear tap can land while the level-name intro is still on screen (z1500);
+	# it must not sit over the settings panel.
+	var intro := find_child("IntroOverlay", true, false)
+	if intro != null:
+		intro.queue_free()
+	if _instruction_bubble != null and is_instance_valid(_instruction_bubble):
+		_instruction_bubble.queue_free()
+		_instruction_bubble = null
 	if mascot != null:
 		mascot.hide_bubble()
 	_build_settings_overlay()
@@ -1768,13 +1785,11 @@ func _build_settings_overlay() -> void:
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	overlay.add_child(center)
-	var panel := _make_kit_panel(18, 12, 16)
-	panel.name = "SettingsPanel"
-	panel.theme = UiHelpers.warm_theme()
+	var panel := _make_settings_panel()
 	center.add_child(panel)
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 6 if _is_landscape else 8)
-	panel.add_child(col)
+	var col := panel.find_child("SettingsBody", true, false) as VBoxContainer
+	if col == null:
+		return
 	# Heading with the kit's green close icon in the top-right corner. The v2 settings
 	# plate is localised (config_2/Configu); the text Label is only a missing-art fallback.
 	var header := HBoxContainer.new()
@@ -1792,7 +1807,7 @@ func _build_settings_overlay() -> void:
 		heading_art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 		heading_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		heading_art.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		heading_art.custom_minimum_size = Vector2(0, 30 if _is_landscape else 36)
+		heading_art.custom_minimum_size = Vector2(0, 28 if _is_landscape else 32)
 		header.add_child(heading_art)
 	else:
 		var heading := Label.new()
@@ -1803,28 +1818,25 @@ func _build_settings_overlay() -> void:
 		heading.add_theme_font_size_override("font_size", 16)
 		heading.add_theme_color_override("font_color", TEXT_PRIMARY)
 		header.add_child(heading)
-	var corner_close := TextureButton.new()
-	corner_close.name = "SettingsCornerClose"
-	corner_close.texture_normal = UiHelpers.kit_texture("icon_close_green")
-	corner_close.ignore_texture_size = true
-	corner_close.stretch_mode = TextureButton.STRETCH_SCALE
-	corner_close.custom_minimum_size = Vector2(24, 24)
-	corner_close.tooltip_text = Localizer.t("close")
-	corner_close.pressed.connect(_close_settings)
+	var corner_close := _make_v2_action_icon(
+		"SettingsCornerClose", V2_CLOSE_ART, Localizer.t("close"),
+		_close_settings, 28 if _is_landscape else 30)
+	corner_close.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	header.add_child(corner_close)
-	var row_height := 34 if _is_landscape else 42
-	col.add_child(_make_settings_row("LanguageButton", Localizer.t("language"), _on_settings_language, row_height))
-	col.add_child(_make_settings_row("OrientationButton", _settings_orientation_text(), _on_settings_orientation, row_height))
-	col.add_child(_make_settings_row("MascotButton", _settings_mascot_text(), _on_settings_mascot, row_height))
+	var row_height := 30 if _is_landscape else 36
+	col.add_child(_make_settings_row("LanguageButton", Localizer.t("language"), _on_settings_language, row_height, V2_CONFIG_ROW_ART[0]))
+	col.add_child(_make_settings_row("OrientationButton", _settings_orientation_text(), _on_settings_orientation, row_height, V2_CONFIG_ROW_ART[1]))
+	col.add_child(_make_settings_row("MascotButton", _settings_mascot_text(), _on_settings_mascot, row_height, V2_CONFIG_ROW_ART[2]))
 	var volume := VolumeRow.new(row_height)
 	volume.changed.connect(_refresh_sound_icon)
+	volume.custom_minimum_size.x = 0
+	volume.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	volume.add_theme_stylebox_override("panel", _v2_row_style(V2_CONFIG_ROW_ART[0]))
 	col.add_child(volume)
-	var close := Button.new()
-	close.name = "SettingsClose"
-	close.text = Localizer.t("close")
-	close.custom_minimum_size = Vector2(120, 32)
+	var close := _make_v2_action_icon(
+		"SettingsClose", V2_ACCEPT_ART, Localizer.t("close"),
+		_close_settings, 32 if _is_landscape else 36)
 	close.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	close.pressed.connect(_close_settings)
 	col.add_child(close)
 	# Every option inside the gear window clicks with the same sound as the gear itself.
 	_connect_settings_clicks(overlay)
@@ -1840,13 +1852,98 @@ func _connect_settings_clicks(node: Node) -> void:
 func _play_settings_click() -> void:
 	_play_effect("play_ui_setting")
 
-func _make_settings_row(node_name: String, text: String, callback: Callable, height: int) -> Button:
+# v2 Options frame: panel_options.png scaled to its own aspect, with a body margin that
+# keeps the rows on the painted stone, clear of the gold border and the top gem.
+func _make_settings_panel() -> Control:
+	var width := 351.0 if _is_landscape else 344.0
+	var height := width / V2_OPTIONS_PANEL_ASPECT
+	var frame := Control.new()
+	frame.name = "SettingsPanel"
+	frame.custom_minimum_size = Vector2(width, height)
+	frame.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var art := TextureRect.new()
+	art.name = "SettingsPanelArt"
+	art.texture = UiHelpers.hires_texture(V2_OPTIONS_PANEL_ART)
+	art.set_meta("source_path", V2_OPTIONS_PANEL_ART)
+	art.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	art.stretch_mode = TextureRect.STRETCH_SCALE
+	art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.set_anchors_preset(Control.PRESET_FULL_RECT)
+	frame.add_child(art)
+	var body := MarginContainer.new()
+	body.name = "SettingsBodyFrame"
+	body.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var side := int(round(width * 0.117))
+	var vertical := int(round(height * 0.15))
+	body.add_theme_constant_override("margin_left", side)
+	body.add_theme_constant_override("margin_right", side)
+	body.add_theme_constant_override("margin_top", vertical)
+	body.add_theme_constant_override("margin_bottom", vertical)
+	frame.add_child(body)
+	var col := VBoxContainer.new()
+	col.name = "SettingsBody"
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_theme_constant_override("separation", 2 if _is_landscape else 4)
+	body.add_child(col)
+	return frame
+
+# Circular v2 Accept/Close badge (the painted icon carries the action; no text label).
+func _make_v2_action_icon(node_name: String, art_path: String, label: String, callback: Callable, icon_size: int) -> Button:
+	var texture := UiHelpers.hires_texture(art_path)
+	if texture == null:
+		var fallback := Button.new()
+		fallback.name = node_name
+		fallback.text = label
+		fallback.custom_minimum_size = Vector2(icon_size, icon_size)
+		fallback.pressed.connect(callback)
+		return fallback
+	var btn := _make_face_button(node_name, texture, Vector2(icon_size, icon_size), label, callback)
+	btn.set_meta("source_path", art_path)
+	return btn
+
+func _apply_v2_row_style(btn: Button, art_path: String) -> void:
+	for state in ["normal", "hover", "pressed", "disabled"]:
+		var tint := Color.WHITE
+		match state:
+			"hover":
+				tint = Color(1.12, 1.12, 1.12)
+			"pressed":
+				tint = Color(0.82, 0.82, 0.82)
+			"disabled":
+				tint = Color(0.65, 0.65, 0.65, 0.85)
+		btn.add_theme_stylebox_override(state, _v2_row_style(art_path, tint))
+	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	btn.add_theme_color_override("font_color", TEXT_PRIMARY)
+	btn.add_theme_color_override("font_hover_color", Color.WHITE)
+
+func _v2_row_style(art_path: String, tint := Color.WHITE) -> StyleBoxTexture:
+	var style := StyleBoxTexture.new()
+	style.texture = UiHelpers.hires_texture(art_path)
+	style.set_meta("source_path", art_path)
+	# The 1090x220 row plate is drawn as one stretched patch: 9-slicing at 30-36 px
+	# would collapse its gem ends.
+	style.texture_margin_left = 0
+	style.texture_margin_right = 0
+	style.texture_margin_top = 0
+	style.texture_margin_bottom = 0
+	style.content_margin_left = 14
+	style.content_margin_right = 14
+	style.content_margin_top = 1
+	style.content_margin_bottom = 1
+	style.modulate_color = tint
+	return style
+
+func _make_settings_row(node_name: String, text: String, callback: Callable, height: int, art_path: String) -> Button:
 	var btn := Button.new()
 	btn.name = node_name
 	btn.text = text
-	btn.custom_minimum_size = Vector2(280, height)
+	btn.custom_minimum_size = Vector2(0, height)
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.add_theme_font_size_override("font_size", 16 if height >= 36 else 13)
+	btn.tooltip_text = text
 	btn.pressed.connect(callback)
-	UiHelpers.apply_plate_style(btn)
+	_apply_v2_row_style(btn, art_path)
 	return btn
 
 func _settings_orientation_text() -> String:
