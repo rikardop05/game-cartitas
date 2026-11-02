@@ -145,7 +145,7 @@ func _campaign(game) -> void:
 	if _press(scene, "LanguageButton", "campaign"):
 		await _frames(4)
 		_check(Localizer.current == "pt" and game.settings["locale"] == "pt", "campaign: language toggles to Portuguese and is stored")
-		_check(_heading(scene) != heading_before and _heading(scene) == Localizer.t("settings"), "campaign: the overlay text follows the language (%s)" % _heading(scene))
+		_check(_heading(scene) != heading_before and _heading_matches_locale(scene), "campaign: the overlay text follows the language (%s)" % _heading(scene))
 		_check((scene.find_child("SettingsButton", true, false) as Button).tooltip_text != gear_tip_before, "campaign: the HUD text follows the language")
 		_check(scene.controller == c, "campaign: the same controller after a language change")
 		_check(scene.get_node_or_null("SettingsOverlay") != null and c.status == GameController.Status.PAUSED, "campaign: the overlay stays open and the clock paused")
@@ -253,9 +253,21 @@ func _heading(scene) -> String:
 	var panel: Node = overlay.find_child("SettingsPanel", true, false)
 	if panel == null:
 		return ""
+	# The v2 overlay paints its heading (SettingsTitle art, one per locale) instead of a Label.
+	var title: Node = panel.find_child("SettingsTitle", true, false)
+	if title != null:
+		return "%s|%s" % [str(title.get_meta("locale", "")), str(title.get_meta("source_path", ""))]
 	for label in panel.find_children("*", "Label", true, false):
 		return (label as Label).text
 	return ""
+
+# True when the heading shows the current language: the painted title's locale, or the
+# translated text for the Label fallback.
+func _heading_matches_locale(scene) -> bool:
+	var heading := _heading(scene)
+	if heading.contains("|"):
+		return heading.begins_with(Localizer.current + "|")
+	return heading == Localizer.t("settings")
 
 func _endless(game) -> void:
 	game.progress = ProgressManager.new()

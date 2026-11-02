@@ -281,7 +281,8 @@ func _find_label(node: Node, text: String) -> Label:
 
 func _find_button(node: Node, text: String) -> Button:
 	for n in _all_nodes(node):
-		if n is Button and (n as Button).text == text:
+		# Painted end-panel buttons have no text: their label lives in meta("label").
+		if n is Button and ((n as Button).text == text or str(n.get_meta("label", "")) == text):
 			return n as Button
 	return null
 
