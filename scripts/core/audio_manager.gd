@@ -46,6 +46,9 @@ const UI_CLICK_DB := 2.0
 const UI_SETTING_DB := 2.0
 
 const FADE_SECONDS := 0.8
+# Safety poll for volume/mute changes that bypass Game.set_volume (a test or tool that
+# writes settings["volume"] directly). Normal changes arrive through volume_changed.
+const VOLUME_POLL_SECONDS := 0.25
 const MUSIC_BUS := "Music"
 const SFX_BUS := "SFX"
 # Round-robin voices, so quick successive taps overlap instead of cutting each other off.
@@ -61,11 +64,11 @@ var _sfx_players: Array[AudioStreamPlayer] = []
 var _sfx_next := 0
 var _streams: Dictionary = {}
 var _active := -1
-var _current_path := ""
 var _owner_id := 0
 var _fade: Tween
 var _game: Node
 var _last_bus_db := INF
+var _volume_timer: Timer
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -88,12 +91,38 @@ func _ready() -> void:
 		add_child(sfx)
 		_sfx_players.append(sfx)
 	_sync_volume()
+	_bind_volume()
 
-func _process(_delta: float) -> void:
+# Volume/mute is event driven: Game.volume_changed applies the slider/HUD changes at once.
+# A slow timer stays as a fallback for direct settings writes (tests/tools), replacing the
+# old per-frame _process poll.
+func _bind_volume() -> void:
+	_game = get_node_or_null("/root/Game")
+	if _game != null and _game.has_signal("volume_changed"):
+		var handler := Callable(self, "_on_volume_changed")
+		if not _game.is_connected("volume_changed", handler):
+			_game.connect("volume_changed", handler)
+	if _volume_timer == null:
+		_volume_timer = Timer.new()
+		_volume_timer.name = "VolumePoll"
+		_volume_timer.wait_time = VOLUME_POLL_SECONDS
+		_volume_timer.one_shot = false
+		_volume_timer.autostart = true
+		_volume_timer.process_mode = Node.PROCESS_MODE_ALWAYS
+		_volume_timer.timeout.connect(_sync_volume)
+		add_child(_volume_timer)
+
+func _on_volume_changed(_volume: float, _enabled: bool) -> void:
 	_sync_volume()
 
 # Release the cached streams with the scene tree, so a clean quit leaves no resource in use.
 func _exit_tree() -> void:
+	if _game != null and is_instance_valid(_game) and _game.has_signal("volume_changed"):
+		var handler := Callable(self, "_on_volume_changed")
+		if _game.is_connected("volume_changed", handler):
+			_game.disconnect("volume_changed", handler)
+	if _volume_timer != null and is_instance_valid(_volume_timer):
+		_volume_timer.stop()
 	_kill_fade()
 	for player in _players + _sfx_players:
 		if is_instance_valid(player):
@@ -166,20 +195,12 @@ func release(owner: Node) -> void:
 func _release_if_unclaimed() -> void:
 	if _owner_id != 0:
 		return
-	_current_path = ""
 	if _active < 0 or _players[_active] == null or not _players[_active].playing:
 		return
 	_kill_fade()
 	_fade = create_tween()
 	_fade.tween_property(_players[_active], "volume_db", SILENT_DB, FADE_SECONDS)
 	_fade.tween_callback(_players[_active].stop)
-
-# The track currently playing (or fading in), "" when silent.
-func current_track() -> String:
-	return _current_path
-
-func is_playing() -> bool:
-	return _active >= 0 and _players[_active] != null and _players[_active].playing
 
 # --- Mixing ----------------------------------------------------------------------------
 
@@ -220,13 +241,11 @@ func _play(path: String, owner: Node) -> void:
 		var playing := _players[i]
 		if playing.stream == stream and playing.playing:
 			_owner_id = owner.get_instance_id() if owner != null else 0
-			_current_path = path
 			_active = i
 			_fade_in(playing)
 			return
 	var old := _active
 	var next := 1 - old if old >= 0 else 0
-	_current_path = path
 	_active = next
 	_owner_id = owner.get_instance_id() if owner != null else 0
 	_kill_fade()

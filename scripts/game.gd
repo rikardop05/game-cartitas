@@ -1,5 +1,9 @@
 extends Node
 
+# Emitted whenever the player changes the sound volume/mute (Options slider, HUD button,
+# set_sound). AudioManager listens to it instead of polling the mix every frame.
+signal volume_changed(volume: float, enabled: bool)
+
 var progress: ProgressManager
 var settings: Dictionary = {"locale": "pt", "orientation": "portrait", "mascot": true}
 var current_level_id: String = ""
@@ -67,6 +71,7 @@ func set_volume(value: float, persist: bool = true) -> void:
 		settings["last_volume"] = value
 	if persist:
 		save_progress()
+	volume_changed.emit(volume(), sound_enabled())
 
 func sound_enabled() -> bool:
 	return volume() > 0.0

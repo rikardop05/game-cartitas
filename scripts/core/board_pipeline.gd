@@ -58,6 +58,24 @@ const SMALL_BASE_CARDS := 3  # bases this small skip the aspect and bridge shape
 const QUARTERS := 4  # lattice steps per card edge: grid_x / grid_y count quarter cards
 const MAX_HIDDEN_QUARTER_AREA := 12  # of 16: one card hides at most 75% of a card below (LevelValidator.MAX_OVERLAP)
 const MIN_SUPPORTS := 2  # lower cards an upper card must overlap at the shared spatial threshold
+
+# Movement tables are constants: the hot loops (hole flood-fill, bridge scan,
+# connectivity, frontier growth) used to allocate a fresh Array on every call.
+const ORTHOGONAL_MOVES: Array[Vector2i] = [
+	Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
+]
+const LATTICE_MOVES: Array[Vector2i] = [
+	Vector2i(2, 0), Vector2i(-2, 0), Vector2i(0, 2), Vector2i(0, -2),
+]
+const HALF_CARD_MOVES: Array[Vector2i] = [
+	Vector2i(2, 0), Vector2i(-2, 0), Vector2i(0, 2), Vector2i(0, -2),
+	Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1),
+]
+const QUARTER_MOVES: Array[Vector2i] = [
+	Vector2i(QUARTERS, 0), Vector2i(-QUARTERS, 0), Vector2i(0, QUARTERS), Vector2i(0, -QUARTERS),
+	Vector2i(QUARTERS / 2, QUARTERS / 2), Vector2i(QUARTERS / 2, -QUARTERS / 2),
+	Vector2i(-QUARTERS / 2, QUARTERS / 2), Vector2i(-QUARTERS / 2, -QUARTERS / 2),
+]
 const SCATTER_ROW_PENALTY := 12.0  # same row / column, exactly side by side
 const SCATTER_ALIGN_PENALTY := 3.0  # same row / column within three cards
 const SCATTER_ALIGN_REACH := 12  # quarter cards
@@ -95,14 +113,16 @@ static func generate(spec: BoardSpec) -> BoardBuildResult:
 
 # Cards per layer (base first): strictly decreasing, every layer non-empty, exact
 # total. Empty when card_count cannot form that many layers.
-static func layer_targets(card_count: int, layers: int, layer_ratio: float = LAYER_RATIO) -> Array:
+static func layer_targets(card_count: int, layers: int, layer_ratio: float = LAYER_RATIO) -> Array[int]:
+	var empty: Array[int] = []
 	if layers < 1:
-		return []
+		return empty
 	var minimum_layer_cards := layers * (layers + 1) / 2
 	if card_count < minimum_layer_cards:
-		return []
+		return empty
 	if layers == 1:
-		return [card_count]
+		var single: Array[int] = [card_count]
+		return single
 	var weight_sum := 0.0
 	for layer in layers:
 		weight_sum += pow(layer_ratio, layer)
@@ -530,20 +550,20 @@ func _compute_connectivity(cards: Array) -> Dictionary:
 	var grid_idx := {}
 	var by_id := {}
 	for i in cards.size():
-		var c = cards[i]
-		grid_idx["%d:%d,%d" % [int(c["layer"]), int(c["grid_x"]), int(c["grid_y"])]] = i
+		var c: Dictionary = cards[i]
+		grid_idx[Vector3i(int(c["layer"]), int(c["grid_x"]), int(c["grid_y"]))] = i
 		by_id[str(c["id"])] = i
 	var adj: Array = []
 	adj.resize(cards.size())
 	for i in cards.size():
 		adj[i] = []
 	for i in cards.size():
-		var c = cards[i]
+		var c: Dictionary = cards[i]
 		var layer := int(c["layer"])
 		var gx := int(c["grid_x"])
 		var gy := int(c["grid_y"])
-		for delta in _moves_quarter():
-			var j: int = grid_idx.get("%d:%d,%d" % [layer, gx + delta.x, gy + delta.y], -1)
+		for delta in QUARTER_MOVES:
+			var j: int = grid_idx.get(Vector3i(layer, gx + delta.x, gy + delta.y), -1)
 			if j >= 0 and j != i:
 				(adj[i] as Array).append(j)
 		for sid in c.get("support_ids", []):
@@ -576,26 +596,29 @@ func _scatter_metrics(cards: Array) -> Dictionary:
 	var at := {}
 	var upper := 0
 	for c in cards:
-		if int(c["layer"]) > 0:
+		var card: Dictionary = c
+		var layer := int(card["layer"])
+		if layer > 0:
 			upper += 1
-			at["%d:%d,%d" % [int(c["layer"]), int(c["grid_x"]), int(c["grid_y"])]] = true
+			at[Vector3i(layer, int(card["grid_x"]), int(card["grid_y"]))] = true
 	var in_run := 0
 	var longest := 1 if upper > 0 else 0
 	for c in cards:
-		var layer := int(c["layer"])
+		var card: Dictionary = c
+		var layer := int(card["layer"])
 		if layer == 0:
 			continue
-		var gx := int(c["grid_x"])
-		var gy := int(c["grid_y"])
+		var gx := int(card["grid_x"])
+		var gy := int(card["grid_y"])
 		var has_neighbor := false
 		for step in [Vector2i(QUARTERS, 0), Vector2i(0, QUARTERS)]:
-			var before := at.has("%d:%d,%d" % [layer, gx - step.x, gy - step.y])
-			if before or at.has("%d:%d,%d" % [layer, gx + step.x, gy + step.y]):
+			var before := at.has(Vector3i(layer, gx - step.x, gy - step.y))
+			if before or at.has(Vector3i(layer, gx + step.x, gy + step.y)):
 				has_neighbor = true
 			# Chains are counted from their first card.
 			if not before:
 				var length := 1
-				while at.has("%d:%d,%d" % [layer, gx + step.x * length, gy + step.y * length]):
+				while at.has(Vector3i(layer, gx + step.x * length, gy + step.y * length)):
 					length += 1
 				longest = maxi(longest, length)
 		if has_neighbor:
@@ -648,26 +671,33 @@ func _scatter_metrics(cards: Array) -> Dictionary:
 # Computes the spatial/support/blocking metrics and stamps each card's "blocked"
 # field using the single shared rule BoardSpatialRules.
 func _compute_spatial_metrics(cards: Array, spec: BoardSpec, step_x: float, step_y: float) -> Dictionary:
+	var n := cards.size()
 	var by_id := {}
-	for c in cards:
-		by_id[str(c["id"])] = c
 	var counts := {}
-	for c in cards:
-		var l := int(c["layer"])
-		counts[l] = int(counts.get(l, 0)) + 1
+	var max_layer := 0
+	var rects: Array[Rect2] = []
+	rects.resize(n)
+	var layers := PackedInt32Array()
+	layers.resize(n)
+	for i in n:
+		var c: Dictionary = cards[i]
+		var layer := int(c["layer"])
+		layers[i] = layer
+		rects[i] = Rect2(Vector2(float(c["x"]), float(c["y"])), Vector2(spec.card_size, spec.card_size))
+		by_id[str(c["id"])] = c
+		counts[layer] = int(counts.get(layer, 0)) + 1
+		max_layer = maxi(max_layer, layer)
 	var layer_count := counts.size()
 	var cards_per_layer: Array = []
-	var max_layer := 0
-	for l in counts:
-		max_layer = maxi(max_layer, int(l))
 	for l in range(max_layer + 1):
 		cards_per_layer.append(int(counts.get(l, 0)))
 
 	var unsupported := 0
 	var support_edge_count := 0
 	var coverage_ok := true
-	for c in cards:
-		var layer := int(c["layer"])
+	for i in n:
+		var c: Dictionary = cards[i]
+		var layer := layers[i]
 		if layer == 0:
 			continue
 		var support_ids: Array = c.get("support_ids", [])
@@ -676,42 +706,61 @@ func _compute_spatial_metrics(cards: Array, spec: BoardSpec, step_x: float, step
 			unsupported += 1
 			coverage_ok = false
 			continue
-		var rect_c := Rect2(Vector2(float(c["x"]), float(c["y"])), Vector2(spec.card_size, spec.card_size))
+		var rect_c := rects[i]
 		for sid in support_ids:
-			var sp = by_id.get(str(sid), null)
-			if sp == null:
+			var raw_support = by_id.get(str(sid), null)
+			if raw_support == null:
 				unsupported += 1
 				coverage_ok = false
 				continue
-			if int(sp["layer"]) != layer - 1:
+			var support: Dictionary = raw_support
+			if int(support["layer"]) != layer - 1:
 				unsupported += 1
 				coverage_ok = false
 				continue
-			var rect_s := Rect2(Vector2(float(sp["x"]), float(sp["y"])), Vector2(spec.card_size, spec.card_size))
+			var rect_s := Rect2(Vector2(float(support["x"]), float(support["y"])), Vector2(spec.card_size, spec.card_size))
 			if not BoardSpatialRules.at_or_above_threshold(BoardSpatialRules.coverage(rect_c, rect_s)):
 				coverage_ok = false
 
+	# Cards are appended layer by layer, so the index order already runs bottom-up.
+	# Bucket the indices per layer so the two O(n^2) scans below compare only the pairs
+	# that matter: a card is blocked by higher layers, and overlap only exists inside a
+	# layer or across layers (never both).
+	var indices_by_layer: Array = []
+	for _l in range(max_layer + 1):
+		indices_by_layer.append([])
+	for i in n:
+		(indices_by_layer[layers[i]] as Array).append(i)
+
+	# One pass over the cross-layer pairs: blocking edges and the largest coverage
+	# (same orientation as the old i<j scan: the lower card is the covered one).
+	var blocked_flags := PackedByteArray()
+	blocked_flags.resize(n)
+	var max_coverage := 0.0
+	var blocking_edge_count := 0
+	for lower in range(max_layer + 1):
+		var lower_bucket: Array = indices_by_layer[lower]
+		for higher in range(lower + 1, max_layer + 1):
+			var higher_bucket: Array = indices_by_layer[higher]
+			for i in lower_bucket:
+				var rect_i := rects[i]
+				for j in higher_bucket:
+					if not rect_i.intersects(rects[j]):
+						continue
+					max_coverage = maxf(max_coverage, BoardSpatialRules.coverage(rect_i, rects[j]))
+					if BoardSpatialRules.blocks(rect_i, rects[j]):
+						blocked_flags[i] = 1
+						blocking_edge_count += 1
+
 	var blocked_cards := 0
 	var free_cards := 0
-	var blocking_edge_count := 0
 	var free_per_layer: Array = []
 	for _l in cards_per_layer.size():
 		free_per_layer.append(0)
-	for i in cards.size():
-		var ci = cards[i]
-		var layer_i := int(ci["layer"])
-		var rect_i := Rect2(Vector2(float(ci["x"]), float(ci["y"])), Vector2(spec.card_size, spec.card_size))
-		var blocked := false
-		for j in cards.size():
-			if i == j:
-				continue
-			var cj = cards[j]
-			if int(cj["layer"]) <= layer_i:
-				continue
-			var rect_j := Rect2(Vector2(float(cj["x"]), float(cj["y"])), Vector2(spec.card_size, spec.card_size))
-			if BoardSpatialRules.blocks(rect_i, rect_j):
-				blocked = true
-				blocking_edge_count += 1
+	for i in n:
+		var ci: Dictionary = cards[i]
+		var layer_i := layers[i]
+		var blocked := blocked_flags[i] == 1
 		ci["blocked"] = blocked
 		if blocked:
 			blocked_cards += 1
@@ -719,21 +768,16 @@ func _compute_spatial_metrics(cards: Array, spec: BoardSpec, step_x: float, step
 			free_cards += 1
 			free_per_layer[layer_i] = int(free_per_layer[layer_i]) + 1
 
-	# Same-layer cards must never overlap (grid alignment); coverage is the largest
-	# fraction of any card hidden by a single card of a higher layer.
+	# Same-layer cards must never overlap (grid alignment).
 	var same_layer_overlaps := 0
-	var max_coverage := 0.0
-	for i in cards.size():
-		for j in range(i + 1, cards.size()):
-			var lo = cards[i]
-			var hi = cards[j]
-			var lo_rect := Rect2(Vector2(float(lo["x"]), float(lo["y"])), Vector2(spec.card_size, spec.card_size))
-			var hi_rect := Rect2(Vector2(float(hi["x"]), float(hi["y"])), Vector2(spec.card_size, spec.card_size))
-			if int(lo["layer"]) == int(hi["layer"]):
-				if lo_rect.intersects(hi_rect):
+	for bucket in indices_by_layer:
+		var same: Array = bucket
+		for a in range(same.size()):
+			var rect_a := rects[same[a]]
+			for b in range(a + 1, same.size()):
+				if rect_a.intersects(rects[same[b]]):
 					same_layer_overlaps += 1
-			else:
-				max_coverage = maxf(max_coverage, BoardSpatialRules.coverage(lo_rect, hi_rect))
+
 	var strictly_decreasing := true
 	for i in range(1, cards_per_layer.size()):
 		if int(cards_per_layer[i]) >= int(cards_per_layer[i - 1]):
@@ -883,13 +927,13 @@ func _cell_less(a: Vector2i, b: Vector2i) -> bool:
 
 func _occupied_neighbor_count(cell: Vector2i, occupied: Dictionary) -> int:
 	var count := 0
-	for delta in _lattice_moves():
-		if occupied.has(cell + (delta as Vector2i)):
+	for delta in LATTICE_MOVES:
+		if occupied.has(cell + delta):
 			count += 1
 	return count
 
 func _add_frontier(frontier: Dictionary, occupied: Dictionary, cell: Vector2i, cells_x: int, cells_y: int) -> void:
-	for delta in _lattice_moves():
+	for delta in LATTICE_MOVES:
 		var n := cell + delta
 		if n.x < 0 or n.x >= cells_x or n.y < 0 or n.y >= cells_y:
 			continue
@@ -1024,11 +1068,12 @@ func _find_holes(cards: Array, cells_x: int, cells_y: int) -> Dictionary:
 	var raster_h := cells_y + 1
 	var covered := {}
 	for c in cards:
-		var gx := int(c["grid_x"])
-		var gy := int(c["grid_y"])
+		var card: Dictionary = c
+		var gx := int(card["grid_x"])
+		var gy := int(card["grid_y"])
 		for dx in 2:
 			for dy in 2:
-				covered["%d,%d" % [gx + dx, gy + dy]] = true
+				covered[Vector2i(gx + dx, gy + dy)] = true
 
 	var exterior := {}
 	var stack: Array[Vector2i] = []
@@ -1040,16 +1085,14 @@ func _find_holes(cards: Array, cells_x: int, cells_y: int) -> Dictionary:
 		stack.append(Vector2i(raster_w - 1, y))
 	while not stack.is_empty():
 		var p: Vector2i = stack.pop_back()
-		var key := "%d,%d" % [p.x, p.y]
-		if covered.has(key) or exterior.has(key):
+		if covered.has(p) or exterior.has(p):
 			continue
-		exterior[key] = true
-		for d in _orthogonal():
-			var n := p + (d as Vector2i)
+		exterior[p] = true
+		for d in ORTHOGONAL_MOVES:
+			var n := p + d
 			if n.x < 0 or n.x >= raster_w or n.y < 0 or n.y >= raster_h:
 				continue
-			var nk := "%d,%d" % [n.x, n.y]
-			if not covered.has(nk) and not exterior.has(nk):
+			if not covered.has(n) and not exterior.has(n):
 				stack.append(n)
 
 	var hole_count := 0
@@ -1057,23 +1100,22 @@ func _find_holes(cards: Array, cells_x: int, cells_y: int) -> Dictionary:
 	var visited := {}
 	for y in raster_h:
 		for x in raster_w:
-			var key := "%d,%d" % [x, y]
-			if covered.has(key) or exterior.has(key) or visited.has(key):
+			var p := Vector2i(x, y)
+			if covered.has(p) or exterior.has(p) or visited.has(p):
 				continue
 			hole_count += 1
 			var size := 0
-			var hstack: Array[Vector2i] = [Vector2i(x, y)]
-			visited[key] = true
+			var hstack: Array[Vector2i] = [p]
+			visited[p] = true
 			while not hstack.is_empty():
 				var hp: Vector2i = hstack.pop_back()
 				size += 1
-				for d in _orthogonal():
-					var hn := hp + (d as Vector2i)
+				for d in ORTHOGONAL_MOVES:
+					var hn := hp + d
 					if hn.x < 0 or hn.x >= raster_w or hn.y < 0 or hn.y >= raster_h:
 						continue
-					var hk := "%d,%d" % [hn.x, hn.y]
-					if not covered.has(hk) and not exterior.has(hk) and not visited.has(hk):
-						visited[hk] = true
+					if not covered.has(hn) and not exterior.has(hn) and not visited.has(hn):
+						visited[hn] = true
 						hstack.append(hn)
 			largest = maxi(largest, size)
 	return {"largest": largest, "count": hole_count}
@@ -1087,15 +1129,15 @@ func _narrow_bridge_count(cards: Array) -> int:
 		return 0
 	var pos := {}
 	for i in n:
-		pos["%d,%d" % [int(cards[i]["grid_x"]), int(cards[i]["grid_y"])]] = i
+		pos[Vector2i(int(cards[i]["grid_x"]), int(cards[i]["grid_y"]))] = i
 	var adj: Array = []
 	adj.resize(n)
 	for i in n:
 		var gx := int(cards[i]["grid_x"])
 		var gy := int(cards[i]["grid_y"])
 		var list: Array[int] = []
-		for delta in _moves():
-			var j: int = pos.get("%d,%d" % [gx + delta.x, gy + delta.y], -1)
+		for delta in HALF_CARD_MOVES:
+			var j: int = pos.get(Vector2i(gx + delta.x, gy + delta.y), -1)
 			if j >= 0:
 				list.append(int(j))
 		adj[i] = list
@@ -1133,13 +1175,14 @@ func _compact_density(cards: Array, cells_x: int, cells_y: int) -> float:
 	var min_y := cells_y + 1
 	var max_y := -1
 	for c in cards:
-		var gx := int(c["grid_x"])
-		var gy := int(c["grid_y"])
+		var card: Dictionary = c
+		var gx := int(card["grid_x"])
+		var gy := int(card["grid_y"])
 		for dx in 2:
 			for dy in 2:
 				var x := gx + dx
 				var y := gy + dy
-				covered["%d,%d" % [x, y]] = true
+				covered[Vector2i(x, y)] = true
 				min_x = mini(min_x, x)
 				max_x = maxi(max_x, x)
 				min_y = mini(min_y, y)
@@ -1170,9 +1213,6 @@ func _occupied_aspect(cards: Array, spec: BoardSpec, step_x: float, step_y: floa
 	var h := float(max_y - min_y) * step_y + spec.card_size
 	return w / h if h > 0.0 else 0.0
 
-func _orthogonal() -> Array[Vector2i]:
-	return [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
-
 static func _hash01(seed: int, x: int, y: int) -> float:
 	var h := seed
 	h = (h * 0x9E3779B1) ^ (x * 0x85EBCA77)
@@ -1181,23 +1221,6 @@ static func _hash01(seed: int, x: int, y: int) -> float:
 	h = (h ^ (h >> 13))
 	var m := (h % 1000003 + 1000003) % 1000003
 	return float(m) / 1000003.0
-
-# Base growth moves one full card at a time so layer-0 cards never overlap.
-func _lattice_moves() -> Array[Vector2i]:
-	return [Vector2i(2, 0), Vector2i(-2, 0), Vector2i(0, 2), Vector2i(0, -2)]
-
-# Adjacency on the half-card raster (base compactness gates).
-func _moves() -> Array[Vector2i]:
-	return [Vector2i(2, 0), Vector2i(-2, 0), Vector2i(0, 2), Vector2i(0, -2),
-			Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1)]
-
-# Adjacency used by the connectivity metrics, in quarter-card steps (full-card and
-# half-card neighbours).
-func _moves_quarter() -> Array[Vector2i]:
-	var full := QUARTERS
-	var half := QUARTERS / 2
-	return [Vector2i(full, 0), Vector2i(-full, 0), Vector2i(0, full), Vector2i(0, -full),
-			Vector2i(half, half), Vector2i(half, -half), Vector2i(-half, half), Vector2i(-half, -half)]
 
 func _is_minimum_pyramid(spec: BoardSpec) -> bool:
 	return spec.layers > 1 and spec.card_count == spec.layers * (spec.layers + 1) / 2
@@ -1211,7 +1234,7 @@ func _shape_gates_waived(spec: BoardSpec) -> bool:
 	return not targets.is_empty() and int(targets[0]) <= SMALL_BASE_CARDS
 
 # Explicit layer_counts in the spec win over the geometric layer_ratio split.
-func _spec_layer_targets(spec: BoardSpec) -> Array:
+func _spec_layer_targets(spec: BoardSpec) -> Array[int]:
 	if not spec.layer_counts.is_empty():
 		return spec.layer_counts.duplicate()
 	return layer_targets(spec.card_count, spec.layers, spec.layer_ratio)

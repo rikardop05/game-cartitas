@@ -16,74 +16,92 @@ static func play_until_end(g: GameController, max_steps: int) -> void:
 			break
 
 static func step(g: GameController) -> bool:
-	var actions: Array = g.get_legal_actions()
-	if actions.is_empty():
-		return false
-	for a in actions:
-		if _completes_trio(g, a):
-			_apply(g, a)
+	# Mirrors GameController.get_legal_actions() order exactly, but without building a
+	# Dictionary per card: the solver runs up to 800 steps on every generated board.
+	var zone_full := g.zone.is_full()
+	if not zone_full:
+		if _apply_completing_trio(g):
 			return true
-	if not g.zone.is_full():
-		# Pair up with a type already in the zone (board card, deck card or Reserve card).
-		for a in actions:
-			if g.zone.count_of_type(_type_of(g, a)) == 1:
-				_apply(g, a)
-				return true
+		if _apply_pairing(g):
+			return true
 		# Start a trio with a Support Deck card only when the zone can hold the two
 		# cards still needed (board + the second deck card) and that type's board card
-		# is actually available. This is what lets the last single board card of a type
-		# pair with its two support cards instead of piling up with other singles.
-		if g.zone.size() + 3 <= g.clearing_capacity:
-			for a in actions:
-				if a["action"] == "use_deck":
-					var deck_type := _type_of(g, a)
-					if g.zone.count_of_type(deck_type) == 0 and _board_has_available(g, deck_type):
-						_apply(g, a)
-						return true
-		var available := _available_by_type(g)
-		var best: Dictionary = {}
-		var best_count := -1
-		for a in actions:
-			if a["action"] != "select_card":
-				continue
-			var t := _type_of(g, a)
-			var n := int(available.get(t, 0))
-			if n > best_count:
-				best_count = n
-				best = a
-		if not best.is_empty():
-			_apply(g, best)
+		# is actually available.
+		if g.zone.size() + 3 <= g.clearing_capacity and _apply_deck_starter(g):
 			return true
-	for a in actions:
-		if a["action"] == "use_deck" or a["action"] == "return_from_reserve":
-			_apply(g, a)
+		if _apply_most_available(g):
 			return true
-	for p in ["refresh", "undo", "hold"]:
-		var pa := _power_action(g, actions, p)
-		if not pa.is_empty():
-			_apply(g, pa)
+		if _apply_first_support(g):
+			return true
+	for power in ["refresh", "undo", "hold"]:
+		if g.powers.has(power) and (power == "refresh" or g.zone.size() > 0):
+			_apply_power(g, power)
 			return true
 	return false
 
-static func _type_of(g: GameController, a: Dictionary) -> String:
-	match a["action"]:
-		"select_card":
-			return g.board.get_card(a["card_id"]).type
-		"use_deck":
-			if a["deck"] == "a":
-				return g.deck_a.current_type()
-			return g.deck_b.current_type()
-		"return_from_reserve":
-			for r in g.reserve:
-				if r.id == a["card_id"]:
-					return r.type
-	return ""
+static func _is_board_available(card: Card) -> bool:
+	return card.state == Card.State.AVAILABLE and card.location == Card.Location.BOARD and not card.is_removed()
 
-static func _completes_trio(g: GameController, a: Dictionary) -> bool:
-	var t := _type_of(g, a)
-	if t == "":
-		return false
-	return g.zone.count_of_type(t) == 2
+# Same candidate order as get_legal_actions(): board cards in board order, then deck a,
+# then deck b, then the Reserve.
+static func _apply_completing_trio(g: GameController) -> bool:
+	for card in g.board.cards:
+		if _is_board_available(card) and g.zone.count_of_type(card.type) == 2:
+			g.select_card(card.id)
+			return true
+	if not g.deck_a.is_empty() and g.zone.count_of_type(g.deck_a.current_type()) == 2:
+		g.use_deck("a")
+		return true
+	if not g.deck_b.is_empty() and g.zone.count_of_type(g.deck_b.current_type()) == 2:
+		g.use_deck("b")
+		return true
+	for card in g.reserve:
+		if g.zone.count_of_type(card.type) == 2:
+			g.return_from_reserve(card.id)
+			return true
+	return false
+
+static func _apply_pairing(g: GameController) -> bool:
+	for card in g.board.cards:
+		if _is_board_available(card) and g.zone.count_of_type(card.type) == 1:
+			g.select_card(card.id)
+			return true
+	if not g.deck_a.is_empty() and g.zone.count_of_type(g.deck_a.current_type()) == 1:
+		g.use_deck("a")
+		return true
+	if not g.deck_b.is_empty() and g.zone.count_of_type(g.deck_b.current_type()) == 1:
+		g.use_deck("b")
+		return true
+	for card in g.reserve:
+		if g.zone.count_of_type(card.type) == 1:
+			g.return_from_reserve(card.id)
+			return true
+	return false
+
+static func _apply_deck_starter(g: GameController) -> bool:
+	if not g.deck_a.is_empty():
+		var type_a := g.deck_a.current_type()
+		if g.zone.count_of_type(type_a) == 0 and _board_has_available(g, type_a):
+			g.use_deck("a")
+			return true
+	if not g.deck_b.is_empty():
+		var type_b := g.deck_b.current_type()
+		if g.zone.count_of_type(type_b) == 0 and _board_has_available(g, type_b):
+			g.use_deck("b")
+			return true
+	return false
+
+static func _apply_first_support(g: GameController) -> bool:
+	if not g.deck_a.is_empty():
+		g.use_deck("a")
+		return true
+	if not g.deck_b.is_empty():
+		g.use_deck("b")
+		return true
+	if not g.reserve.is_empty():
+		g.return_from_reserve(g.reserve[0].id)
+		return true
+	return false
 
 static func _available_by_type(g: GameController) -> Dictionary:
 	var counts := {}
@@ -98,23 +116,27 @@ static func _board_has_available(g: GameController, card_type: String) -> bool:
 			return true
 	return false
 
-static func _power_action(_g: GameController, actions: Array, power: String) -> Dictionary:
-	for a in actions:
-		if a["action"] == "use_%s" % power:
-			return a
-	return {}
+static func _apply_most_available(g: GameController) -> bool:
+	var available := _available_by_type(g)
+	var best: Card = null
+	var best_count := -1
+	for card in g.board.cards:
+		if not _is_board_available(card):
+			continue
+		var n := int(available.get(card.type, 0))
+		if n > best_count:
+			best_count = n
+			best = card
+	if best == null:
+		return false
+	g.select_card(best.id)
+	return true
 
-static func _apply(g: GameController, a: Dictionary) -> void:
-	match a["action"]:
-		"select_card":
-			g.select_card(a["card_id"])
-		"use_deck":
-			g.use_deck(a["deck"])
-		"return_from_reserve":
-			g.return_from_reserve(a["card_id"])
-		"use_hold":
-			g.use_hold()
-		"use_undo":
-			g.use_undo()
-		"use_refresh":
+static func _apply_power(g: GameController, power: String) -> void:
+	match power:
+		"refresh":
 			g.use_refresh()
+		"undo":
+			g.use_undo()
+		"hold":
+			g.use_hold()

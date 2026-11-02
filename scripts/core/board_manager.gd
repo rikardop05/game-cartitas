@@ -9,14 +9,47 @@ extends RefCounted
 
 var cards: Array[Card] = []
 
+# O(1) id lookup and a cached per-card blocker list. A card can only be blocked by a
+# card of a higher layer that overlaps its rect, so the list is the AABB-intersecting
+# superset of BoardSpatialRules.blocks(); is_blocked() still applies the shared rule.
+var _by_id: Dictionary = {}
+var _blocking_candidates: Dictionary = {}
+var _duplicate_ids := false
+
 func _init(p_cards: Array[Card] = []) -> void:
 	cards = p_cards.duplicate()
+	_rebuild_index()
+
+func _rebuild_index() -> void:
+	_by_id.clear()
+	_blocking_candidates.clear()
+	_duplicate_ids = false
+	for i in cards.size():
+		var card: Card = cards[i]
+		if _by_id.has(card.id):
+			_duplicate_ids = true
+		_by_id[card.id] = card
+		_blocking_candidates[card.id] = []
+	for i in cards.size():
+		var covered: Card = cards[i]
+		var covered_rect := covered.get_display_rect()
+		var candidates: Array = _blocking_candidates[covered.id]
+		for j in cards.size():
+			if i == j:
+				continue
+			var covering: Card = cards[j]
+			if covering.layer <= covered.layer:
+				continue
+			if covered_rect.intersects(covering.get_display_rect()):
+				candidates.append(covering)
 
 func get_card(card_id: String) -> Card:
-	for c in cards:
-		if c.id == card_id:
-			return c
-	return null
+	if _duplicate_ids:
+		for c in cards:
+			if c.id == card_id:
+				return c
+		return null
+	return _by_id.get(card_id, null)
 
 func active_cards() -> Array[Card]:
 	var out: Array[Card] = []
@@ -26,11 +59,32 @@ func active_cards() -> Array[Card]:
 	return out
 
 func remaining_count() -> int:
-	return active_cards().size()
+	var n := 0
+	for c in cards:
+		if c.location == Card.Location.BOARD and not c.is_removed():
+			n += 1
+	return n
 
 func is_blocked(card: Card) -> bool:
 	if card.is_removed() or card.location != Card.Location.BOARD:
 		return false
+	if _duplicate_ids:
+		return _is_blocked_full_scan(card)
+	var candidates = _blocking_candidates.get(card.id, null)
+	if candidates == null:
+		return _is_blocked_full_scan(card)
+	var card_rect := card.get_display_rect()
+	for other in candidates:
+		var covering: Card = other
+		if covering.location != Card.Location.BOARD or covering.is_removed():
+			continue
+		if BoardSpatialRules.blocks_with_layers(card_rect, covering.get_display_rect(), card.layer, covering.layer):
+			return true
+	return false
+
+# Defensive fallback for a card that is not in the cached index (never happens with the
+# board the game builds, but keeps the old exact behaviour if an index is stale).
+func _is_blocked_full_scan(card: Card) -> bool:
 	for other in cards:
 		if other == card:
 			continue
@@ -80,3 +134,5 @@ func shuffle_positions(rng: RandomNumberGenerator) -> void:
 			positions[j] = tmp
 		for k in group.size():
 			group[k].position = positions[k]
+	# Positions changed: the cached blocker lists are no longer valid.
+	_rebuild_index()
