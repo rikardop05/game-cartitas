@@ -11,12 +11,16 @@ const GOLD := UiHelpers.GOLD
 # button box matches that ratio exactly and is drawn with linear filtering + mipmaps.
 const V2_DIR := "res://assets/ui/kit/v2/"
 const MENU_BUTTON_SIZE := Vector2(190, 55)
+const MENU_BUTTON_ASPECT := 1130.0 / 330.0
+const MENU_BUTTON_HEIGHT_PORTRAIT := 45.0
+const MENU_BUTTON_HEIGHT_LANDSCAPE := 34.0
 const MENU_BUTTON_ART := {
 	"play": "Iniciar).png",
 	"options": "Opcoes_.png",
 	"quit": "sair_.png",
 }
 const MENU_ICON_SIZE := 36.0
+const CONTINUE_ART := {"pt": "Continuar_.png", "en": "Layer 2.png"}
 
 # Portrait stacks logo, plaque and stars with fixed gaps; landscape pins the logo/stars
 # to the top-left and the plaque to the right.
@@ -40,14 +44,13 @@ const BOARDS := {
 		"stone": Rect2(0.216, 0.216, 0.570, 0.508),
 	},
 	"landscape": {
-		"art": "menu_.png",
-		"aspect": 969.0 / 920.0,
-		"art_top": 0.0,
-		"art_bottom": 1.0,
-		"art_left": 10.0 / 969.0,
-		"art_right": 953.0 / 969.0,
-		"slots_x": Vector2(0.2270, 0.7627),
-		"slots_y": [0.3446, 0.5033, 0.6609],
+		"art": "panel_menu_board.png",
+		"aspect": 1134.0 / 1387.0,
+		"art_top": 8.0 / 1387.0,
+		"art_bottom": 1234.0 / 1387.0,
+		"art_left": 15.0 / 1134.0,
+		"art_right": 1118.0 / 1134.0,
+		"stone": Rect2(0.216, 0.216, 0.570, 0.508),
 	},
 }
 const BOARD_SHADOW_OFFSET := Vector2(0, 10)
@@ -55,7 +58,6 @@ const BOARD_SHADOW_SCALE := 1.012
 
 # Options screen and help overlay art.
 const OPTIONS_TITLE_ART := {"pt": "config_2.png", "en": "Configu.png"}
-const CONTINUE_ART := {"pt": "Continuar_.png", "en": "Layer 2.png"}
 const GEAR_ART := "Config_Icon.png"
 const HELP_ART := "interrog.png"
 const VOLUME_HANDLE_ART := "Regulagem_botton.png"
@@ -70,7 +72,7 @@ const CLOSE_V2_ART := "icon_close_v2.png"
 const LOGO_ART := "res://assets/ui/branding/logo_claw_and_crown.png"
 const HERO_ART := "res://assets/ui/heroes/hero_menu_wolf.png"
 const LOGO_HEIGHT_LANDSCAPE := 60.0
-const LOGO_HEIGHT_PORTRAIT := 78.0
+const LOGO_HEIGHT_PORTRAIT := 68.0
 const HERO_SHADER := """
 shader_type canvas_item;
 uniform float edge = 0.10;
@@ -97,6 +99,7 @@ var _reset_armed := false
 var _bg_layer: Control
 var _board_layer: Control
 var _hero: TextureRect
+var _hero_secondary: TextureRect
 var _board: TextureRect
 var _board_shadow: TextureRect
 var _content: Control
@@ -110,9 +113,11 @@ var _pointer := Vector2.ZERO
 var _pointer_goal := Vector2.ZERO
 var _manual_pointer := false
 var _clock := 0.0
+var _resize_queued := false
 
 func _ready() -> void:
 	theme = UiHelpers.warm_theme()
+	resized.connect(_on_viewport_resized)
 	_build()
 	var audio := get_node_or_null("/root/Audio")
 	if audio != null:
@@ -167,6 +172,7 @@ func _build() -> void:
 	_bg_layer = null
 	_board_layer = null
 	_hero = null
+	_hero_secondary = null
 	_board = null
 	_board_shadow = null
 	_content = null
@@ -214,6 +220,25 @@ func _landscape() -> bool:
 	var viewport_size := get_viewport_rect().size
 	return viewport_size.x >= viewport_size.y
 
+func _has_progress() -> bool:
+	return Game.progress != null and (
+		Game.progress.total_stars() > 0
+		or Game.progress.get_unlocked_level() > 1
+		or Game.progress.endless_best > 0)
+
+func _on_viewport_resized() -> void:
+	if _resize_queued or not is_inside_tree():
+		return
+	_resize_queued = true
+	call_deferred("_relayout_after_resize")
+
+func _relayout_after_resize() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_resize_queued = false
+	if is_inside_tree():
+		_build()
+
 func _build_menu() -> void:
 	var landscape := _landscape()
 
@@ -226,7 +251,11 @@ func _build_menu() -> void:
 	_bg_layer.offset_bottom = PARALLAX_BLEED
 	_bg_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_bg_layer)
-	var background := UiHelpers.make_background(landscape)
+	var variant := str(Game.settings.get("menu_background_variant", "harbor"))
+	var background_path := ""
+	if landscape:
+		background_path = "res://assets/ui/background_castle.png" if variant == "castle" else "res://assets/ui/background_menu.png"
+	var background := UiHelpers.make_background(landscape, 0, background_path)
 	# Keep the delivered city crisp; the plaque/logo already provide the focus.
 	background.modulate = Color(0.96, 0.96, 0.96)
 	_bg_layer.add_child(background)
@@ -300,6 +329,10 @@ func _make_menu_panel() -> Control:
 	panel.name = "MenuPanel"
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_menu_buttons.clear()
+	if _has_progress():
+		var locale := "pt" if Localizer.current == "pt" else "en"
+		_menu_buttons.append(_make_menu_button(
+			"ContinueButton", "continue", str(CONTINUE_ART[locale]), _on_continue))
 	_menu_buttons.append(_make_menu_button("PlayButton", "play", MENU_BUTTON_ART["play"], _on_play))
 	_menu_buttons.append(_make_menu_button("OptionsButton", "options", MENU_BUTTON_ART["options"], _on_options))
 	_menu_buttons.append(_make_menu_button("QuitButton", "quit", MENU_BUTTON_ART["quit"], _on_quit))
@@ -366,39 +399,40 @@ func _make_menu_board() -> void:
 	_board.set_meta("source_path", V2_DIR + str(spec["art"]))
 	_board_layer.add_child(_board)
 
-# Decorative wolf knight in the board parallax layer, mouse-ignore. Landscape keeps
-# it behind the sign on the right. Portrait moves it to the lower right and draws it
-# in front of the sign (z=1, content stays z=2) so the whole body is visible beside
-# the plaque instead of only the boots below it.
+# The scenic portrait uses no foreground hero. Landscape puts two full-body heroes
+# on the open right half, clear of the four-button panel.
 func _make_hero() -> void:
-	var texture := UiHelpers.hires_texture(HERO_ART)
-	if texture == null:
+	if not _landscape():
 		return
 	var view := get_viewport_rect().size
-	var landscape := _landscape()
-	var aspect := float(texture.get_width()) / float(maxi(1, texture.get_height()))
-	var height := view.y * (0.90 if landscape else 0.26)
-	var width := height * aspect
-	if width > view.x * 0.42:
-		width = view.x * 0.42
-		height = width / aspect
-	# Landscape: hero on the left/centre, plaque on the right. Portrait: lower right,
-	# peeking over the plaque's lower lip without covering the buttons.
-	var position := Vector2(36.0, view.y - height - 8.0)
-	if not landscape:
-		position = Vector2(view.x - width - 2.0, view.y - height - 18.0)
-	_hero = _make_texture_rect(texture)
-	_hero.name = "MenuHero"
-	_hero.stretch_mode = TextureRect.STRETCH_SCALE
-	_hero.size = Vector2(width, height)
-	_hero.position = position
-	_hero.z_index = 0 if landscape else 1
-	var material := ShaderMaterial.new()
-	var shader := Shader.new()
-	shader.code = HERO_SHADER
-	material.shader = shader
-	_hero.material = material
-	_board_layer.add_child(_hero)
+	var art_paths := [
+		"res://assets/ui/heroes/hero_bunny.png",
+		"res://assets/ui/heroes/hero_cat_mage.png",
+	]
+	for i in art_paths.size():
+		var texture := UiHelpers.hires_texture(str(art_paths[i]))
+		if texture == null:
+			continue
+		var aspect := float(texture.get_width()) / float(maxi(1, texture.get_height()))
+		var width := view.x * 0.27
+		var height := minf(view.y * 0.78, width / maxf(0.1, aspect))
+		width = height * aspect
+		var rect := _make_texture_rect(texture)
+		rect.name = "MenuHero" if i == 0 else "MenuHeroSecondary"
+		rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		rect.size = Vector2(width, height)
+		rect.position = Vector2(view.x * (0.50 + i * 0.22), view.y - height + 8.0)
+		rect.z_index = 0
+		var material := ShaderMaterial.new()
+		var shader := Shader.new()
+		shader.code = HERO_SHADER
+		material.shader = shader
+		rect.material = material
+		_board_layer.add_child(rect)
+		if i == 0:
+			_hero = rect
+		else:
+			_hero_secondary = rect
 
 func _make_texture_rect(texture: Texture2D) -> TextureRect:
 	var rect := TextureRect.new()
@@ -419,11 +453,8 @@ func _make_shadow_rect(texture: Texture2D, softness: float, strength: float) -> 
 	rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	return rect
 
-# Lays out the whole v2 menu in view coordinates: the plaque is fitted to the screen,
-# the button plates are pinned to its stone/wood safe area (portrait) or to the three
-# painted slots (landscape), the logo sits above the plaque in portrait / top-left in
-# landscape, the stars go under the plaque/logo and the gear/help badges are kept clear
-# of the plates. Everything is measured in untransformed space so parallax never drifts.
+# Responsive four-button composition. The portrait art board is used in both orientations;
+# its intrinsic stone area is scaled to fit four banners, with the landscape panel anchored left.
 func _layout_board() -> void:
 	if not is_instance_valid(_board) or not is_instance_valid(_board_shadow):
 		return
@@ -441,10 +472,9 @@ func _layout_board() -> void:
 	var logo_size: Vector2 = _logo.custom_minimum_size
 	var board_size: Vector2
 	if landscape:
-		var height := minf((view.y - 8.0) / visible_fraction, view.x * 0.60 / aspect)
+		var height := minf(view.y - 12.0, view.x * 0.38 / aspect)
 		board_size = Vector2(height * aspect, height)
 	else:
-		# Leave room for the logo above and the stars below: the plaque never covers them.
 		var reserved := logo_size.y + MENU_GAP_LOGO + MENU_GAP_STARS + STARS_BAND + MENU_EDGE * 2.0
 		var height := minf((view.y - reserved) / visible_fraction, (view.x - 12.0) / aspect)
 		board_size = Vector2(height * aspect, height)
@@ -453,15 +483,17 @@ func _layout_board() -> void:
 	var logo_pos := Vector2.ZERO
 	var stars_pos := Vector2.ZERO
 	if landscape:
-		origin = Vector2(view.x - board_size.x - LANDSCAPE_MARGIN, (view.y - board_size.y) * 0.5)
-		logo_pos = Vector2(20.0, 14.0)
-		stars_pos = Vector2(20.0, logo_pos.y + logo_size.y + 4.0)
+		var visible_top := (view.y - visible_height) * 0.5
+		origin = Vector2(10.0, visible_top - art_top * board_size.y)
+		logo_pos = Vector2(origin.x + (board_size.x - logo_size.x) * 0.5, maxf(2.0, visible_top - logo_size.y * 0.58))
+		stars_pos = Vector2(0.0, view.y - STARS_BAND - 2.0)
 	else:
-		var total := logo_size.y + MENU_GAP_LOGO + visible_height + MENU_GAP_STARS + STARS_BAND
-		var top := maxf(MENU_EDGE, (view.y - total) * 0.5)
-		origin = Vector2((view.x - board_size.x) * 0.5, top + logo_size.y + MENU_GAP_LOGO - art_top * board_size.y)
+		var logo_overlap := 14.0
+		var total := logo_size.y + visible_height - logo_overlap + MENU_GAP_STARS + STARS_BAND
+		var top := maxf(6.0, (view.y - total) * 0.5)
+		origin = Vector2((view.x - board_size.x) * 0.5, top + logo_size.y - logo_overlap - art_top * board_size.y)
 		logo_pos = Vector2((view.x - logo_size.x) * 0.5, top)
-		stars_pos = Vector2(0.0, top + logo_size.y + MENU_GAP_LOGO + visible_height + MENU_GAP_STARS)
+		stars_pos = Vector2(0.0, top + logo_size.y - logo_overlap + visible_height + MENU_GAP_STARS)
 	origin.x = _clamp_inside(origin.x, view.x, spec["art_left"], spec["art_right"], board_size.x)
 	origin.y = _clamp_inside(origin.y, view.y, art_top, art_bottom, board_size.y)
 	# Both the sign and its shadow live in the parallax layer; subtract the layer's
@@ -477,43 +509,28 @@ func _layout_board() -> void:
 	# Buttons: the panel is a full-board container, so plates are placed in board space.
 	_panel.size = board_size
 	_panel.position = origin
-	var button_size := MENU_BUTTON_SIZE
-	if landscape:
-		var slots_x: Vector2 = spec["slots_x"]
-		var slots_y: Array = spec["slots_y"]
-		button_size.x = minf(MENU_BUTTON_SIZE.x, (slots_x.y - slots_x.x) * board_size.x - 3.0)
-		button_size.y = button_size.x / (float(MENU_BUTTON_SIZE.x) / MENU_BUTTON_SIZE.y)
-		for i in _menu_buttons.size():
-			var btn := _menu_buttons[i]
-			btn.size = button_size
-			btn.position = Vector2(
-				(board_size.x - button_size.x) * 0.5,
-				float(slots_y[i]) * board_size.y - button_size.y * 0.5)
-	else:
-		var stone: Rect2 = spec["stone"]
-		var area := Rect2(stone.position * board_size, stone.size * board_size)
-		button_size.x = minf(MENU_BUTTON_SIZE.x, area.size.x - 8.0)
-		button_size.y = button_size.x / (float(MENU_BUTTON_SIZE.x) / MENU_BUTTON_SIZE.y)
-		var gap := 8.0
-		var stack := button_size.y * _menu_buttons.size() + gap * (_menu_buttons.size() - 1)
-		var y := area.position.y + (area.size.y - stack) * 0.5 - 8.0
-		for i in _menu_buttons.size():
-			var btn := _menu_buttons[i]
-			btn.size = button_size
-			btn.position = Vector2((board_size.x - button_size.x) * 0.5, y)
-			y += button_size.y + gap
+	var stone: Rect2 = spec["stone"]
+	var area := Rect2(stone.position * board_size, stone.size * board_size)
+	var gap := 4.0 if landscape else 5.0
+	var max_height := MENU_BUTTON_HEIGHT_LANDSCAPE if landscape else MENU_BUTTON_HEIGHT_PORTRAIT
+	var button_height := minf(max_height, (area.size.y - gap * (_menu_buttons.size() - 1)) / float(_menu_buttons.size()))
+	var button_width := minf(area.size.x - 8.0, button_height * MENU_BUTTON_ASPECT)
+	var button_size := Vector2(button_width, button_height)
+	var stack := button_height * _menu_buttons.size() + gap * (_menu_buttons.size() - 1)
+	var y := area.position.y + (area.size.y - stack) * 0.5
+	for btn in _menu_buttons:
+		btn.custom_minimum_size = button_size
+		btn.size = button_size
+		btn.position = Vector2((board_size.x - button_size.x) * 0.5, y)
+		y += button_height + gap
 	_logo.size = logo_size
 	_logo.position = logo_pos
 	_stars.size = Vector2(view.x, STARS_BAND)
 	_stars.position = stars_pos
-	if landscape:
-		_stars.size.x = 240.0
-		# Badges live on the empty wood above the first slot.
-		var badge_y := origin.y + 46.0 / 920.0 * board_size.y + 8.0
-		_place_icons(Vector2(origin.x + (board_size.x - _icons_width()) * 0.5, badge_y))
-	else:
-		# Portrait keeps the badges in the free top-right corner, beside the logo.
-		_place_icons(Vector2(view.x - 8.0 - _icons_width(), 14.0))
+	# Total stars are available in the level selector; on the menu they collide with the scenic
+	# composition at narrow and tablet aspect ratios, so keep the accessible node but hide it.
+	_stars.visible = false
+	_place_icons(Vector2(view.x - 8.0 - _icons_width(), 7.0))
 
 func _icons_width() -> float:
 	var gap := 10.0
@@ -561,7 +578,7 @@ func _make_face_button(texture: Texture2D, min_size: Vector2) -> Button:
 	var shadow := _make_shadow_rect(texture, 1.8, 0.5)
 	shadow.name = "Shadow"
 	shadow.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	shadow.stretch_mode = TextureRect.STRETCH_SCALE
+	shadow.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	shadow.set_anchors_preset(Control.PRESET_FULL_RECT)
 	shadow.offset_top = 5
 	shadow.offset_bottom = 5
@@ -571,7 +588,7 @@ func _make_face_button(texture: Texture2D, min_size: Vector2) -> Button:
 	face.name = "Face"
 	face.texture = texture
 	face.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	face.stretch_mode = TextureRect.STRETCH_SCALE
+	face.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	# The v2 plates are painted art; linear filtering + mipmaps keep them clean at any scale.
 	face.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	face.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -689,7 +706,7 @@ func _build_options() -> void:
 	vbox.add_child(_make_option_row("OrientationButton", _orientation_label(), Localizer.t("orientation_label"), _on_toggle_orientation, row_height, CONFIG_ROW_ART[1]))
 	vbox.add_child(_make_option_row("MascotButton", _mascot_label(), Localizer.t("mascot_label"), _on_toggle_mascot, row_height, CONFIG_ROW_ART[2]))
 	var volume := VolumeRow.new(row_height)
-	_style_v2_volume_row(volume, CONFIG_ROW_ART[0])
+	_style_v2_volume_row(volume, CONFIG_ROW_ART[0], row_height)
 	vbox.add_child(volume)
 	if _reset_armed:
 		vbox.add_child(_make_reset_confirm(row_height))
@@ -772,10 +789,10 @@ func _make_option_row(node_name: String, text: String, tooltip: String, callback
 	btn.add_theme_font_size_override("font_size", 16 if height >= 36 else 12)
 	btn.tooltip_text = tooltip
 	btn.pressed.connect(callback)
-	_apply_v2_row_style(btn, art_name)
+	_apply_v2_row_style(btn, art_name, height)
 	return btn
 
-func _apply_v2_row_style(btn: Button, art_name: String) -> void:
+func _apply_v2_row_style(btn: Button, art_name: String, row_height: int) -> void:
 	for state in ["normal", "hover", "pressed", "disabled"]:
 		var tint := Color.WHITE
 		match state:
@@ -785,21 +802,31 @@ func _apply_v2_row_style(btn: Button, art_name: String) -> void:
 				tint = Color(0.82, 0.82, 0.82)
 			"disabled":
 				tint = Color(0.65, 0.65, 0.65, 0.85)
-		btn.add_theme_stylebox_override(state, _v2_row_style(art_name, tint))
+		btn.add_theme_stylebox_override(state, _v2_row_style(art_name, tint, row_height))
 	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	btn.add_theme_color_override("font_color", UiHelpers.TEXT_PRIMARY)
 	btn.add_theme_color_override("font_hover_color", Color.WHITE)
 
-func _v2_row_style(art_name: String, tint := Color.WHITE) -> StyleBoxTexture:
+func _v2_row_style(art_name: String, tint := Color.WHITE, row_height: int = 36) -> StyleBoxTexture:
 	var style := StyleBoxTexture.new()
-	style.texture = _v2_texture(art_name)
+	var texture := _v2_texture(art_name)
+	if texture != null:
+		# Fit to the displayed row height, then 9-slice the gem end-caps while the centre expands.
+		var aspect := float(texture.get_width()) / float(maxi(1, texture.get_height()))
+		var target := Vector2(float(row_height) * aspect, float(row_height))
+		var sliced := UiHelpers.trimmed_nine_patch(
+			texture, target, Rect2(0.12, 0.14, 0.12, 0.14),
+			"menu_row:%s:%d" % [art_name, row_height])
+		style.texture = sliced.get("texture", texture)
+		var margins: Rect2i = sliced.get("margins", Rect2i())
+		style.texture_margin_left = margins.position.x
+		style.texture_margin_top = margins.position.y
+		style.texture_margin_right = margins.size.x
+		style.texture_margin_bottom = margins.size.y
+	style.draw_center = true
+	style.axis_stretch_horizontal = StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH
+	style.axis_stretch_vertical = StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH
 	style.set_meta("source_path", V2_DIR + art_name)
-	# The rows are much shorter than the 1090x220 plate, so it is drawn as one stretched
-	# patch: 9-slicing with the plate's borders would collapse the middle at this height.
-	style.texture_margin_left = 0
-	style.texture_margin_right = 0
-	style.texture_margin_top = 0
-	style.texture_margin_bottom = 0
 	style.content_margin_left = 14
 	style.content_margin_right = 14
 	style.content_margin_top = 1
@@ -808,10 +835,10 @@ func _v2_row_style(art_name: String, tint := Color.WHITE) -> StyleBoxTexture:
 	return style
 
 # Volume gets the same config_row plate as the other rows, keeping its shared controls.
-func _style_v2_volume_row(row: Control, art_name: String) -> void:
+func _style_v2_volume_row(row: Control, art_name: String, row_height: int) -> void:
 	row.custom_minimum_size.x = 0
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_theme_stylebox_override("panel", _v2_row_style(art_name))
+	row.add_theme_stylebox_override("panel", _v2_row_style(art_name, Color.WHITE, row_height))
 	_apply_v2_volume_handle(row)
 
 # Second step of "Reset progress": the warning plus the v2 Accept/Close badges.
@@ -820,7 +847,7 @@ func _make_reset_confirm(height: int) -> PanelContainer:
 	panel.name = "ResetConfirmRow"
 	panel.custom_minimum_size = Vector2(0, height)
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.add_theme_stylebox_override("panel", _v2_row_style(CONFIG_ROW_ART[1]))
+	panel.add_theme_stylebox_override("panel", _v2_row_style(CONFIG_ROW_ART[1], Color.WHITE, height))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	panel.add_child(row)
@@ -1003,6 +1030,19 @@ func _make_endless_button() -> Button:
 func _on_play() -> void:
 	_screen = Screen.LEVELS
 	_build()
+
+func _on_continue() -> void:
+	var ids: Array = LevelLoader.load_all_level_ids()
+	if ids.is_empty():
+		_on_play()
+		return
+	var next_level := Game.progress.get_unlocked_level()
+	if next_level <= int(ids.back()):
+		Game.start_level(next_level)
+	elif Game.progress.is_endless_unlocked():
+		Game.start_endless()
+	else:
+		Game.start_level(ids.back())
 
 func _on_options() -> void:
 	_screen = Screen.OPTIONS

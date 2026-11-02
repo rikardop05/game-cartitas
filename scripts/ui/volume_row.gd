@@ -48,6 +48,7 @@ func _make_kit_icon_button(node_name: String, kit_name: String, callback: Callab
 	btn.texture_normal = UiHelpers.kit_texture(kit_name)
 	btn.ignore_texture_size = true
 	btn.stretch_mode = TextureButton.STRETCH_SCALE
+	btn.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST if kit_name in ["icon_minus", "icon_plus"] else CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	btn.custom_minimum_size = Vector2(32, 32)
 	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	btn.pressed.connect(callback)
@@ -67,13 +68,10 @@ func _make_slider() -> Control:
 	var track_texture := UiHelpers.hires_texture(V2_VOLUME_TRACK_ART)
 	var bar: Control
 	if track_texture != null:
-		var v2_bar := NinePatchRect.new()
-		v2_bar.texture = track_texture
-		v2_bar.patch_margin_left = 12
-		v2_bar.patch_margin_right = 12
-		v2_bar.patch_margin_top = 8
-		v2_bar.patch_margin_bottom = 8
-		v2_bar.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		var track_data := UiHelpers.trimmed_nine_patch(
+			track_texture, Vector2(SLIDER_TRACK_PX * 2.0, 32.0),
+			Rect2(0.06, 0.10, 0.06, 0.10), "volume_track")
+		var v2_bar := UiHelpers.nine_patch_rect(track_data, Vector2(SLIDER_TRACK_PX * 2.0, 32.0))
 		v2_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		v2_bar.set_meta("source_path", V2_VOLUME_TRACK_ART)
 		bar = v2_bar
@@ -86,20 +84,21 @@ func _make_slider() -> Control:
 		fallback_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		bar = fallback_bar
 	bar.name = "Track"
-	bar.size = Vector2(SLIDER_TRACK_PX, 16)
-	bar.scale = Vector2(2, 2)
+	if track_texture == null:
+		bar.size = Vector2(SLIDER_TRACK_PX * 2.0, 32.0)
 	slider.add_child(bar)
 	var handle := TextureRect.new()
 	handle.name = "Handle"
 	var handle_texture := UiHelpers.hires_texture(V2_VOLUME_HANDLE_ART)
 	if handle_texture == null:
 		handle_texture = UiHelpers.kit_texture("icon_accept")
+		handle.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	else:
 		handle.set_meta("source_path", V2_VOLUME_HANDLE_ART)
+		handle.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	handle.texture = handle_texture
 	handle.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	handle.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	handle.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	handle.size = Vector2(16, 16)
 	handle.scale = Vector2(2, 2)
 	handle.mouse_filter = Control.MOUSE_FILTER_IGNORE

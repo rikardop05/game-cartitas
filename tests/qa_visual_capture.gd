@@ -10,8 +10,8 @@ extends SceneTree
 
 const OUT_DIR := "user://qa_shots"
 const VIEWS := [
-	{"tag": "portrait", "orientation": "portrait", "window": Vector2i(360, 640)},
-	{"tag": "landscape", "orientation": "landscape", "window": Vector2i(640, 360)},
+	{"tag": "portrait", "orientation": "portrait", "window": Vector2i(720, 1280)},
+	{"tag": "landscape", "orientation": "landscape", "window": Vector2i(1280, 720)},
 ]
 const LEVELS := ["1", "6", "8", "11"]
 const LEVEL_TAG := {"1": "L1", "6": "L6", "8": "L8", "11": "L11"}
@@ -213,7 +213,7 @@ func _capture_match_fx() -> void:
 	# uses (flash panels + painted burst/smoke), without mutating gameplay state.
 	_game.settings["orientation"] = "landscape"
 	_game.apply_orientation()
-	root.size = Vector2i(640, 360)
+	root.size = Vector2i(1280, 720)
 	await _frames(4)
 	_game.current_level_id = "6"
 	change_scene_to_file("res://scenes/level.tscn")

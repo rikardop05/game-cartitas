@@ -221,6 +221,27 @@ func _scenario(game) -> void:
 	_press(menu, "BackButton")
 	await _frames(3)
 	_check(menu.find_child("PlayButton", true, false) != null, "help plate returns to the main menu")
+	_check(menu.find_child("ContinueButton", true, false) == null,
+		"a fresh profile does not show the Continue plate")
+	game.progress.levels["1"] = {"completed": true, "stars": 1}
+	for locale in ["pt", "en"]:
+		game.set_locale(locale)
+		menu._build()
+		await _frames(3)
+		var continue_button := menu.find_child("ContinueButton", true, false) as Button
+		_check(continue_button != null, "[%s] progress adds the fourth Continue plate" % locale)
+		if continue_button == null:
+			continue
+		var first_play := menu.find_child("PlayButton", true, false) as Control
+		var expected_art := "Continuar_.png" if locale == "pt" else "Layer 2.png"
+		_check(str(continue_button.get_meta("source_path", "")).ends_with(expected_art),
+			"[%s] Continue uses its localized painted art %s" % [locale, expected_art])
+		_check(str(continue_button.get_meta("label", "")) == Localizer.t("continue"),
+			"[%s] Continue keeps its localized accessible label" % locale)
+		_check(continue_button.size.x >= 32.0 and continue_button.size.y >= 32.0,
+			"[%s] Continue meets the minimum touch target" % locale)
+		_check(first_play != null and continue_button.global_position.y < first_play.global_position.y,
+			"[%s] Continue is first in the four-button stack" % locale)
 
 # One locale of the main menu: the three buttons exist, are clickable, and show the right face.
 func _check_menu(menu, locale: String) -> void:
@@ -231,7 +252,13 @@ func _check_menu(menu, locale: String) -> void:
 		_check(source.ends_with("logo_claw_and_crown.png"),
 			"[%s] logo uses the Claw & Crown art (got '%s')" % [locale, source])
 		_check(logo.size.y >= 40.0, "[%s] logo is legible (height %.1f)" % [locale, logo.size.y])
-	_check(menu.find_child("MenuHero", true, false) != null, "[%s] menu shows the decorative hero" % locale)
+	if bool(menu.call("_landscape")):
+		_check(menu.find_child("MenuHero", true, false) != null and
+			menu.find_child("MenuHeroSecondary", true, false) != null,
+			"[%s] landscape menu shows the two right-side heroes" % locale)
+	else:
+		_check(menu.find_child("MenuHero", true, false) == null,
+			"[%s] portrait menu keeps the scenic panel unobstructed" % locale)
 	_check(menu.find_child("TotalStars", true, false) != null, "[%s] menu shows the total stars line" % locale)
 	var gear := menu.find_child("ConfigButton", true, false) as TextureButton
 	_check(gear != null and str(gear.get_meta("source_path", "")).ends_with("Config_Icon.png"),
@@ -239,7 +266,7 @@ func _check_menu(menu, locale: String) -> void:
 	var help_badge := menu.find_child("HelpButton", true, false) as TextureButton
 	_check(help_badge != null and str(help_badge.get_meta("source_path", "")).ends_with("interrog.png"),
 		"[%s] menu help badge uses interrog.png" % locale)
-	var board_art := "menu_.png" if bool(menu.call("_landscape")) else "panel_menu_board.png"
+	var board_art := "panel_menu_board.png"
 	var board_node := menu.get("_board") as TextureRect
 	_check(board_node != null and str(board_node.get_meta("source_path", "")).ends_with(board_art),
 		"[%s] menu plaque uses the v2 %s" % [locale, board_art])
@@ -251,7 +278,7 @@ func _check_menu(menu, locale: String) -> void:
 			continue
 		_check(not btn.disabled and btn.is_visible_in_tree(), "[%s] %s is enabled and visible" % [locale, node_name])
 		_check(btn.mouse_filter == Control.MOUSE_FILTER_STOP, "[%s] %s receives clicks" % [locale, node_name])
-		_check(btn.size.x >= 150.0 and btn.size.y >= 45.0, "[%s] %s is legible (got %s)" % [locale, node_name, btn.size])
+		_check(btn.size.x >= 32.0 and btn.size.y >= 32.0, "[%s] %s meets the touch target (got %s)" % [locale, node_name, btn.size])
 		_check(btn.tooltip_text == Localizer.t(str(spec["key"]) + "_tip"), "[%s] %s keeps its tooltip" % [locale, node_name])
 		var face := btn.get_node_or_null("Face") as TextureRect
 		_check(face != null and face.texture != null, "[%s] %s has a texture face" % [locale, node_name])
@@ -284,6 +311,10 @@ func _check_menu(menu, locale: String) -> void:
 		var stacked: bool = play.global_position.y + play.size.y <= opts.global_position.y + 0.5 \
 				and opts.global_position.y + opts.size.y <= quit.global_position.y + 0.5
 		_check(stacked, "[%s] main buttons stack without overlapping" % locale)
+		var continuation := menu.find_child("ContinueButton", true, false) as Control
+		if continuation != null:
+			_check(continuation.global_position.y + continuation.size.y <= play.global_position.y + 0.5,
+				"[%s] Continue stacks before the other menu buttons" % locale)
 
 func _sound_icon_is(menu: Node, file_name: String) -> bool:
 	var icon := menu.find_child("SoundButton", true, false) as TextureButton

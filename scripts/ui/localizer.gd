@@ -8,6 +8,8 @@ const STRINGS := {
 	"subtitle": {"en": "Match 3 identical cards", "pt": "Combine 3 cartas iguais"},
 	"play": {"en": "Play", "pt": "Jogar"},
 	"play_tip": {"en": "Open the level selection", "pt": "Abrir a seleção de levels"},
+	"continue": {"en": "Continue", "pt": "Continuar"},
+	"continue_tip": {"en": "Resume your campaign", "pt": "Continuar sua campanha"},
 	"options": {"en": "Options", "pt": "Opções"},
 	"settings": {"en": "Settings", "pt": "Configurações"},
 	"options_tip": {"en": "Language, orientation, sound and progress settings", "pt": "Idioma, orientação, som e configurações de progresso"},

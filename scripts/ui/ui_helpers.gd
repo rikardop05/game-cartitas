@@ -10,8 +10,28 @@ const GOLD := Color("#ffe36e")
 
 static var _font_cache: SystemFont = null
 static var _card_texture_cache: Dictionary = {}
+static var _card_texture_cache_lru: Array[String] = []
 static var _frame_cache: Dictionary = {}
+static var _frame_cache_lru: Array[String] = []
+static var _alpha_bounds_cache: Dictionary = {}
+static var _alpha_bounds_cache_lru: Array[String] = []
 static var _shadow_cache: Dictionary = {}
+static var _shadow_cache_lru: Array[String] = []
+const CARD_TEXTURE_CACHE_LIMIT := 64
+const FRAME_CACHE_LIMIT := 64
+const ALPHA_BOUNDS_CACHE_LIMIT := 64
+const SHADOW_CACHE_LIMIT := 48
+
+static func _cache_touch(order: Array[String], key: String) -> void:
+	order.erase(key)
+	order.append(key)
+
+static func _cache_store(cache: Dictionary, order: Array[String], key: String, value: Variant, limit: int) -> void:
+	cache[key] = value
+	_cache_touch(order, key)
+	while order.size() > limit:
+		var expired: String = order.pop_front()
+		cache.erase(expired)
 
 static func symbol_font() -> SystemFont:
 	if _font_cache == null:
@@ -24,30 +44,40 @@ static func symbol_font() -> SystemFont:
 # (stretch mode canvas_items), so a 46 px logical card is 90+ real pixels; the art is kept at
 # full resolution with mipmaps and drawn with trilinear filtering, letting the GPU scale it to
 # whatever size the screen needs instead of pre-shrinking it to logical pixels (which blurred
-# and pixelated it once the window upscaled the result). Mipmaps are built here, so any
-# delivered PNG works without import tweaks. Cached per type.
+# and pixelated it once the window upscaled the result). Imported mipmaps are preferred; a runtime
+# fallback keeps unconfigured or generated art usable. Cached per type.
 static func card_texture(type: String) -> Texture2D:
 	return hires_texture("res://assets/cards/card_%s.png" % type)
 
-# Any painted (not pixel-art) picture at full resolution: loaded once, mipmaps generated, cached
-# by path, null when the file is missing. Draw it with TEXTURE_FILTER_LINEAR_WITH_MIPMAPS.
+# Any painted (not pixel-art) picture at full resolution: loaded once and cached by path, null when
+# the file is missing. Imports provide mipmaps; unconfigured textures keep a runtime fallback.
 static func hires_texture(path: String) -> Texture2D:
-	if not _card_texture_cache.has(path):
+	if _card_texture_cache.has(path):
+		_cache_touch(_card_texture_cache_lru, path)
+		return _card_texture_cache[path]
+	else:
 		var texture: Texture2D = null
 		if ResourceLoader.exists(path):
 			var source := load(path) as Texture2D
-			var image := source.get_image() if source != null else null
-			if image != null:
-				image = image.duplicate()
-				if image.is_compressed():
-					image.decompress()
-				if not image.has_mipmaps():
-					image.generate_mipmaps()
-				texture = ImageTexture.create_from_image(image)
-			else:
+			if source is CompressedTexture2D:
+				# Imported PNGs carry mipmaps in their .import settings. Do not read the full
+				# compressed image back to CPU just to check a property already known here.
 				texture = source
-		_card_texture_cache[path] = texture
-	return _card_texture_cache[path]
+			else:
+				var image := source.get_image() if source != null else null
+				if image != null:
+					if image.has_mipmaps():
+						texture = source
+					else:
+						image = image.duplicate()
+						if image.is_compressed():
+							image.decompress()
+						image.generate_mipmaps()
+						texture = ImageTexture.create_from_image(image)
+				else:
+					texture = source
+		_cache_store(_card_texture_cache, _card_texture_cache_lru, path, texture, CARD_TEXTURE_CACHE_LIMIT)
+		return texture
 
 # HUD art (assets/ui/hud/<name>.png): the star plaque states and the stopwatch/gear icons.
 static func hud_texture(name: String) -> Texture2D:
@@ -159,22 +189,66 @@ static func _editable_image(texture: Texture2D) -> Image:
 		image.decompress()
 	return image
 
+# Imported PNGs sometimes retain 1-4/255 alpha noise around painted panels. Image.get_used_rect()
+# includes that fringe, so 9-slices treat the whole source as content and squeeze the visible
+# border inward. Cache the thresholded visible bounds by texture path; use alpha > 16/255.
+static func _visible_alpha_rect(image: Image, cache_key: String) -> Rect2i:
+	if _alpha_bounds_cache.has(cache_key):
+		_cache_touch(_alpha_bounds_cache_lru, cache_key)
+		return _alpha_bounds_cache[cache_key]
+	var w := image.get_width()
+	var h := image.get_height()
+	var threshold := 16
+	var top := 0
+	while top < h and not _alpha_row_visible(image, top, threshold):
+		top += 1
+	var bottom := h - 1
+	while bottom >= top and not _alpha_row_visible(image, bottom, threshold):
+		bottom -= 1
+	var left := 0
+	while left < w and not _alpha_column_visible(image, left, top, bottom, threshold):
+		left += 1
+	var right := w - 1
+	while right >= left and not _alpha_column_visible(image, right, top, bottom, threshold):
+		right -= 1
+	var bounds := image.get_used_rect()
+	if right >= left and bottom >= top:
+		bounds = Rect2i(left, top, right - left + 1, bottom - top + 1)
+	_cache_store(_alpha_bounds_cache, _alpha_bounds_cache_lru, cache_key, bounds, ALPHA_BOUNDS_CACHE_LIMIT)
+	return bounds
+
+static func _alpha_row_visible(image: Image, y: int, threshold: int) -> bool:
+	for x in image.get_width():
+		if roundi(image.get_pixel(x, y).a * 255.0) > threshold:
+			return true
+	return false
+
+static func _alpha_column_visible(image: Image, x: int, top: int, bottom: int, threshold: int) -> bool:
+	for y in range(top, bottom + 1):
+		if roundi(image.get_pixel(x, y).a * 255.0) > threshold:
+			return true
+	return false
+
 # 9-slice a painted frame that has a transparent centre, showing only its visible
 # border: crops the alpha bounding box, fits it and caps the border thickness (so a
 # thick painted bevel never eats the play area). Returns the fitted texture, the
 # 9-slice margins and the real inner hole, in target-local px. Cached by texture
 # path, target size and border cap.
 static func alpha_nine_patch(texture: Texture2D, target_size: Vector2, max_border: float = 8.0) -> Dictionary:
-	var key := "%s|%.0fx%.0f|%.1f" % [
+	var key := "%s|%.0fx%.0f|%.1f|x%.2f" % [
 		texture.resource_path if texture != null else "",
-		target_size.x, target_size.y, max_border,
+		target_size.x, target_size.y, max_border, ui_oversample(),
 	]
 	if _frame_cache.has(key):
+		_cache_touch(_frame_cache_lru, key)
 		return _frame_cache[key]
 	var image := _editable_image(texture)
 	if image == null or target_size.x <= 0.0 or target_size.y <= 0.0:
 		return {}
-	var used := image.get_used_rect()
+	var bounds_key := texture.resource_path if texture != null else ""
+	if bounds_key.is_empty() and texture != null:
+		bounds_key = str(texture.get_instance_id())
+	var used := _visible_alpha_rect(image, bounds_key)
 	if used.size.x < 4 or used.size.y < 4:
 		return {}
 	var crop := image.get_region(used)
@@ -216,7 +290,8 @@ static func alpha_nine_patch(texture: Texture2D, target_size: Vector2, max_borde
 		"inner": inner,
 		"source_bounds": used,
 	}
-	_frame_cache[key] = result
+	result.merge(_hires_nine_patch(crop, Vector2(fitted.get_width(), fitted.get_height()), result["margins"]))
+	_cache_store(_frame_cache, _frame_cache_lru, key, result, FRAME_CACHE_LIMIT)
 	return result
 
 # 9-slice a painted panel with fixed proportional margins: the texture is cropped
@@ -226,13 +301,17 @@ static func alpha_nine_patch(texture: Texture2D, target_size: Vector2, max_borde
 # (left, top, right, bottom) as fractions of the CROPPED texture size.
 static func trimmed_nine_patch(texture: Texture2D, target_size: Vector2, margin_ratio: Rect2, cache_key: String = "") -> Dictionary:
 	var source_key := cache_key if not cache_key.is_empty() else (texture.resource_path if texture != null else "")
-	var key := "trim|%s|%.0fx%.0f|%s" % [source_key, target_size.x, target_size.y, str(margin_ratio)]
+	var key := "trim|%s|%.0fx%.0f|%s|x%.2f" % [source_key, target_size.x, target_size.y, str(margin_ratio), ui_oversample()]
 	if _frame_cache.has(key):
+		_cache_touch(_frame_cache_lru, key)
 		return _frame_cache[key]
 	var image := _editable_image(texture)
 	if image == null or target_size.x <= 0.0 or target_size.y <= 0.0:
 		return {}
-	var used := image.get_used_rect()
+	var bounds_key := source_key
+	if bounds_key.is_empty() and texture != null:
+		bounds_key = str(texture.get_instance_id())
+	var used := _visible_alpha_rect(image, bounds_key)
 	if used.size.x < 4 or used.size.y < 4:
 		return {}
 	var crop := image.get_region(used)
@@ -267,8 +346,69 @@ static func trimmed_nine_patch(texture: Texture2D, target_size: Vector2, margin_
 		"inner": inner,
 		"source_bounds": used,
 	}
-	_frame_cache[key] = result
+	result.merge(_hires_nine_patch(crop, Vector2(fitted.get_width(), fitted.get_height()), result["margins"]))
+	_cache_store(_frame_cache, _frame_cache_lru, key, result, FRAME_CACHE_LIMIT)
 	return result
+
+# How many real pixels one design pixel covers right now: the window is drawn with the
+# canvas_items stretch, so a 64 px design panel is 128+ real px on a 2x window. Painted
+# 9-slices baked at design size would be upscaled by the GPU (blurry), so they are also
+# baked at this factor and drawn scaled back down (see nine_patch_rect). 1..4.
+static func ui_oversample() -> float:
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null or tree.root == null:
+		return 1.0
+	var design := Vector2(tree.root.content_scale_size)
+	var real := Vector2(tree.root.size)
+	if design.x <= 0.0 or design.y <= 0.0 or real.x <= 0.0 or real.y <= 0.0:
+		return 1.0
+	var factor := maxf(real.x / design.x, real.y / design.y)
+	# Snap up to half steps so small window jitters reuse the cache.
+	return clampf(ceilf(factor * 2.0) / 2.0, 1.0, 4.0)
+
+# The oversampled copy of a 9-slice: the same crop resized to `design_size` times the
+# oversample factor (never above the source resolution), margins scaled to match. Adds
+# hires_texture / hires_margins / oversample; empty when no oversampling is needed.
+static func _hires_nine_patch(crop: Image, design_size: Vector2, margins: Rect2i) -> Dictionary:
+	if design_size.x <= 0.0 or design_size.y <= 0.0:
+		return {}
+	var factor := minf(ui_oversample(), minf(crop.get_width() / design_size.x, crop.get_height() / design_size.y))
+	if factor <= 1.01:
+		return {}
+	var hires: Image = crop.duplicate()
+	hires.resize(maxi(2, roundi(design_size.x * factor)), maxi(2, roundi(design_size.y * factor)), Image.INTERPOLATE_LANCZOS)
+	hires.generate_mipmaps()
+	var hw := hires.get_width()
+	var hh := hires.get_height()
+	return {
+		"hires_texture": ImageTexture.create_from_image(hires),
+		"hires_margins": Rect2i(
+			clampi(roundi(margins.position.x * factor), 1, hw / 2),
+			clampi(roundi(margins.position.y * factor), 1, hh / 2),
+			clampi(roundi(margins.size.x * factor), 1, hw / 2),
+			clampi(roundi(margins.size.y * factor), 1, hh / 2)),
+		"oversample": factor,
+	}
+
+# A NinePatchRect for alpha_nine_patch / trimmed_nine_patch data filling `size` design px.
+# With an oversampled bake it is laid out `oversample` times larger and scaled back down,
+# so the corners keep their design size but are sampled at the real screen resolution.
+# StyleBoxTexture users keep reading "texture"/"margins" (design size) unchanged.
+static func nine_patch_rect(data: Dictionary, size: Vector2) -> NinePatchRect:
+	var art := NinePatchRect.new()
+	var hires := data.has("hires_texture")
+	var factor := float(data.get("oversample", 1.0)) if hires else 1.0
+	art.texture = data["hires_texture"] if hires else data.get("texture")
+	var margins: Rect2i = data["hires_margins"] if hires else data.get("margins", Rect2i())
+	art.patch_margin_left = margins.position.x
+	art.patch_margin_top = margins.position.y
+	art.patch_margin_right = margins.size.x
+	art.patch_margin_bottom = margins.size.y
+	art.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	art.size = size * factor
+	art.scale = Vector2.ONE / factor
+	return art
 
 static var _rotated_cache: Dictionary = {}
 
@@ -313,6 +453,7 @@ static func shadow_texture(texture: Texture2D, softness: float, strength: float)
 		source_key = str(texture.get_instance_id())
 	var key := "%s|%.1f|%.2f" % [source_key, softness, strength]
 	if _shadow_cache.has(key):
+		_cache_touch(_shadow_cache_lru, key)
 		return _shadow_cache[key]
 	var image := _editable_image(texture)
 	if image == null:
@@ -334,7 +475,7 @@ static func shadow_texture(texture: Texture2D, softness: float, strength: float)
 			if a > 0.002:
 				out.set_pixel(x, y, Color(0.04, 0.02, 0.01, a))
 	var result := ImageTexture.create_from_image(out)
-	_shadow_cache[key] = result
+	_cache_store(_shadow_cache, _shadow_cache_lru, key, result, SHADOW_CACHE_LIMIT)
 	return result
 
 static func _blur_alpha(image: Image, radius: int) -> PackedFloat32Array:
@@ -408,8 +549,8 @@ static func background_path(landscape: bool, level: int = 0) -> String:
 		return "res://assets/ui/background_autumn.png"
 	return "res://assets/ui/background.png" if landscape else "res://assets/ui/background_portrait.png"
 
-static func make_background(landscape: bool, level: int = 0) -> Control:
-	var path := background_path(landscape, level)
+static func make_background(landscape: bool, level: int = 0, path_override: String = "") -> Control:
+	var path := path_override if not path_override.is_empty() else background_path(landscape, level)
 	if not ResourceLoader.exists(path):
 		var flat := ColorRect.new()
 		flat.color = WARM_BACKGROUND
@@ -424,7 +565,7 @@ static func make_background(landscape: bool, level: int = 0) -> Control:
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# Painted art, not pixel art: linear filtering keeps the blur smooth when scaled.
-	bg.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	bg.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	var mat := ShaderMaterial.new()
 	mat.shader = preload("res://scripts/ui/background_filter.gdshader")
 	var menu := level <= 0
