@@ -103,6 +103,7 @@ func _run_view(game, view: Dictionary) -> void:
 		_fail("infrastructure", "LevelScreen did not become ready")
 		return
 
+	await _await_deal(scene)
 	var nodes := _required_nodes(scene, required)
 	if nodes.size() != required.size():
 		return
@@ -660,3 +661,9 @@ func _finish() -> void:
 	for failure in _failures:
 		printerr("  " + failure)
 	quit(1)
+
+# Waits (wall clock) until the level's initial deal has finished: the board is at its final geometry.
+func _await_deal(scene) -> void:
+	var start := Time.get_ticks_msec()
+	while scene != null and is_instance_valid(scene) and scene.has_method("is_dealing") and scene.is_dealing() and Time.get_ticks_msec() - start < 10000:
+		await process_frame

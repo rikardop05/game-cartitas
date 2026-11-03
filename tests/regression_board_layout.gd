@@ -179,6 +179,8 @@ func _run() -> void:
 				_check(false, "L%s %s: level scene did not load" % [level_id, view["name"]])
 				continue
 			var controller = scene.get("controller")
+			if controller != null:
+				await _await_deal(scene)
 			if controller == null:
 				_check(false, "L%s %s: controller missing" % [level_id, view["name"]])
 				continue
@@ -194,3 +196,8 @@ func _run() -> void:
 
 func _init() -> void:
 	call_deferred("_run")
+# Waits (wall clock) until the level's initial deal has finished: the board is at its final geometry.
+func _await_deal(scene) -> void:
+	var start := Time.get_ticks_msec()
+	while scene != null and is_instance_valid(scene) and scene.has_method("is_dealing") and scene.is_dealing() and Time.get_ticks_msec() - start < 10000:
+		await process_frame

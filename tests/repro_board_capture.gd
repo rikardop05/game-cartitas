@@ -49,6 +49,7 @@ func _run() -> void:
 		if scene == null or controller == null or container == null:
 			_errors.append("%s: scene/controller/board missing" % view["name"])
 			continue
+		await _await_deal(scene)
 		if not container.size.is_equal_approx(view["board"]):
 			_errors.append("%s: board size %s != %s" % [view["name"], str(container.size), str(view["board"])])
 
@@ -148,3 +149,9 @@ func _finish() -> void:
 
 func _init() -> void:
 	call_deferred("_run")
+
+# Waits (wall clock) until the level's initial deal has finished: the board is at its final geometry.
+func _await_deal(scene) -> void:
+	var start := Time.get_ticks_msec()
+	while scene != null and is_instance_valid(scene) and scene.has_method("is_dealing") and scene.is_dealing() and Time.get_ticks_msec() - start < 10000:
+		await process_frame
