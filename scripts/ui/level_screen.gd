@@ -826,12 +826,21 @@ func _build_hud_pills(hud: Control) -> void:
 	var clock_rect := _rect("clock_pill")
 	var clock_texture := UiHelpers.hires_texture(CLOCK_PLANK_ART)
 	var clock_pill := _make_art("ClockPill", clock_texture, clock_rect, true)
+	# Landscape draws the plank from its top-left corner at a tuned scale; the shadow follows
+	# the scaled (visual) box so it never peeks out from under it.
+	var clock_scale := float(_layout.get("clock_scale", 1.0))
+	clock_pill.pivot_offset = Vector2.ZERO
+	clock_pill.scale = Vector2(clock_scale, clock_scale)
+	var shadow_size := clock_rect.size * clock_scale
 	var clock_shadow := _make_drop_shadow(
-		clock_texture, Rect2(clock_rect.position + Vector2(1.0, 2.0), clock_rect.size - Vector2(1.0, 2.0)), 1.5, 0.28)
+		clock_texture, Rect2(clock_rect.position + Vector2(1.0, 2.0), shadow_size - Vector2(1.0, 2.0)), 1.5, 0.28)
 	if clock_shadow != null:
+		clock_shadow.name = "ClockShadow"
 		hud.add_child(clock_shadow)
 	hud.add_child(clock_pill)
 	timer_label = _make_pill_label(clock_pill, "00:00", 12, TEXT_PRIMARY, false, float(_layout["clock_text_inset"]))
+	if _layout.has("clock_text_rect"):
+		_place(timer_label, _layout["clock_text_rect"])
 	clock_pill.add_child(_make_art("Stopwatch", UiHelpers.hud_texture("icon_stopwatch"), _rect("stopwatch_in_pill"), true))
 
 	if _endless != null:

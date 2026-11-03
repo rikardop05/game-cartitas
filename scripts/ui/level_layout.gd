@@ -7,6 +7,7 @@ extends RefCounted
 
 const FRAME_MARGIN := 12.0
 const LAND_FRAME_ASPECT := 1.74
+const CLOCK_SCALE_LANDSCAPE := 0.8
 
 static func compute(viewport_size: Vector2) -> Dictionary:
 	var size := Vector2(maxf(1.0, viewport_size.x), maxf(1.0, viewport_size.y))
@@ -170,15 +171,20 @@ static func _landscape(size: Vector2) -> Dictionary:
 		zone.position.y + (zone.size.y - card_side) * 0.5,
 		zone_row_width,
 		card_side)
-	var clock := Rect2(46.0, 1.0, 112.0, 46.0)
+	# Hand-tuned in the editor at 1280x720 (640x360 logical): the clock plank is a 100x97 box drawn
+	# at CLOCK_SCALE_LANDSCAPE from its top-left corner, and may poke above the viewport on purpose.
+	var clock := Rect2(51.0, -15.0, 100.0, 97.0)
+	var clock_text := Rect2(45.0, 28.0, 31.0, 40.0)
 	var plaque := Rect2((w - 90.0) * 0.5, 6.0, 90.0, 36.0)
-	var logo := Rect2(w - 240.0, 2.0, 100.0, 40.0)
+	var logo := Rect2(w - 240.0, 2.0, 110.0, 50.0)
+	# The Reserve box is bottom-anchored and its tuned 1.03 x 1.13 stretch is baked into the rect.
+	reserve = Rect2(7.0, h - 69.0, 174.0, 69.0)
 	var back := Rect2(6.0, 8.0, 32.0, 32.0)
 	var help := Rect2(w - 128.0, 8.0, 32.0, 32.0)
 	var gear := Rect2(w - 90.0, 6.0, 32.0, 32.0)
 	var sound := Rect2(w - 48.0, 6.0, 32.0, 32.0)
 	var title := Rect2()
-	var stopwatch := Rect2(4.0, 5.0, 36.0, 36.0)
+	var stopwatch := Rect2(0.0, 25.0, 40.0, 31.0)
 	var score := Rect2(clock.end.x + 6.0, 6.0, 84.0, 32.0)
 	var instruction := Rect2(board.position.x + 12.0, board.position.y + 10.0, minf(180.0, board.size.x - 24.0), 58.0)
 	var mascot := Rect2(0.0, board.position.y + 8.0, minf(148.0, board.position.x), maxf(80.0, board.size.y - 16.0))
@@ -212,7 +218,7 @@ static func _landscape(size: Vector2) -> Dictionary:
 	return {
 		"orientation": "landscape",
 		"viewport": size,
-		"hud": Rect2(0.0, 0.0, w, header_height),
+		"hud": Rect2(0.0, 0.0, w, maxf(header_height, logo.end.y)),
 		"header_height": header_height,
 		"rects": rects,
 		"interactive": interactive,
@@ -222,4 +228,6 @@ static func _landscape(size: Vector2) -> Dictionary:
 		"zone_h_separation": zone_gap,
 		"zone_v_separation": zone_gap,
 		"clock_text_inset": 42.0,
+		"clock_text_rect": clock_text,
+		"clock_scale": CLOCK_SCALE_LANDSCAPE,
 	}

@@ -30,6 +30,15 @@ const MENU_EDGE := 14.0
 const STARS_BAND := 22.0
 const LANDSCAPE_MARGIN := 6.0
 
+# Landscape tuning (hand-adjusted in the editor at 1280x720 = 640x360 logical px), kept as
+# fractions of the board so it holds on other window sizes.
+const LOGO_SCALE_LANDSCAPE := 1.35
+const LOGO_CENTER_SHIFT_LANDSCAPE := -2.7
+const LOGO_RISE_LANDSCAPE := 16.2 # logo top sits this far above the sign's visible top (y = 10 at 640x360)
+const BOARD_TRIM_LANDSCAPE := 0.0911
+const BOARD_TILT_DEG_LANDSCAPE := 0.3
+const PANEL_DROP_LANDSCAPE := 0.0598
+
 # v2 menu boards: the tall stone/banner board in portrait and the square three-slot
 # wooden board in landscape. The rectangles below are the safe button areas (fractions
 # of each art), so the plates sit on stone/wood and never over the carved frames.
@@ -501,7 +510,11 @@ func _layout_board() -> void:
 	if landscape:
 		var visible_top := (view.y - visible_height) * 0.5
 		origin = Vector2(10.0, visible_top - art_top * board_size.y)
-		logo_pos = Vector2(origin.x + (board_size.x - logo_size.x) * 0.5, maxf(2.0, visible_top - logo_size.y * 0.58))
+		# Hand-tuned at 1280x720: a 1.35x logo, a touch left of the board's centre, top at y = 10.
+		logo_size *= LOGO_SCALE_LANDSCAPE
+		logo_pos = Vector2(
+			origin.x + board_size.x * 0.5 + LOGO_CENTER_SHIFT_LANDSCAPE - logo_size.x * 0.5,
+			maxf(2.0, visible_top - LOGO_RISE_LANDSCAPE))
 		stars_pos = Vector2(0.0, view.y - STARS_BAND - 2.0)
 	else:
 		var logo_overlap := 24.0
@@ -515,16 +528,30 @@ func _layout_board() -> void:
 	# Both the sign and its shadow live in the parallax layer; subtract the layer's
 	# current offset so the origin stays expressed in the untransformed layout space.
 	var layer_offset := _board_layer.position
-	_board.size = board_size
-	_board.position = origin - layer_offset
+	# Landscape sign: squashed from the top (bottom edge fixed) and tilted a hair, as tuned by hand.
+	var art_origin := origin
+	var art_size := board_size
+	var tilt := 0.0
+	var panel_drop := 0.0
+	if landscape:
+		var trim := board_size.y * BOARD_TRIM_LANDSCAPE
+		art_origin.y += trim
+		art_size.y -= trim
+		tilt = BOARD_TILT_DEG_LANDSCAPE
+		panel_drop = board_size.y * PANEL_DROP_LANDSCAPE
+	_board.size = art_size
+	_board.position = art_origin - layer_offset
 	_board.pivot_offset = board_size * 0.5
-	_board_shadow.size = board_size
-	_board_shadow.position = origin + BOARD_SHADOW_OFFSET - layer_offset
+	_board.rotation_degrees = tilt
+	_board_shadow.size = art_size
+	_board_shadow.position = art_origin + BOARD_SHADOW_OFFSET - layer_offset
 	_board_shadow.pivot_offset = board_size * 0.5
+	_board_shadow.rotation_degrees = tilt
 
 	# Buttons: the panel is a full-board container, so plates are placed in board space.
-	_panel.size = board_size
-	_panel.position = origin
+	# In landscape the panel top sits PANEL_DROP lower, which slides the whole stack down.
+	_panel.size = Vector2(board_size.x, board_size.y - panel_drop)
+	_panel.position = origin + Vector2(0.0, panel_drop)
 	var stone: Rect2 = spec["stone"]
 	var area := Rect2(stone.position * board_size, stone.size * board_size)
 	var gap := 4.0 if landscape else 5.0

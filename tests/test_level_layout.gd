@@ -17,7 +17,14 @@ func test_responsive_rects_fit_and_controls_do_not_overlap() -> void:
 		var rects: Dictionary = layout["rects"]
 		for key in rects:
 			var rect: Rect2 = rects[key]
-			Assert.is_true(bounds.encloses(rect), "%s: %s (%s) is inside %s" % [str(size), str(key), str(rect), str(bounds)])
+			var allowed := bounds
+			if key == "clock_pill":
+				# Hand-tuned landscape plank: drawn at clock_scale from its top-left corner, and the
+				# transparent box may rise up to 16 px above the screen (the painted plank stays inside).
+				var clock_scale := float(layout.get("clock_scale", 1.0))
+				rect = Rect2(rect.position, rect.size * clock_scale)
+				allowed = bounds.grow_individual(0.0, 16.0, 0.0, 0.0)
+			Assert.is_true(allowed.encloses(rect), "%s: %s (%s) is inside %s" % [str(size), str(key), str(rect), str(allowed)])
 		var board: Rect2 = rects["board_frame"]
 		var largest_area := 0.0
 		for value in rects.values():

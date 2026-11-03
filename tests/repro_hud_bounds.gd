@@ -14,6 +14,12 @@ const EPSILON := 0.01
 # The Clearing Zone cards may sit slightly proud of the painted surface, but every slot
 # remains within the bar's carved area (4+3 rows in portrait, one row in landscape).
 const ZONE_FLOAT_OVERHANG := 3.0
+# The landscape clock plank was tuned by hand (box 100x97 drawn at 0.8 from (51, -15)): its painted
+# plank sits inside the screen but the transparent box may rise above it, so it is checked by
+# _assert_clock_art instead of the generic containment audits. The Hud box also grows to hold the
+# taller wordmark, which may overlap the board frame's top edge by a few pixels (art, not controls).
+const CLOCK_TOP_BLEED := 16.0
+const HEADER_ART_BLEED := 6.0
 const ZONE_MIN_CARD_PX := 32.0
 const COMMON_REQUIRED := ["Layout", "Hud", "BoardFrame", "DeckA", "DeckB", "Reserve", "ClearingZone", "Powers", "MascotArea", "BackButton", "HelpButton", "SettingsButton", "SoundButton", "ClockPill", "Stopwatch"]
 const LANDSCAPE_EXTRA := []
@@ -119,7 +125,9 @@ func _run_view(game, view: Dictionary) -> void:
 
 	# Exact hierarchy contracts: every piece sits inside the Layout, the Board inside its window.
 	for node_name in required:
-		if node_name != "Layout":
+		if node_name == "ClockPill":
+			_assert_clock_art(nodes[node_name], nodes["Layout"].get_global_rect())
+		elif node_name != "Layout":
 			_assert_inside(nodes[node_name], nodes["Layout"].get_global_rect(), "container:%s-in-Layout" % node_name)
 	_assert_inside(board, nodes["BoardFrame"].get_global_rect(), "container:Board-in-BoardFrame")
 	var shade := board_frame.find_child("BoardShade", true, false) as Control
@@ -251,6 +259,10 @@ func _assert_regions_disjoint(nodes: Dictionary, landscape: bool) -> void:
 		for j in range(i + 1, regions.size()):
 			var a: Rect2 = nodes[regions[i]].get_global_rect()
 			var b: Rect2 = nodes[regions[j]].get_global_rect()
+			if regions[i] == "Hud":
+				a.size.y -= HEADER_ART_BLEED
+			elif regions[j] == "Hud":
+				b.size.y -= HEADER_ART_BLEED
 			if a.grow(-EPSILON).intersects(b.grow(-EPSILON)):
 				_fail("overlap", "%s %s overlaps %s %s" % [regions[i], str(a), regions[j], str(b)])
 
@@ -453,6 +465,8 @@ func _audit_viewport_descendants(root_control: Control, viewport_bounds: Rect2, 
 		# The portrait hero intentionally enters from just beyond the left screen edge.
 		if mascot_node != null and (control == mascot_node or mascot_node.is_ancestor_of(control)):
 			continue
+		if _is_clock_art(control):
+			continue
 		var rect := control.get_global_rect()
 		if rect.size.x <= 0.0 or rect.size.y <= 0.0:
 			continue
@@ -555,6 +569,8 @@ func _audit_subtree_against(root_control: Control, bounds: Rect2, kind: String, 
 		# part of the frame's layout contract.
 		if mascot_node != null and (control == mascot_node or mascot_node.is_ancestor_of(control)):
 			continue
+		if _is_clock_art(control):
+			continue
 		var rect := control.get_global_rect()
 		if rect.size.x <= 0.0 or rect.size.y <= 0.0:
 			continue
@@ -576,6 +592,19 @@ func _collect_visible_controls(node: Node, out: Array[Control], include_self: bo
 				continue
 			out.append(child_control)
 			_collect_visible_controls(child_control, out, false)
+
+func _is_clock_art(control: Control) -> bool:
+	return control.name == &"ClockPill" or control.name == &"ClockShadow"
+
+# The hand-tuned clock plank: fully inside the layout sideways and at the bottom, and no more than
+# CLOCK_TOP_BLEED above the top edge.
+func _assert_clock_art(control: Control, layout_bounds: Rect2) -> void:
+	var rect := control.get_global_rect()
+	var overflow := _overflow(rect, layout_bounds)
+	if float(overflow["top"]) > CLOCK_TOP_BLEED or float(overflow["bottom"]) > EPSILON \
+			or float(overflow["left"]) > EPSILON or float(overflow["right"]) > EPSILON:
+		_fail("clock-art", "rect=%s bounds=%s overflow=%s (top bleed allowed: %.0f)" % [
+			str(rect), str(layout_bounds), str(overflow), CLOCK_TOP_BLEED])
 
 func _assert_inside(control: Control, bounds: Rect2, kind: String) -> void:
 	var rect := control.get_global_rect()
