@@ -294,6 +294,7 @@ func _ready() -> void:
 		audio.play_gameplay(self)
 	_level_id = Game.current_level_id
 	_endless = Game.endless_run
+	CardImpactFx.warm()
 	_build_ui()
 	resized.connect(_on_resized)
 	await get_tree().process_frame

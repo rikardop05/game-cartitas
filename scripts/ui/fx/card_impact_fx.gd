@@ -12,6 +12,12 @@ extends Node2D
 
 # load(), not preload(): the scene references this script (a preload would be circular).
 const SCENE_PATH := "res://scenes/fx/card_impact_fx.tscn"
+static var _scene: PackedScene
+
+## Loads the effect scene once (call at level start): no load() then happens mid-game.
+static func warm() -> void:
+	if _scene == null:
+		_scene = load(SCENE_PATH) as PackedScene
 const DUST := [
 	preload("res://assets/ui/fx/impact/dust_1.png"),
 	preload("res://assets/ui/fx/impact/dust_2.png"),
@@ -71,7 +77,7 @@ static func play(parent: Node, card: Control, config: Dictionary = {}) -> CardIm
 	var xf := card.get_global_transform()
 	var scale_xy := xf.get_scale()
 	var size_px := Vector2(card.size.x * absf(scale_xy.x), card.size.y * absf(scale_xy.y))
-	var fx := (load(SCENE_PATH) as PackedScene).instantiate() as CardImpactFx
+	var fx := _instance()
 	live_count += 1
 	fx.tree_exited.connect(_on_gone)
 	if parent is CanvasItem:
@@ -85,6 +91,10 @@ static func play(parent: Node, card: Control, config: Dictionary = {}) -> CardIm
 	if bool(cfg["squash"]):
 		fx._squash_card(card, cfg)
 	return fx
+
+static func _instance() -> CardImpactFx:
+	warm()
+	return _scene.instantiate() as CardImpactFx
 
 static func _on_gone() -> void:
 	live_count -= 1
@@ -166,7 +176,11 @@ static func _color_pick_ramp(colors: Array) -> Gradient:
 	g.colors = cols
 	return g
 
+static var no_particles := DisplayServer.get_name() == "headless"
+
 func _dust(layer: Node2D, tex: Texture2D, dir: Vector2, amount: int, k: float, tint: Color, half_w: float, weight: float, delay: float = 0.06, strip: bool = false) -> void:
+	if no_particles:
+		return
 	var p := CPUParticles2D.new()
 	p.texture = tex
 	p.amount = amount
@@ -209,6 +223,8 @@ func _dust(layer: Node2D, tex: Texture2D, dir: Vector2, amount: int, k: float, t
 	t.tween_callback(p.set.bind("emitting", true))
 
 func _sparks(k: float, colors: Array, half_w: float) -> void:
+	if no_particles:
+		return
 	var p := CPUParticles2D.new()
 	p.texture = SPARK
 	p.material = _add_mat()
@@ -240,6 +256,8 @@ func _sparks(k: float, colors: Array, half_w: float) -> void:
 	p.emitting = true
 
 func _motes(k: float, colors: Array, size_px: Vector2) -> void:
+	if no_particles:
+		return
 	var p := CPUParticles2D.new()
 	p.texture = MOTE
 	p.material = _add_mat()
@@ -320,7 +338,7 @@ func _rim(color: Color, size_px: Vector2) -> void:
 static func play_trail(parent: Node, center: Vector2, size: float) -> CardImpactFx:
 	if parent == null or not is_instance_valid(parent):
 		return null
-	var fx := (load(SCENE_PATH) as PackedScene).instantiate() as CardImpactFx
+	var fx := _instance()
 	live_count += 1
 	fx.tree_exited.connect(_on_gone)
 	parent.add_child(fx)
