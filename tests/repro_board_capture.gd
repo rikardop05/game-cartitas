@@ -4,11 +4,14 @@ extends SceneTree
 const LEVEL_ID := "6"
 const EPSILON := 0.01
 const VIEWS := [
-	# The hole comes from the painted panel_board_frame.png (alpha nine-patch, border capped at
-	# BOARD_FRAME_BORDER_MAX), so it changed with the new frame art delivered this round.
-	{"name": "portrait-360x640", "orientation": "portrait", "window": Vector2i(360, 640), "board": Vector2(323, 181)},
-	{"name": "landscape-640x360", "orientation": "landscape", "window": Vector2i(640, 360), "board": Vector2(458, 202)},
+	# Board container size from the responsive LevelLayout (scripts/ui/level_layout.gd) inside the
+	# painted frame's inner hole. Re-pinned 2026-11-02 after the round-1/2 layout work (portrait
+	# board taller, landscape narrower beside the vertical powers board), checked by eye.
+	{"name": "portrait-360x640", "orientation": "portrait", "window": Vector2i(360, 640), "board": Vector2(316, 243)},
+	{"name": "landscape-640x360", "orientation": "landscape", "window": Vector2i(640, 360), "board": Vector2(387.2, 206)},
 ]
+# Playing a level persists state (music shuffle bag, powers): keep it off the player's save.
+const THROWAWAY_SAVE := "user://repro_board_capture_save.json"
 
 var _errors: Array[String] = []
 var _save_before: Dictionary
@@ -21,6 +24,7 @@ func _run() -> void:
 		_errors.append("Game autoload missing")
 		_finish()
 		return
+	game.save_path = THROWAWAY_SAVE
 
 	for view in VIEWS:
 		game.settings["orientation"] = view["orientation"]
@@ -124,6 +128,11 @@ func _snapshot_save() -> Dictionary:
 	return {"exists": exists, "bytes": bytes}
 
 func _finish() -> void:
+	var game = root.get_node_or_null("Game")
+	if game != null and game.save_path == THROWAWAY_SAVE:
+		game.save_path = SaveManager.DEFAULT_PATH
+	if FileAccess.file_exists(THROWAWAY_SAVE):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(THROWAWAY_SAVE))
 	var save_after := _snapshot_save()
 	if _save_before.has("read_error") or save_after.has("read_error"):
 		_errors.append("could not verify save preservation")

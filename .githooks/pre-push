@@ -60,6 +60,8 @@ for smoke in "$ROOT"/tests/smoke_*.gd; do
 done
 run "repro_hud_bounds" "GREEN" --headless --script res://tests/repro_hud_bounds.gd
 run "regression_board_layout" "REGRESSION BOARD LAYOUT OK" --headless --script res://tests/regression_board_layout.gd
+run "repro_board_capture" "BOARD CAPTURE REGRESSION OK" --headless --script res://tests/repro_board_capture.gd
+run "probe_generation" "OK" --headless --script res://tests/probe_generation.gd
 # Board determinism needs a local baseline (user://determinism_baseline.json); skipped without one.
 det=$(timeout 600 "$GODOT" --headless --path "$ROOT" -s res://tests/probe_determinism.gd -- --compare 2>&1)
 if echo "$det" | grep -q "PROBE DETERMINISM OK"; then
