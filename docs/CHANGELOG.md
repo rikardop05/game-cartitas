@@ -1,5 +1,47 @@
 # Changelog — Cartitas Infinity
 
+## Card juice estilo Balatro + painéis nítidos — 2026-11-02
+
+- **Tilt + brilho (tabuleiro e decks):** a carta sob o ponteiro/dedo ganha inclinação em perspectiva (até ±14°), "pop" de escala (1,06) e um brilho especular que acompanha a inclinação; a sombra desliza no sentido oposto. Cartas bloqueadas mantêm o visual escurecido e nunca inclinam. No celular a inclinação começa ao tocar. Só a carta ativa tem um `ShaderMaterial` próprio; ao sair volta ao material compartilhado.
+- **Clearing Zone:** cada carta balança continuamente (fase própria, por `TIME` no shader) e tem brilho holográfico sutil.
+- **Shader** `scripts/ui/card_juice.gdshader` (perspectiva 2D + dim + brilho + holo + sway); constantes `JUICE_*`/`ZONE_*` no topo de `level_screen.gd`. Créditos MIT (Hei, MrEliptik) em `docs/CREDITS.md`.
+- **Balões do herói/instrução** sempre acima das cartas, `mouse_filter` IGNORE e dentro do viewport (asserções em `tests/smoke_stars.gd`).
+- **Painéis pintados nítidos:** a Clearing Zone e a Reserve no retrato estavam borradas porque o 9-slice ampliava a arte. `UiHelpers._baked_nine_patch` (opt-in, só zona e reserva) desenha cantos e espessura das bordas a ≤1 texel por pixel, o ornamento do meio de cada borda uma única vez e sem escala, e o centro como um único recorte de cobertura limitado a 1,5× — sem repetição nem espelho. Moldura do tabuleiro e painel de poderes continuam no pipeline com oversample. Teste `tests/test_nine_patch_sharpness.gd` (7 tamanhos × escalas 1/2/3: ampliação e cópia única de cada canto/ornamento).
+- Testes novos: `smoke_card_juice.gd`, `qa_juice_capture.gd`, `qa_panels_capture.gd`. `probe_render_cost` L15 paisagem: avg 2,79 ms/render.
+
+## Rodada 2 — 2026-11-02
+
+### Jogo
+- **Seleção de fases no mapa do mundo:** o botão Jogar abre `scenes/level_select.tscn`, um mapa pintado (`assets/ui/map/world_map.png`, 1552x886) com 30 nós. Os Levels **1–15 são jogáveis** (cada nó mostra as estrelas ganhas) e **16–30 ficam bloqueados** (tooltip “Em breve”/“Coming soon”); o **Endless** fica sobre o castelo, no canto direito do mapa. Em retrato o mapa pode ser arrastado para explorar; o botão de voltar usa a nova seta dourada. O badge de “traduzir” que veio no screenshot é coberto por uma pequena pincelada verde desenhada em código.
+- **Rotação de fundos do menu:** a cada partida o menu escolhe uma de **6 cenas pintadas** (`assets/ui/menu_backgrounds/menu_bg_{harbor,training,cathedral,library,castle,forest}.png`) e avança o índice salvo em `Game.settings["menu_bg_index"]`, gravado com `Game.save_progress()`. A cena escolhida é mantida durante a sessão (inclusive ao voltar das Opções) e a rotação continua na próxima abertura; cenas que já têm personagens pintados não desenham os heróis separados (`show_heroes`).
+- **Logo maior e placas maiores:** o logo pintado cresceu de 60/68 px para **84 px (paisagem) / 92 px (retrato)** e agora encosta no topo da placa, com a camada de conteúdo à frente do board; as placas de botão em paisagem cresceram de 34 px para **42 px** de altura.
+- **Heróis sem fade nas bordas:** o shader `HERO_SHADER` que esmaecia as bordas dos heróis do menu foi removido; os retratos aparecem com `material == null` e `modulate` branco, e só são desenhados quando a cena escolhida não tem personagens próprios.
+- **Parallax suave:** o menu move três camadas com bleed de 12 px (fundo 2,8/2,1 px, placa 6,3/4,2 px e conteúdo 8,4/5,6 px) e interpolação independente de frame (`1 - exp(-6.0 * delta)`). O novo `tests/probe_menu_frame_time.gd` mede, sem outros processos do Godot rodando, **496 frames em 3,00 s: média 6,05 ms (165 fps), p95 6,12 ms e pior 6,38 ms** (vsync ligado, `max_fps = 0`, monitor de 165 Hz). Uma leitura de 33 ms/30 fps registrada antes vinha de CPU concorrida por outros testes.
+- **Tela de vitória nova:** `victory_board.png` com furo para o board, título PT/EN (`victory_title_pt/en.png`), a coelha comemorando (`victory_bunny.png`), as estrelas 1–3 (`victory_stars_1/2/3.png`) e o botão de tentar de novo PT/EN; o overlay escurece a tela em 50% e fica acima do HUD.
+- **Derrota em tela cheia:** o overlay subiu para `z_index 1100` (antes 9, atrás do HUD) e o shade cobre a tela inteira a 46%; o personagem de derrota é desenhado **grande** (altura = tela na paisagem, 74% no retrato), sangrando pelas bordas esquerda/inferior, atrás da janela de pedra.
+- **Relógio na prancha:** o HUD passou a usar `assets/ui/hud/clock_plank.png` (1636x686), com o ícone de cronômetro dentro da placa pintada.
+- **Janela que cabe na tela:** `Game.fit_window()` limita a janela à área útil do monitor (menos as decorações), mantendo 9:16 no retrato e 16:9 na paisagem, e centraliza a janela; `apply_orientation()` não pede mais um tamanho maior que a tela.
+- **Camadas do herói:** na tela do Level o herói fica em `HERO_Z = 1` (dentro do BoardFrame, atrás das cartas) e decks/poderes/zona em `FOREGROUND_Z = 8`; no retrato o retrato pode sair pela borda sem cobrir cartas ou controles.
+
+### Visual e assets
+- **Borda do tabuleiro e sombra dos decks:** o shade do board agora é recortado pela moldura (`intersection` com o retângulo interno e `BOARD_SHADE_OVERDRAW = 0`), eliminando a faixa clara entre o tabuleiro e o bisel; a sombra da mesa dos decks deixou de ser um `StyleBoxFlat` quadrado e passou a usar a silhueta alfa real da placa (`_make_drop_shadow`, offset 1,2 px e 0,26 de força).
+- **Seta dourada de voltar:** o chevron pixel-art desenhado em código foi substituído pela arte `assets/ui/kit/v2/icon_back.png`, recortada na região visível (235,105,725,1045 de 1254x1254) e filtrada com linear + mipmaps.
+- **Barra de volume sem “−”/“+":** a linha de volume usa só a arte `Bar_adjust.png` com o handle `Regulagem_botton.png`; arrastar ou clicar na canaleta define o volume e o ícone de som continua alternando mudo/último volume. O handle percorre **apenas a cova interna** (x 218–651 da arte de 841 px, ou 0,2592–0,7741 da largura): em 0 a borda esquerda encosta no fim esquerdo e em 100 a borda direita no fim direito; cliques no “−”/“+” saturam em 0/1 e um snap de 2% absorve o arredondamento float32.
+- **Ícone do app:** `res://icon.png` como ícone do projeto e `res://icon.ico` multi-tamanho (16, 24, 32, 48, 64, 128 e 256) no preset Windows (`application/config/icon`, `application/config/windows_native_icon` e `export_presets.cfg` → `application/icon`).
+- **Assets de personagem:** `assets/ui/heroes/hero_rhino.png` e `assets/cards/card_rhino.png` foram atualizados, assim como as artes de derrota de coelha, gato e sacer; o archer continua como fallback.
+
+### Áudio
+- **Música contínua e aleatória:** o menu toca *Beyond the Walls*; campanha e Endless usam **6 faixas** (*Castle Eudora* + Magikal Dreamers, Dinasty Oro, Honor and Glory, Welcome my friends, The great journey) num **shuffle bag** (cada faixa uma vez por rodada, nunca a mesma duas vezes seguidas), com sacola e última faixa salvas entre sessões. A música **não reinicia** ao vencer, ir ao próximo Level, tentar de novo, perder ou passar de rodada no Endless: só muda quando a faixa termina ou na troca menu ↔ jogo (crossfade de 0,8 s). A cadeia de faixas pertence ao autoload `AudioManager` e sobrevive às trocas de cena. O volume segue por `Game.volume_changed` (timer de 0,25 s como fallback), sem polling por frame.
+
+### Ferramentas e qualidade
+- Novos utilitários desta rodada: `tests/probe_menu_frame_time.gd` (números do parallax), `tests/qa_volume_capture.gd` (capturas 2x da barra de volume em 0 e 100), `tests/test_volume_row.gd` (mapeamento valor↔x da canaleta) e `tests/smoke_music_rotation.gd` (rotação e persistência).
+- `tests/test_window_sizing.gd` cobre `Game.fit_window`; `tests/test_asset_references.gd` continua validando as referências de assets.
+
+### Expressões dos heróis
+- **Todos os heróis mudam de expressão** conforme o humor (antes só a coelha do L8): *pensando* (parado), *sequência* (combos), *escolha ruim* (avisos) e *derrota*. 14 conjuntos vindos do board de arte em `assets/ui/heroes/expressions/<herói>/` (12 jogáveis + baleia e pato prontos); tabela `HeroRoster.EXPRESSIONS`. Cada expressão é ajustada pelo recorte alfa à altura e à linha dos pés do retrato-base, então o personagem não pula nem muda de tamanho. O rig animado da coelha continua no idle.
+- **Correção:** o mascote recusava `cat_mage`, `rhino` e `sacer`, então os Levels 12–15 mostravam o lobo do menu.
+- Card juice estilo Balatro: ver a seção do topo.
+
 ## UI em alta resolução, layout responsivo e limpeza de assets — 2026-11-02
 
 ### Jogo

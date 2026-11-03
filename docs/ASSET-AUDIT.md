@@ -171,3 +171,46 @@ Validation after removal:
 - New suite `tests/test_asset_references.gd` (4 tests, 0 failed) checks every concrete `res://assets/...` literal in `scripts/**/*.gd` and `scenes/**/*.tscn` with `ResourceLoader.exists()`, plus the dynamic card/hero/star/power families. It was run standalone and is **not** registered in `tests/run_tests.gd`.
 - `Godot_v4.7-stable_win64_console.exe --path E:/Cartitas --headless --import` completed with no missing asset dependency errors. The only error line is the pre-existing addon loader message `No loader found for resource: res://addons/godot_mcp/Editor/GodotMcpPlugin.cs`, unrelated to the assets.
 - `docs/ART-GUIDE-EN.md`, `docs/ART-GUIDE-PT.md` and `docs/spec.md` were updated to point at the v2 art and to mark the removed files.
+
+## Rodada 2 — candidatos (2026-11-02)
+
+Auditoria de leitura nesta rodada: **nada foi apagado**. Corpus: `scripts/**/*.gd`,
+`scenes/**/*.tscn`, `tests/**/*.gd`, `project.godot` e `export_presets.cfg`; famílias
+dinâmicas (`card_%s`, `hero_%s`, `level_%02d`, `stars_%d`, `icon_power_%s`,
+`victory_stars_%d`) foram tratadas como usadas.
+
+### Novos órfãos desta rodada
+
+| Path | Size | Evidência de uso (antes) | Evidência de órfão (agora) |
+| --- | ---: | --- | --- |
+| `assets/ui/kit/icon_minus.png` | 160 B | `HEAD:scripts/ui/volume_row.gd:35` — o botão `VolumeDown` usava `icon_minus` | 0 ocorrências em `scripts/`, `tests/` e `scenes/`; a barra de volume perdeu os botões “−”/“+” nesta rodada (`scripts/ui/volume_row.gd:54-57` agora só cria o slider e o mute) |
+| `assets/ui/kit/icon_plus.png` | 251 B | `HEAD:scripts/ui/volume_row.gd:37` — o botão `VolumeUp` usava `icon_plus` | 0 ocorrências em `scripts/`, `tests/` e `scenes/`; idem acima |
+
+Sidecars: `icon_minus.png.import` (947 B) e `icon_plus.png.import` (944 B) acompanham os PNGs.
+Total recuperável nesta rodada: **411 B** (PNGs) + 1,9 KB de `.import` (os `.import` são
+regenerados, não contam como asset).
+
+### Verificados e mantidos (não são órfãos)
+
+- `assets/ui/background_menu.png` — ainda carregado pelas telas **Options/Help**: `scripts/ui/main_menu.gd:200` (`make_background(_landscape())`) e `UiHelpers.background_path` (`scripts/ui/ui_helpers.gd:529-530`). O menu principal em si usa `menu_backgrounds/`, mas o fundo antigo continua sendo a base das outras telas. **Não remover.**
+- `assets/ui/background_portrait.png` e `assets/ui/background.png` — Levels 1–3 (via `background_path`, `ui_helpers.gd:550`, chamado em `level_screen.gd:402`).
+- `assets/ui/kit/v2/panel_menu_board.png` — placa do menu (`main_menu.gd:38,47`).
+- `assets/ui/kit/v2/Layer 1.png`, `Layer 2.png`, `Layer 3.png` — placas EN do fim de fase/menu (`level_screen.gd:89-91`, `main_menu.gd:23`).
+- `assets/ui/hud/icon_stopwatch.png` — continua dentro da nova prancha do relógio (`level_screen.gd:835`).
+- `assets/ui/kit/icon_accept.png` — fallback do handle do volume (`volume_row.gd:111`).
+- `assets/ui/kit/panel_powers.png` — fallback do painel de poderes (`level_screen.gd:1008`).
+- `assets/ui/kit/pill.png` — usado por `kit_texture("pill")` (`level_screen.gd:799,843`, `main_menu.gd:577`).
+- `assets/ui/kit/panel_reserve.png` — usado por `UiHelpers.kit_stylebox` e pela linha de volume.
+- `assets/ui/background_castle.png` / `_portrait` — fallback de L8+ (já em DYNAMIC/UNSURE).
+- `assets/ui/kit/v2/menu_.png` — **pré-existente**: já em `HEAD` só aparecia na lista de assets do `tests/smoke_main_menu.gd:21` (0 referências em produção). Não foi esta rodada que o tornou órfão; fica como candidato de uma limpeza separada (1,1 MB).
+
+### Lista de fases antiga (in-menu) e chevron
+
+- O antigo seletor de fases dentro do menu (`Screen.LEVELS` → `_build_levels`) ficou **inalcançável**: `_on_play` agora abre `res://scenes/level_select.tscn` (`main_menu.gd:1077-1082`) e nenhum caminho atribui `_screen = Screen.LEVELS`. Essa tela não tinha arte exclusiva: as placas vêm de `_apply_plate_style` → `panel_reserve` (compartilhado) e `_make_window` pede `panel_board`/`panel_board_portrait`, que **não existem no disco** (`assets/ui/kit/` não tem esses arquivos). Portanto não há asset a remover por causa da lista antiga.
+- O chevron pixel-art do voltar era **desenhado em código** (`_chevron_texture`, `HEAD:scripts/ui/level_screen.gd`) e foi substituído pela arte `assets/ui/kit/v2/icon_back.png` (`level_screen.gd:71-72,627-636`); não existia arquivo de chevron para remover.
+
+### Conclusão da rodada
+
+- Candidatos seguros para uma limpeza futura: **`icon_minus.png` + `icon_plus.png`** (411 B).
+- Nenhum outro asset ficou órfão por causa do mapa, da rotação de fundos, da vitória/derrota, da prancha do relógio, da seta dourada, do ícone do app ou da rotação de músicas.
+- Não apagar nada até a verificação do orquestrador.

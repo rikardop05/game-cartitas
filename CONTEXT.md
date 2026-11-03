@@ -72,7 +72,7 @@ The full-body painted image that represents a Hero (`assets/ui/heroes/hero_<id>.
 _Avoid_: Mascot sprite, avatar
 
 **Hero Expression**:
-An alternate Hero Portrait used only by the Level 8 bunny, chosen by mood: thinking (idle), sequence (happy), bad choice (worried), defeat (sad). Other heroes keep one portrait and vary by tint and vertical offset.
+An alternate Hero Portrait chosen by mood: thinking (idle), sequence (happy), bad choice (worried), defeat (sad). Every hero with a delivered set swaps frames — cat, wolf_ranger, boar, mouse, owl, frog, knight, bunny, wolf_knight, cat_mage, rhino, sacer (whale and duck sets are ready but no Level uses them yet). The bunny keeps its idle rig while the mood is IDLE; only the menu_wolf fallback keeps one portrait and varies by tint. Frames are normalised by their alpha bounds to the base portrait's height and foot line.
 _Avoid_: Frame (ambiguous with animation frames)
 
 **Logo**:
