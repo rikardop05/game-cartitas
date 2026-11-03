@@ -9,7 +9,8 @@ extends RefCounted
 # Mirrors the art paths / margins of scripts/ui/level_screen.gd (it cannot be preloaded in a
 # headless test: it needs the Game autoload). Keep in sync when a HUD panel changes.
 const ZONE_BAR_ART := "res://assets/ui/kit/v2/bar_zone.png"
-const ZONE_BAR_MARGINS := Rect2(0.08, 0.10, 0.08, 0.10)
+const ZONE_BAR_MARGINS_LANDSCAPE := Rect2(0.055, 0.10, 0.055, 0.10)
+const ZONE_BAR_MARGINS_PORTRAIT := Rect2(0.08, 0.10, 0.08, 0.10)
 const RESERVE_FIELD_ART := "res://assets/ui/kit/panel_reserve_field.png"
 const RESERVE_FIELD_MARGINS := Rect2(0.07, 0.11, 0.07, 0.11)
 const POWERS_BOARD_ART := "res://assets/ui/kit/panel_powers_board.png"
@@ -36,8 +37,9 @@ func _panels(layout_size: Vector2) -> Array:
 	var reserve: Rect2 = rects["reserve"]
 	var powers: Rect2 = rects["powers"]
 	var board: Rect2 = rects["board_frame"]
+	var zone_margins: Rect2 = ZONE_BAR_MARGINS_LANDSCAPE if landscape else ZONE_BAR_MARGINS_PORTRAIT
 	return [
-		["zone", UiHelpers.trimmed_nine_patch(UiHelpers.hires_texture(ZONE_BAR_ART), zone.size, ZONE_BAR_MARGINS, "zone_bar", true), zone.size],
+		["zone", UiHelpers.trimmed_nine_patch(UiHelpers.hires_texture(ZONE_BAR_ART), zone.size, zone_margins, "zone_bar", true), zone.size],
 		["reserve", UiHelpers.trimmed_nine_patch(UiHelpers.hires_texture(RESERVE_FIELD_ART), reserve.size, RESERVE_FIELD_MARGINS, "", true), reserve.size],
 		["powers", UiHelpers.trimmed_nine_patch(powers_art, powers.size, powers_margins), powers.size],
 		["board_frame", UiHelpers.alpha_nine_patch(UiHelpers.hires_texture(frame_path), board.size, BOARD_FRAME_BORDER_MAX), board.size],

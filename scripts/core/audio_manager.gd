@@ -13,6 +13,11 @@ extends Node
 #   Audio.play_menu(self)     # crossfade to the menu track
 #   Audio.play_gameplay(self) # start gameplay music only when entering from the menu
 #   Audio.release(self)       # retained as a no-op for existing scene exit hooks
+#
+# Consecutive gameplay tracks overlap: a few seconds before the current one ends, the next
+# shuffle-bag track starts on the idle player and the two crossfade (TRACK_CROSSFADE_SECONDS),
+# so the rotation never stops or goes silent between tracks. Menu<->game changes use the same
+# equal-power curve (crossfade_gains) over FADE_SECONDS.
 
 signal track_changed(path: String)
 
@@ -58,6 +63,13 @@ const UI_CLICK_DB := 2.0
 const UI_SETTING_DB := 2.0
 
 const FADE_SECONDS := 0.8
+# Overlap between two consecutive gameplay tracks: the next track starts this many seconds
+# before the current one ends and the two crossfade, so the rotation never goes silent. Tweak
+# here. Short tracks get a shorter overlap (see crossfade_window).
+const TRACK_CROSSFADE_SECONDS := 4.0
+# How often the playback head of the active gameplay track is read, to start the overlap in
+# time. The audio players are not in the Level scene, so this autoload has to watch them.
+const TRACK_POLL_SECONDS := 0.2
 # Safety poll for volume/mute changes that bypass Game.set_volume (a test or tool that
 # writes settings["volume"] directly). Normal changes arrive through volume_changed.
 const VOLUME_POLL_SECONDS := 0.25
@@ -82,12 +94,15 @@ var _fade: Tween
 var _game: Node
 var _last_bus_db := INF
 var _volume_timer: Timer
+var _track_timer: Timer
 var _active_track_path := ""
 var _music_bag: Array[String] = []
 var _last_gameplay_track := ""
 var _music_rng := RandomNumberGenerator.new()
 # True from the menu->game transition until the game->menu transition.
 var _gameplay_active := false
+# Set while a gameplay track overlap is running, so one track only ever starts one successor.
+var _track_crossfaded := false
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -113,6 +128,7 @@ func _ready() -> void:
 		_sfx_players.append(sfx)
 	_sync_volume()
 	_bind_volume()
+	_bind_track_watch()
 	_restore_music_state()
 
 # Volume/mute is event driven: Game.volume_changed applies the slider/HUD changes at once.
@@ -137,6 +153,63 @@ func _bind_volume() -> void:
 func _on_volume_changed(_volume: float, _enabled: bool) -> void:
 	_sync_volume()
 
+# The playback head is only readable from the stream, so a light timer (5 Hz, same process mode
+# as the players) watches the active gameplay track and starts the overlap before it ends.
+func _bind_track_watch() -> void:
+	if _track_timer != null:
+		return
+	_track_timer = Timer.new()
+	_track_timer.name = "TrackPoll"
+	_track_timer.wait_time = TRACK_POLL_SECONDS
+	_track_timer.one_shot = false
+	_track_timer.autostart = true
+	_track_timer.process_mode = Node.PROCESS_MODE_ALWAYS
+	_track_timer.timeout.connect(_watch_track_end)
+	add_child(_track_timer)
+
+# Starts the next gameplay track TRACK_CROSSFADE_SECONDS before this one ends, so the two
+# overlap instead of leaving a gap.
+func _watch_track_end() -> void:
+	if _track_crossfaded or not _gameplay_active or not GAMEPLAY_TRACKS.has(_active_track_path):
+		return
+	var player := active_music_player()
+	if player == null or player.stream == null or not player.playing:
+		return
+	var length := player.stream.get_length()
+	var remaining := length - player.get_playback_position()
+	if remaining <= 0.0 or remaining > crossfade_window(length):
+		return
+	_start_track_crossfade(remaining)
+
+# Overlaps `remaining` seconds: the idle player gets the next bag track and fades in while the
+# current one fades out. `_active` moves to the new player right away, so the outgoing player's
+# `finished` signal (it still runs, silently, to its end) is ignored by _on_music_finished.
+func _start_track_crossfade(remaining: float) -> void:
+	if _players.size() < 2:
+		return
+	var old_index := _active
+	var next_index := 1 - old_index if old_index >= 0 else 0
+	if old_index < 0 or next_index == old_index:
+		return
+	var next_path := _next_gameplay_track()
+	var stream := _load_stream(next_path)
+	if stream == null:
+		return
+	_track_crossfaded = true
+	var incoming := _players[next_index]
+	var outgoing := _players[old_index]
+	incoming.stream = stream
+	incoming.volume_db = SILENT_DB
+	incoming.play()
+	_active = next_index
+	_active_track_path = next_path
+	_run_crossfade(incoming, outgoing, remaining, _on_track_crossfade_done)
+	track_changed.emit(next_path)
+
+# The old track has reached (or passed) its end: re-arm the watch for the track now playing.
+func _on_track_crossfade_done() -> void:
+	_track_crossfaded = false
+
 # Release the cached streams with the scene tree, so a clean quit leaves no resource in use.
 func _exit_tree() -> void:
 	if _game != null and is_instance_valid(_game) and _game.has_signal("volume_changed"):
@@ -145,6 +218,8 @@ func _exit_tree() -> void:
 			_game.disconnect("volume_changed", handler)
 	if _volume_timer != null and is_instance_valid(_volume_timer):
 		_volume_timer.stop()
+	if _track_timer != null and is_instance_valid(_track_timer):
+		_track_timer.stop()
 	_kill_fade()
 	for player in _players + _sfx_players:
 		if is_instance_valid(player):
@@ -189,6 +264,14 @@ static func build_shuffle_bag(track_paths: Array[String], seed_value: int, previ
 		bag[0] = bag[swap_index]
 		bag[swap_index] = temporary
 	return bag
+
+# Overlap of two consecutive gameplay tracks, in seconds. Pure, so the headless suite can check
+# the clamp without an audio device: the wanted overlap, but never more than a third of the
+# track, so a short track still plays a third at full level on each side.
+static func crossfade_window(length: float, wanted: float = TRACK_CROSSFADE_SECONDS) -> float:
+	if length <= 0.0 or wanted <= 0.0:
+		return 0.0
+	return minf(wanted, length / 3.0)
 
 func _active_player_is_playing() -> bool:
 	return _active >= 0 and _active < _players.size() and _players[_active].playing
@@ -324,6 +407,17 @@ static func stream_loops(stream: AudioStream) -> bool:
 static func sfx_output_gain_db(base_gain_db: float) -> float:
 	return base_gain_db + linear_to_db(SFX_VOLUME_SCALE)
 
+# Equal-power overlap law, pure so the headless suite can check the curve: at `t` 0..1 the
+# incoming gain rises along a sine while the outgoing falls along the cosine, so the two tracks
+# keep a constant total loudness (in^2 + out^2 = 1) and the middle of a fade never dips. The
+# `_from` arguments let a fade start from the levels a track already has (a re-entering screen),
+# which is a plain lerp and therefore never jumps.
+static func crossfade_gains(t: float, in_from: float = 0.0, out_from: float = 1.0) -> Vector2:
+	var clamped := clampf(t, 0.0, 1.0)
+	return Vector2(
+		lerpf(clampf(in_from, 0.0, 1.0), 1.0, sin(clamped * PI * 0.5)),
+		clampf(out_from, 0.0, 1.0) * cos(clamped * PI * 0.5))
+
 # --- Internals -------------------------------------------------------------------------
 
 func _play(path: String) -> void:
@@ -343,18 +437,13 @@ func _play(path: String) -> void:
 	var next := 1 - old if old >= 0 else 0
 	_active = next
 	_active_track_path = path
-	_kill_fade()
+	_track_crossfaded = false
 	var player := _players[next]
 	player.stream = stream
 	player.volume_db = SILENT_DB
 	player.play()
-	_fade = create_tween()
-	_fade.set_parallel(true)
-	_fade.tween_property(player, "volume_db", TRACK_PEAK_DB, FADE_SECONDS)
-	if old >= 0 and old != next:
-		var fading := _players[old]
-		_fade.tween_property(fading, "volume_db", SILENT_DB, FADE_SECONDS)
-		_fade.chain().tween_callback(fading.stop)
+	var fading: AudioStreamPlayer = _players[old] if old >= 0 and old != next else null
+	_run_crossfade(player, fading, FADE_SECONDS)
 	track_changed.emit(path)
 
 # Plays one short effect on the next SFX voice; the SFX bus carries the player's volume/mute.
@@ -373,15 +462,65 @@ func _play_sfx(path: String, volume_db: float) -> void:
 # Brings `player` back to full music level and fades out any other track that was still
 # audible (a crossfade interrupted by the player coming back to the previous screen).
 func _fade_in(player: AudioStreamPlayer) -> void:
-	_kill_fade()
-	_fade = create_tween()
-	_fade.set_parallel(true)
-	_fade.tween_property(player, "volume_db", TRACK_PEAK_DB, FADE_SECONDS)
+	_track_crossfaded = false
+	var outgoing: AudioStreamPlayer = null
 	for other in _players:
 		if other == player or not other.playing:
 			continue
-		_fade.tween_property(other, "volume_db", SILENT_DB, FADE_SECONDS)
-		_fade.chain().tween_callback(other.stop)
+		if outgoing == null:
+			outgoing = other
+		else:
+			other.stop()   # only two music players exist today; keep any extra silent
+	_run_crossfade(player, outgoing, FADE_SECONDS)
+
+# One fade for every music change (menu<->game and gameplay track overlaps): the incoming rises
+# along the equal-power curve from the level it already has, the outgoing falls to silence and is
+# stopped when the fade ends. `on_done` runs afterwards (the track watch re-arms itself there).
+func _run_crossfade(incoming: AudioStreamPlayer, outgoing: AudioStreamPlayer, seconds: float,
+		on_done := Callable()) -> void:
+	var in_from := _track_gain(incoming)
+	var out_from := _track_gain(outgoing)
+	_kill_fade()
+	if seconds <= 0.0:
+		if is_instance_valid(incoming):
+			_set_track_gain(incoming, 1.0)
+		if is_instance_valid(outgoing):
+			outgoing.stop()
+		if on_done.is_valid():
+			on_done.call()
+		return
+	_fade = create_tween()
+	_fade.set_parallel(true)
+	_fade.tween_method(_apply_crossfade.bind(incoming, outgoing, in_from, out_from), 0.0, 1.0, seconds)
+	if is_instance_valid(outgoing) or on_done.is_valid():
+		_fade.chain().tween_callback(_finish_crossfade.bind(outgoing, on_done))
+
+# One step of a fade: pure gains -> dB relative to TRACK_PEAK_DB (never above the mix headroom).
+func _apply_crossfade(t: float, incoming: AudioStreamPlayer, outgoing: AudioStreamPlayer,
+		in_from := 0.0, out_from := 1.0) -> void:
+	var gains := crossfade_gains(t, in_from, out_from)
+	_set_track_gain(incoming, gains.x)
+	_set_track_gain(outgoing, gains.y)
+
+# Linear gain of a player relative to TRACK_PEAK_DB, so a fade can start where the track is now.
+func _track_gain(player: AudioStreamPlayer) -> float:
+	if not is_instance_valid(player):
+		return 0.0
+	return clampf(db_to_linear(player.volume_db - TRACK_PEAK_DB), 0.0, 1.0)
+
+func _set_track_gain(player: AudioStreamPlayer, gain: float) -> void:
+	if not is_instance_valid(player):
+		return
+	if gain <= 0.0005:
+		player.volume_db = SILENT_DB
+		return
+	player.volume_db = maxf(SILENT_DB, linear_to_db(gain) + TRACK_PEAK_DB)
+
+func _finish_crossfade(outgoing: AudioStreamPlayer, on_done: Callable) -> void:
+	if is_instance_valid(outgoing):
+		outgoing.stop()
+	if on_done.is_valid():
+		on_done.call()
 
 func _kill_fade() -> void:
 	if _fade != null and _fade.is_valid():

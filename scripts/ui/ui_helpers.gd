@@ -564,6 +564,20 @@ static func nine_patch_rect(data: Dictionary, size: Vector2) -> NinePatchRect:
 		})
 	return art
 
+# A square action badge uses the same alpha-trimmed, oversampled 9-slice pipeline as
+# the painted panels. The broad hit target can remain rectangular while this badge
+# keeps its source proportions and samples mipmapped high-resolution art sharply.
+static func oversampled_badge(texture: Texture2D, size: Vector2, cache_key: String = "") -> NinePatchRect:
+	if texture == null or size.x <= 0.0 or size.y <= 0.0:
+		return null
+	var key := cache_key
+	if key.is_empty():
+		key = "badge:%s" % (texture.resource_path if not texture.resource_path.is_empty() else str(texture.get_instance_id()))
+	var data := trimmed_nine_patch(texture, size, Rect2(0.36, 0.36, 0.36, 0.36), key, true)
+	if data.is_empty():
+		return null
+	return nine_patch_rect(data, size)
+
 static var _rotated_cache: Dictionary = {}
 
 # A painted picture rotated 90 degrees and cached (used to lay the tall powers

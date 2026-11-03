@@ -148,3 +148,59 @@ func test_gameplay_tracks_end_so_the_rotation_can_advance() -> void:
 		var stream := load(path) as AudioStream
 		Assert.is_true(stream != null, "%s loads" % path)
 		Assert.is_false(AudioManager.stream_loops(stream), "%s plays once so the rotation advances on finished" % path)
+
+# Phase P: consecutive gameplay tracks overlap instead of leaving a silent gap.
+func test_track_crossfade_window_is_bounded_by_a_third_of_the_track() -> void:
+	Assert.is_true(AudioManager.TRACK_CROSSFADE_SECONDS >= 2.0,
+		"the gameplay overlap is long enough to be heard (%.1f s)" % AudioManager.TRACK_CROSSFADE_SECONDS)
+	Assert.is_true(AudioManager.TRACK_CROSSFADE_SECONDS > AudioManager.FADE_SECONDS,
+		"the track overlap is longer than a menu/game crossfade")
+	Assert.is_true(AudioManager.crossfade_window(120.0) == AudioManager.TRACK_CROSSFADE_SECONDS,
+		"a full-length track gets the whole overlap")
+	Assert.is_true(absf(AudioManager.crossfade_window(6.0) - 2.0) < 0.001,
+		"a 6 s track is overlapped for a third of its length (got %.3f)" % AudioManager.crossfade_window(6.0))
+	Assert.is_true(absf(AudioManager.crossfade_window(9.0) - 3.0) < 0.001, "a 9 s track overlaps for 3 s")
+	Assert.is_true(AudioManager.crossfade_window(0.0) == 0.0, "an empty stream has no overlap")
+	Assert.is_true(AudioManager.crossfade_window(-4.0) == 0.0, "a negative length has no overlap")
+	Assert.is_true(AudioManager.crossfade_window(120.0, 0.0) == 0.0, "an overlap of 0 is respected")
+
+# Phase P2: every music fade (menu<->game and gameplay overlaps) uses one equal-power curve.
+func test_crossfade_gains_are_equal_power_and_never_dip() -> void:
+	var start := AudioManager.crossfade_gains(0.0)
+	Assert.is_true(start.x < 0.001, "the incoming track starts silent")
+	Assert.is_true(absf(start.y - 1.0) < 0.001, "the outgoing track starts at full level")
+	var end := AudioManager.crossfade_gains(1.0)
+	Assert.is_true(absf(end.x - 1.0) < 0.001, "the incoming track ends at full level")
+	Assert.is_true(end.y < 0.001, "the outgoing track ends silent")
+	var middle := AudioManager.crossfade_gains(0.5)
+	Assert.is_true(absf(middle.x - middle.y) < 0.001, "the middle of a fade is symmetric")
+	Assert.is_true(middle.x > 0.69 and middle.y > 0.69,
+		"both tracks stay clearly audible in the middle (%.2f / %.2f)" % [middle.x, middle.y])
+	var previous := -1.0
+	for step in 11:
+		var t := step / 10.0
+		var gains := AudioManager.crossfade_gains(t)
+		Assert.is_true(absf(gains.x * gains.x + gains.y * gains.y - 1.0) < 0.001,
+			"constant power at t=%.1f (no dip, %.3f)" % [t, gains.x * gains.x + gains.y * gains.y])
+		Assert.is_true(gains.x >= previous - 0.0001, "the incoming gain never goes backwards at t=%.1f" % t)
+		Assert.is_true(gains.x + gains.y >= 0.999, "the summed gain never sags inside the fade at t=%.1f" % t)
+		previous = gains.x
+	# A fade that interrupts another one must start from the levels the tracks already have.
+	var partial := AudioManager.crossfade_gains(0.0, 0.4, 0.6)
+	Assert.is_true(absf(partial.x - 0.4) < 0.001 and absf(partial.y - 0.6) < 0.001,
+		"an interrupted fade resumes from the current gains instead of jumping")
+	Assert.is_true(absf(AudioManager.crossfade_gains(2.0).x - 1.0) < 0.001, "t is clamped above 1")
+	Assert.is_true(AudioManager.crossfade_gains(-1.0).x < 0.001, "t is clamped below 0")
+
+func test_every_shipped_track_keeps_a_third_audible_before_the_overlap() -> void:
+	for path in AudioManager.GAMEPLAY_TRACKS:
+		var stream := load(path) as AudioStream
+		if stream == null:
+			continue
+		var length := stream.get_length()
+		var window := AudioManager.crossfade_window(length)
+		Assert.is_true(window > 0.0, "%s gets a real overlap (%.2f s)" % [path, window])
+		Assert.is_true(window <= length / 3.0 + 0.001,
+			"%s is never overlapped for more than a third (%.2f of %.2f s)" % [path, window, length])
+		Assert.is_true(length - window > window,
+			"%s plays more than half of itself alone (%.2f s)" % [path, length - window])

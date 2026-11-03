@@ -315,6 +315,10 @@ func _place_bubble() -> void:
 		global_target = Vector2(
 			global_position.x + size.x + BUBBLE_SIDE_GAP,
 			side_bubble_bounds.end.y - _bubble.size.y)  # bottom-aligned, next to the mascot's head
+		global_target.x = clampf(
+			global_target.x,
+			side_bubble_bounds.position.x,
+			maxf(side_bubble_bounds.position.x, side_bubble_bounds.end.x - _bubble.size.x))
 		global_target.y = clampf(global_target.y, side_bubble_bounds.position.y, maxf(side_bubble_bounds.position.y, side_bubble_bounds.end.y - _bubble.size.y))
 	else:
 		global_target = global_position + Vector2(size.x * 0.5 - BUBBLE_TAIL_INSET, -_bubble.size.y - BUBBLE_GAP)

@@ -107,6 +107,8 @@ func _scenarios(game) -> void:
 	if not await _settle(scene):
 		return
 	_check(scene.match_flashes == 1, "the match flashed exactly once (flashes %d)" % scene.match_flashes)
+	_check(is_equal_approx(float(scene.MATCH_FX_VISUAL_SCALE), 0.5),
+		"the blue burst and smoke use the intended half-size match-FX scale")
 	_check_zone_clean(scene, [x_type], "after the rapid match")
 	if not _failures.is_empty():
 		return
