@@ -1,16 +1,17 @@
 extends SceneTree
 
-# Hero mascot smoke: phase portraits, L8 bunny expression frames and neutral intro.
+# Hero mascot smoke: phase portraits, per-hero expression sets and neutral intro.
 # Drives the real level scene (autoloads available), using a throwaway save.
 
 const THROWAWAY_SAVE := "user://smoke_mascot_heroes_save.json"
 const CASES := [
-	{"level": "1", "hero": "cat", "bunny": false},
-	{"level": "6", "hero": "frog", "bunny": false},
-	{"level": "8", "hero": "bunny", "bunny": true},
-	{"level": "9", "hero": "wolf_knight", "bunny": false},
-	{"level": "10", "hero": "menu_wolf", "bunny": false},
-	{"level": "11", "hero": "menu_wolf", "bunny": false},
+	{"level": "1", "hero": "cat", "frames": ["thinking", "sequence", "bad_choice", "defeat"]},
+	{"level": "6", "hero": "frog", "frames": ["thinking", "sequence", "bad_choice", "defeat"]},
+	{"level": "8", "hero": "bunny", "frames": ["hero_bunny_thinking", "hero_bunny_sequence", "hero_bunny_bad_choice", "hero_bunny_defeat"]},
+	{"level": "9", "hero": "wolf_knight", "frames": ["thinking", "sequence", "bad_choice", "defeat"]},
+	{"level": "10", "hero": "menu_wolf", "frames": []},
+	{"level": "13", "hero": "rhino", "frames": ["thinking", "sequence", "bad_choice", "defeat"]},
+	{"level": "14", "hero": "sacer", "frames": ["thinking", "sequence", "bad_choice", "defeat"]},
 ]
 
 var _failures: Array[String] = []
@@ -70,33 +71,36 @@ func _check_case(case: Dictionary) -> void:
 		return
 	var tag := "L%s" % case["level"]
 	_check(mascot.character == case["hero"], "%s: hero %s (got %s)" % [tag, case["hero"], mascot.character])
-	if case["bunny"]:
-		_check(mascot.frame_id == "hero_bunny_thinking", "%s: idle is thinking (got %s)" % [tag, mascot.frame_id])
-		mascot.set_mood(1)
-		_check(mascot.frame_id == "hero_bunny_sequence", "%s: happy is sequence (got %s)" % [tag, mascot.frame_id])
-		mascot.set_mood(2)
-		_check(mascot.frame_id == "hero_bunny_bad_choice", "%s: worried is bad choice (got %s)" % [tag, mascot.frame_id])
-		mascot.set_mood(3)
-		_check(mascot.frame_id == "hero_bunny_defeat", "%s: sad is defeat (got %s)" % [tag, mascot.frame_id])
-		mascot.set_mood(0)
-		_check(mascot.frame_id == "hero_bunny_thinking", "%s: idle returns to thinking (got %s)" % [tag, mascot.frame_id])
-		# The gameplay events must select the same frames.
-		mascot.say("match")
-		_check(mascot.frame_id == "hero_bunny_sequence", "%s: match -> happy frame (got %s)" % [tag, mascot.frame_id])
-		mascot.say("zone_warning")
-		_check(mascot.frame_id == "hero_bunny_bad_choice", "%s: warning -> worried frame (got %s)" % [tag, mascot.frame_id])
-		mascot.say("power_used")
-		_check(mascot.frame_id == "hero_bunny_sequence", "%s: power -> happy frame (got %s)" % [tag, mascot.frame_id])
-		mascot.say("lose")
-		_check(mascot.frame_id == "hero_bunny_defeat", "%s: lose -> sad frame (got %s)" % [tag, mascot.frame_id])
-		mascot.say("win", {"stars": 3})
-		_check(mascot.frame_id == "hero_bunny_sequence", "%s: win -> happy frame (got %s)" % [tag, mascot.frame_id])
-		mascot.set_mood(0)
-	else:
+	var frames: Array = case["frames"]
+	if frames.is_empty():
+		# A hero without a set (the menu wolf fallback) keeps one portrait and the tint.
 		var expected := "hero_%s" % case["hero"]
 		_check(mascot.frame_id == expected, "%s: portrait %s (got %s)" % [tag, expected, mascot.frame_id])
-		mascot.set_mood(1)
-		_check(mascot.frame_id == expected, "%s: a common hero keeps its portrait on mood changes (got %s)" % [tag, mascot.frame_id])
+		mascot.set_mood(2)
+		_check(mascot.frame_id == expected, "%s: no set keeps the portrait on mood changes (got %s)" % [tag, mascot.frame_id])
+		_check(mascot.self_modulate != Color.WHITE, "%s: no set uses the worried tint" % tag)
+		mascot.set_mood(3)
+		_check(mascot.self_modulate != Color.WHITE, "%s: no set uses the sad tint" % tag)
+		mascot.set_mood(0)
+		_check(mascot.self_modulate == Color.WHITE, "%s: idle clears the tint" % tag)
+	else:
+		for m in 4:
+			mascot.set_mood(m)
+			_check(mascot.frame_id == frames[m], "%s: mood %d -> %s (got %s)" % [tag, m, frames[m], mascot.frame_id])
+			_check(mascot.self_modulate == Color.WHITE, "%s: mood %d expression has no tint" % [tag, m])
+		mascot.set_mood(0)
+		_check(mascot.frame_id == frames[0], "%s: idle returns to thinking (got %s)" % [tag, mascot.frame_id])
+		# The gameplay events must select the same frames.
+		mascot.say("match")
+		_check(mascot.frame_id == frames[1], "%s: match -> happy frame (got %s)" % [tag, mascot.frame_id])
+		mascot.say("zone_warning")
+		_check(mascot.frame_id == frames[2], "%s: warning -> worried frame (got %s)" % [tag, mascot.frame_id])
+		mascot.say("power_used")
+		_check(mascot.frame_id == frames[1], "%s: power -> happy frame (got %s)" % [tag, mascot.frame_id])
+		mascot.say("lose")
+		_check(mascot.frame_id == frames[3], "%s: lose -> sad frame (got %s)" % [tag, mascot.frame_id])
+		mascot.say("win", {"stars": 3})
+		_check(mascot.frame_id == frames[1], "%s: win -> happy frame (got %s)" % [tag, mascot.frame_id])
 		mascot.set_mood(0)
 	# The hero is intentionally larger than its placement box and overlaps the frame.
 	_check(mascot.size.x > 100.0 and mascot.size.y > 150.0,

@@ -2,8 +2,9 @@ class_name Mascot
 extends Control
 
 # A full-body hero portrait (assets/ui/heroes/) plus a speech bubble that floats
-# above or beside it. The portrait is fixed per Level / Endless round by hero_for(),
-# so the screens never have to choose one. The voice is always the neutral "hero"
+# above or beside it. The portrait is fixed per Level / Endless round by hero_for().
+# Heroes with a delivered expression set (HeroRoster.EXPRESSIONS) swap the frame by mood;
+# the others keep one portrait and vary by tint. The voice is always the neutral "hero"
 # line family, so the same lines fit every portrait. Everything ignores the mouse so
 # it never steals taps.
 #
@@ -20,9 +21,8 @@ const HEROES := HeroRoster.HEROES
 const FALLBACK_HERO := HeroRoster.FALLBACK_HERO
 const DEFAULT_CHARACTER := HeroRoster.DEFAULT_HERO
 const HERO_DIR := HeroRoster.HERO_DIR
-const BUNNY_LEVEL := HeroRoster.BUNNY_LEVEL
 # Rigged idle for the bunny (L8 and the Endless rounds that draw her): a 2D
-# skeleton scene played over the portrait, hidden while an expression frame runs.
+# skeleton scene played over the portrait while the mood is IDLE.
 const RIG_CHARACTER := "bunny"
 const RIG_SCENE := "res://assets/ui/heroes/bunny_rig/bunny_rig.tscn"
 const INK := Color("#3a2410")
@@ -67,22 +67,29 @@ var free_bounds := Rect2()
 # campaign-only tip about stars is never shown there.
 var idle_event := "idle_tip"
 var mood: Mood = Mood.IDLE
-# Hero id ("cat", "wolf_ranger", ...): only the portrait changes, the voice stays neutral.
+# Hero id ("cat", "wolf_ranger", ...): changes the portrait and the expression set; the
+# voice stays neutral.
 var character := DEFAULT_CHARACTER:
 	set(value):
 		var id := str(value)
-		character = id if (HEROES.has(id) or id == FALLBACK_HERO) else DEFAULT_CHARACTER
+		character = id if HeroRoster.is_known_hero(id) else DEFAULT_CHARACTER
 		if _texture_ready:
 			_load_texture()
 		queue_redraw()
 
 var _rng := RandomNumberGenerator.new()
 var _level_id := ""
-var _endless := false
-# File stem of the portrait currently drawn ("hero_bunny_sequence", ...), for checks.
+# File stem of the portrait/frame currently drawn ("thinking", "hero_bunny_sequence",
+# "hero_menu_wolf", ...), for checks.
 var frame_id := ""
 var _texture_ready := false
+# Base portrait: the framing reference and the art for heroes without an expression set.
 var _texture: Texture2D
+var _base_frame_id := ""
+# Frame for the current mood when the hero has a delivered set (null otherwise).
+var _expression_texture: Texture2D
+var _expression_path := ""
+var _expression_bounds := Rect2i()
 var _rig: Node2D
 var _rig_active := false
 var _bubble_root: Control
@@ -102,14 +109,6 @@ var _mood_left := 0.0
 static func hero_for(level_id: String, endless_round: int = 0) -> String:
 	return HeroRoster.hero_for(level_id, endless_round)
 
-# Compatibility alias for older call sites.
-static func character_for(level_id: String, endless_round: int = 0) -> String:
-	return HeroRoster.hero_for(level_id, endless_round)
-
-# L8 bunny swaps the portrait itself; the other heroes keep one portrait + tint/dip.
-static func bunny_expression_for(mood: Mood) -> String:
-	return HeroRoster.bunny_expression_for(int(mood))
-
 func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	custom_minimum_size = BASE_SIZE
@@ -119,7 +118,6 @@ func _init() -> void:
 	# The session-wide picker keeps the no-repeat memory across Mascot instances.
 	lines = Game.mascot_lines()
 	_level_id = Game.current_level_id
-	_endless = Game.endless_run != null
 	var endless_round := 0
 	if Game.endless_run != null:
 		endless_round = Game.endless_run.current_round
@@ -221,14 +219,12 @@ func _apply_event_mood(event: String) -> void:
 func _arm_tip_timer() -> void:
 	_tip_in = _rng.randf_range(TIP_DELAY.x, TIP_DELAY.y)
 
-func _is_bunny_level8() -> bool:
-	return not _endless and character == "bunny" and str(_level_id).to_int() == BUNNY_LEVEL
-
 func _apply_mood_look() -> void:
-	if _is_bunny_level8():
-		# The L8 expression frames carry the mood; the character itself stays still.
+	if HeroRoster.has_expressions(character):
+		# The delivered expression frames carry the mood; no tint over the art.
 		self_modulate = Color.WHITE
-		_load_texture()
+		_refresh_expression()
+		_sync_rig()
 		queue_redraw()
 		return
 	match mood:
@@ -364,6 +360,9 @@ func _draw() -> void:
 	draw_colored_polygon(shadow, Color(0, 0, 0, 0.22))
 	if _rig_active:
 		return
+	if _expression_texture != null:
+		draw_texture_rect(_expression_texture, _expression_rect(_expression_texture), false)
+		return
 	var rect := _sprite_rect()
 	if _texture != null:
 		draw_texture_rect(_texture, rect, false)
@@ -372,36 +371,71 @@ func _draw() -> void:
 
 # Bottom-centre, aspect preserved: the art is never squashed, whatever the control size.
 func _sprite_rect() -> Rect2:
-	var source := Vector2(3.0, 4.0) if _texture == null else _texture.get_size()
+	return _fit_rect(_texture.get_size() if _texture != null else Vector2(3.0, 4.0))
+
+func _fit_rect(source: Vector2) -> Rect2:
 	var k := minf(size.x / source.x, size.y / source.y)
 	var drawn := source * k
 	return Rect2(Vector2((size.x - drawn.x) * 0.5, size.y - drawn.y), drawn)
 
+# Places an expression frame so its VISIBLE box (alpha bounds) matches the base portrait's
+# drawn box: same height and foot line, centred. Base portraits have no transparent margin,
+# so their visible box is _sprite_rect().
+func _expression_rect(texture: Texture2D) -> Rect2:
+	var base_rect := _sprite_rect()
+	var visible := _expression_bounds
+	if visible.size.x <= 0 or visible.size.y <= 0:
+		return _fit_rect(texture.get_size())
+	var k := base_rect.size.y / float(visible.size.y)
+	var target := Vector2(
+		base_rect.get_center().x - visible.size.x * k * 0.5,
+		base_rect.end.y - visible.size.y * k)
+	var origin := target - Vector2(visible.position) * k
+	return Rect2(origin, texture.get_size() * k)
+
 func _load_texture() -> void:
-	# L8 bunny swaps the frame by mood; every other hero keeps one portrait. Missing
-	# art falls back to the menu wolf and then to any delivered hero, never blank.
-	var order: Array = []
-	if _is_bunny_level8():
-		order.append(bunny_expression_for(mood))
-	order.append("hero_%s" % character)
-	order.append("hero_%s" % FALLBACK_HERO)
+	# The base portrait is the framing reference and the art for heroes without a set.
+	# Missing art falls back to the menu wolf and then to any delivered hero, never blank.
+	var order: Array = ["hero_%s" % character, "hero_%s" % FALLBACK_HERO]
 	for id in HEROES:
 		order.append("hero_%s" % id)
 	_texture = null
-	frame_id = ""
+	_base_frame_id = ""
 	for name in order:
 		var texture := UiHelpers.hires_texture(HERO_DIR % name)
 		if texture != null:
 			_texture = texture
-			frame_id = name
+			_base_frame_id = name
 			break
+	frame_id = _base_frame_id
+	_refresh_expression()
 	queue_redraw()
 	_sync_rig()
 
-# The bunny idle rig replaces the still portrait whenever no expression frame is
-# showing (L8 idle and the Endless rounds). Expressions keep the painted frames.
+# Loads the frame for the current mood when the hero has a delivered set. The base portrait
+# stays loaded as the framing reference (and as the fallback if a frame file is missing).
+func _refresh_expression() -> void:
+	_expression_texture = null
+	_expression_path = ""
+	_expression_bounds = Rect2i()
+	frame_id = _base_frame_id
+	if _texture == null:
+		return
+	var path := HeroRoster.expression_for(character, int(mood))
+	if path.is_empty():
+		return
+	var texture := UiHelpers.hires_texture(path)
+	if texture == null:
+		return
+	_expression_texture = texture
+	_expression_path = path
+	_expression_bounds = HeroRoster.expression_bounds(character, int(mood))
+	frame_id = path.get_file().get_basename()
+
+# The bunny idle rig replaces the still portrait only while the mood is IDLE; any
+# expression frame (or the tint of a hero without a set) keeps the painted portrait.
 func _rig_wanted() -> bool:
-	return character == RIG_CHARACTER and not (_is_bunny_level8() and mood != Mood.IDLE)
+	return character == RIG_CHARACTER and mood == Mood.IDLE
 
 func _sync_rig() -> void:
 	var want := _rig_wanted() and _texture != null and ResourceLoader.exists(RIG_SCENE)

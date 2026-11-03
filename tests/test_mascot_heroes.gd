@@ -1,6 +1,6 @@
 extends RefCounted
 
-# Phase map, delivered portraits and L8 expression frames for the hero mascot.
+# Phase map, delivered portraits and per-hero expression sets for the hero mascot.
 # Uses the data-only HeroRoster so it compiles in the headless runner (no Game).
 
 const CAMPAIGN := {
@@ -24,6 +24,9 @@ const HEROES := ["cat", "wolf_ranger", "boar", "mouse", "owl", "frog", "knight",
 # Portraits used only by the new campaign Levels (not part of the Endless 9-hero rotation).
 const NEW_PORTRAITS := ["cat_mage", "rhino", "sacer"]
 const EXPRESSIONS := ["hero_bunny_thinking", "hero_bunny_sequence", "hero_bunny_bad_choice", "hero_bunny_defeat"]
+# The 14 delivered 4-expression sets (12 playable heroes + whale/duck board types).
+const EXPRESSION_HERO_IDS := ["cat", "wolf_ranger", "boar", "mouse", "owl", "frog", "knight", "bunny",
+	"wolf_knight", "cat_mage", "rhino", "sacer", "whale", "duck"]
 
 func test_campaign_phase_map() -> void:
 	for id in CAMPAIGN:
@@ -64,6 +67,42 @@ func test_bunny_expression_for_each_mood() -> void:
 	Assert.equals(HeroRoster.bunny_expression_for(3), "hero_bunny_defeat", "sad uses defeat")
 	for expression in EXPRESSIONS:
 		Assert.is_true(FileAccess.file_exists("res://assets/ui/heroes/%s.png" % expression), "%s exists" % expression)
+
+func test_every_delivered_set_has_four_existing_frames_and_bounds() -> void:
+	Assert.equals(HeroRoster.EXPRESSIONS.size(), 14, "14 delivered expression sets")
+	for hero in EXPRESSION_HERO_IDS:
+		Assert.is_true(HeroRoster.has_expressions(hero), "%s has an expression set" % hero)
+		var frames: Array = HeroRoster.EXPRESSIONS.get(hero, [])
+		Assert.equals(frames.size(), 4, "%s has four expressions" % hero)
+		for mood in 4:
+			var file: String = HeroRoster.EXPRESSION_FILES[mood]
+			var path := HeroRoster.expression_for(hero, mood)
+			Assert.is_true(path.ends_with(file + ".png"), "%s mood %d maps to %s (got %s)" % [hero, mood, file, path])
+			Assert.is_true(FileAccess.file_exists(path), "%s mood %d exists: %s" % [hero, mood, path])
+			Assert.equals(path, str(frames[mood]), "%s mood %d uses its table entry" % [hero, mood])
+			var bounds := HeroRoster.expression_bounds(hero, mood)
+			Assert.is_true(bounds.size.x > 0 and bounds.size.y > 0,
+				"%s mood %d has alpha bounds (%s)" % [hero, mood, str(bounds)])
+
+func test_every_table_hero_is_a_known_hero_id() -> void:
+	for hero in HeroRoster.EXPRESSIONS:
+		Assert.is_true(HeroRoster.is_known_hero(hero), "table hero %s is a known HeroRoster id" % hero)
+	for extra in HeroRoster.EXTRA_HEROES:
+		Assert.is_true(HeroRoster.is_known_hero(extra), "extra set hero %s is a known id" % extra)
+
+func test_every_playable_hero_has_a_set_and_the_fallback_keeps_the_tint() -> void:
+	var playable: Array = []
+	playable.append_array(HeroRoster.HEROES)
+	for id in HeroRoster.CAMPAIGN_OVERRIDES.values():
+		if not playable.has(id):
+			playable.append(id)
+	for hero in playable:
+		Assert.is_true(HeroRoster.is_known_hero(hero), "%s is a known hero" % hero)
+		Assert.is_true(HeroRoster.has_expressions(hero), "%s has a delivered expression set" % hero)
+	Assert.is_false(HeroRoster.has_expressions(HeroRoster.FALLBACK_HERO),
+		"the menu wolf fallback has no set and keeps the tint behaviour")
+	Assert.equals(HeroRoster.expression_for(HeroRoster.FALLBACK_HERO, 1), "",
+		"a hero without a set has no expression path")
 
 func test_portrait_control_is_a_full_body_box() -> void:
 	var ratio := HeroRoster.BASE_SIZE.y / HeroRoster.BASE_SIZE.x
