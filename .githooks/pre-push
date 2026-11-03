@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# Pre-push gate for Claw & Crown: runs the full Godot test battery once before code leaves
+# the machine. Day-to-day edits only need the targeted tests (see README "Testes").
+#
+# Enable once per clone:   git config core.hooksPath .githooks
+# Skip in an emergency:    git push --no-verify   (or SKIP_GODOT_TESTS=1 git push)
+# Godot binary:            $GODOT_BIN, else Godot/Godot_v4.7-stable_win64_console.exe
+set -u
+
+if [ "${SKIP_GODOT_TESTS:-0}" = "1" ]; then
+	echo "pre-push: SKIP_GODOT_TESTS=1, skipping the Godot battery."
+	exit 0
+fi
+
+ROOT="$(git rev-parse --show-toplevel)"
+GODOT="${GODOT_BIN:-$ROOT/Godot/Godot_v4.7-stable_win64_console.exe}"
+if [ ! -x "$GODOT" ] && [ ! -f "$GODOT" ]; then
+	echo "pre-push: Godot not found at '$GODOT'. Set GODOT_BIN or use --no-verify." >&2
+	exit 1
+fi
+
+# Nothing to test when the push carries no project files (e.g. only docs).
+range_ok=0
+while read -r _local_ref local_sha _remote_ref remote_sha; do
+	[ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue
+	if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+		files=$(git diff --name-only "origin/main...$local_sha" 2>/dev/null)
+	else
+		files=$(git diff --name-only "$remote_sha..$local_sha" 2>/dev/null)
+	fi
+	if echo "$files" | grep -qvE '^(docs/|README\.md$|CONTEXT\.md$|\.githooks/|\.maestri/)'; then
+		range_ok=1
+	fi
+done
+if [ "$range_ok" = "0" ]; then
+	echo "pre-push: only docs changed, skipping the Godot battery."
+	exit 0
+fi
+
+LOG="$(mktemp -t cartitas-prepush.XXXXXX)"
+failed=()
+
+run() { # name, ok-regex, godot args...
+	local name="$1" ok="$2"; shift 2
+	local out
+	out=$(timeout 600 "$GODOT" --path "$ROOT" "$@" 2>&1)
+	echo "== $name" >> "$LOG"; echo "$out" >> "$LOG"
+	if echo "$out" | grep -qE "SCRIPT ERROR|Parse Error" || ! echo "$out" | grep -qE "$ok"; then
+		failed+=("$name"); echo "  FAIL  $name"
+	else
+		echo "  ok    $name"
+	fi
+}
+
+echo "pre-push: running the Godot battery (log: $LOG)"
+run "run_tests" "RESULTS: [0-9]+ tests, 0 failed" --headless --script res://tests/run_tests.gd
+for smoke in "$ROOT"/tests/smoke_*.gd; do
+	n=$(basename "$smoke" .gd)
+	run "$n" "OK" --headless --script "res://tests/$n.gd"
+done
+run "repro_hud_bounds" "GREEN" --headless --script res://tests/repro_hud_bounds.gd
+run "regression_board_layout" "REGRESSION BOARD LAYOUT OK" --headless --script res://tests/regression_board_layout.gd
+# Board determinism needs a local baseline (user://determinism_baseline.json); skipped without one.
+det=$(timeout 600 "$GODOT" --headless --path "$ROOT" -s res://tests/probe_determinism.gd -- --compare 2>&1)
+if echo "$det" | grep -q "PROBE DETERMINISM OK"; then
+	echo "  ok    probe_determinism"
+elif echo "$det" | grep -qiE "no baseline|baseline not found|missing baseline"; then
+	echo "  skip  probe_determinism (no local baseline)"
+else
+	echo "== probe_determinism" >> "$LOG"; echo "$det" >> "$LOG"
+	failed+=("probe_determinism"); echo "  FAIL  probe_determinism"
+fi
+
+if [ "${#failed[@]}" -gt 0 ]; then
+	echo "pre-push: ${#failed[@]} check(s) failed: ${failed[*]}" >&2
+	echo "pre-push: see $LOG. Push blocked (use --no-verify only if you know why)." >&2
+	exit 1
+fi
+echo "pre-push: all checks passed."
+exit 0

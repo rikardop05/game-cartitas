@@ -97,6 +97,18 @@ São **15 tipos** (`CardTypeRegistry`): `cat`, `mouse`, `boar`, `owl`, `wolf`, `
 
 ## Como rodar os testes (opcional)
 
+### Quando rodar cada camada
+
+| Momento | O que rodar | Tempo |
+|---|---|---|
+| Mudança pequena (um valor, um texto, um ajuste visual) | `script-validate` do arquivo (MCP do Godot) + o teste da área, ex. `--script res://tests/test_audio.gd` | segundos |
+| Fim de uma feature | `run_tests.gd` + os `smoke_*.gd` da área afetada | 1–3 min |
+| Antes do push | a bateria completa — feita automaticamente pelo hook `pre-push` | ~10 min |
+
+O hook fica em `.githooks/pre-push` e é ativado uma vez por clone com `git config core.hooksPath .githooks`. Ele roda `run_tests.gd`, todos os `smoke_*.gd`, `repro_hud_bounds.gd`, `regression_board_layout.gd` e `probe_determinism.gd --compare` (este só quando existe um baseline local), e bloqueia o push se algo falhar. Pushes só de documentação pulam a bateria. O Godot usado é `$GODOT_BIN` ou `Godot/Godot_v4.7-stable_win64_console.exe`; para pular em emergência: `git push --no-verify` (ou `SKIP_GODOT_TESTS=1`).
+
+### Rodando à mão
+
 Abra o terminal (PowerShell) na pasta do projeto e rode os testes unitários:
 
 ```powershell
