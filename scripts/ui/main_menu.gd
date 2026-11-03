@@ -1,6 +1,6 @@
 extends Control
 
-enum Screen { MENU, LEVELS, OPTIONS, HELP }
+enum Screen { MENU, OPTIONS, HELP }
 
 # Same warm palette as the level screen, so menu and game read as one product.
 const WARM_BACKGROUND := UiHelpers.WARM_BACKGROUND
@@ -13,7 +13,7 @@ const V2_DIR := "res://assets/ui/kit/v2/"
 const MENU_BUTTON_SIZE := Vector2(190, 55)
 const MENU_BUTTON_ASPECT := 1130.0 / 330.0
 const MENU_BUTTON_HEIGHT_PORTRAIT := 45.0
-const MENU_BUTTON_HEIGHT_LANDSCAPE := 34.0
+const MENU_BUTTON_HEIGHT_LANDSCAPE := 42.0
 const MENU_BUTTON_ART := {
 	"play": "Iniciar).png",
 	"options": "Opcoes_.png",
@@ -71,19 +71,20 @@ const CLOSE_V2_ART := "icon_close_v2.png"
 # Branding and the decorative hero behind the sign.
 const LOGO_ART := "res://assets/ui/branding/logo_claw_and_crown.png"
 const HERO_ART := "res://assets/ui/heroes/hero_menu_wolf.png"
-const LOGO_HEIGHT_LANDSCAPE := 60.0
-const LOGO_HEIGHT_PORTRAIT := 68.0
-const HERO_SHADER := """
-shader_type canvas_item;
-uniform float edge = 0.10;
-uniform float opacity = 0.92;
-void fragment() {
-	vec4 c = texture(TEXTURE, UV);
-	vec2 d = min(UV, vec2(1.0) - UV);
-	float fade = smoothstep(0.0, edge, min(d.x, d.y));
-	COLOR = vec4(c.rgb, c.a * fade * opacity);
-}
-"""
+const BACK_ICON_ART := "res://assets/ui/kit/v2/icon_back.png"
+const LOGO_HEIGHT_LANDSCAPE := 84.0
+const LOGO_HEIGHT_PORTRAIT := 92.0
+const MENU_BACKGROUNDS: Array[Dictionary] = [
+	# Every supplied scene has at least one painted character, so separate character sprites stay off.
+	{"path": "res://assets/ui/menu_backgrounds/menu_bg_harbor.png", "show_heroes": false},
+	{"path": "res://assets/ui/menu_backgrounds/menu_bg_training.png", "show_heroes": false},
+	{"path": "res://assets/ui/menu_backgrounds/menu_bg_cathedral.png", "show_heroes": false},
+	{"path": "res://assets/ui/menu_backgrounds/menu_bg_library.png", "show_heroes": false},
+	{"path": "res://assets/ui/menu_backgrounds/menu_bg_castle.png", "show_heroes": false},
+	{"path": "res://assets/ui/menu_backgrounds/menu_bg_forest.png", "show_heroes": false},
+]
+static var _session_menu_background := ""
+static var _back_icon_texture_cache: Texture2D = null
 
 # Parallax kept in logical pixels: the far background moves least, the sign a bit more and the
 # title/buttons column the most. The layers are shifted as whole containers, never per button.
@@ -114,9 +115,12 @@ var _pointer_goal := Vector2.ZERO
 var _manual_pointer := false
 var _clock := 0.0
 var _resize_queued := false
+var _menu_background_path := ""
+var _menu_background_show_heroes := false
 
 func _ready() -> void:
 	theme = UiHelpers.warm_theme()
+	_menu_background_path = _pick_session_menu_background()
 	resized.connect(_on_viewport_resized)
 	_build()
 	var audio := get_node_or_null("/root/Audio")
@@ -195,8 +199,6 @@ func _build() -> void:
 	else:
 		add_child(UiHelpers.make_background(_landscape()))
 		match _screen:
-			Screen.LEVELS:
-				_build_levels()
 			Screen.HELP:
 				_build_help()
 			_:
@@ -226,6 +228,28 @@ func _has_progress() -> bool:
 		or Game.progress.get_unlocked_level() > 1
 		or Game.progress.endless_best > 0)
 
+# Pick one of the six delivered paintings once per application session. The stored
+# zero-based index points at the image currently shown, so the next launch advances.
+func _pick_session_menu_background() -> String:
+	if not _session_menu_background.is_empty():
+		var session_spec := _menu_background_spec(_session_menu_background)
+		_menu_background_show_heroes = bool(session_spec.get("show_heroes", false))
+		return _session_menu_background
+	var previous := int(Game.settings.get("menu_bg_index", -1))
+	var next_index := posmod(previous + 1, MENU_BACKGROUNDS.size())
+	var selected: Dictionary = MENU_BACKGROUNDS[next_index]
+	_session_menu_background = str(selected["path"])
+	_menu_background_show_heroes = bool(selected["show_heroes"])
+	Game.settings["menu_bg_index"] = next_index
+	Game.save_progress()
+	return _session_menu_background
+
+func _menu_background_spec(path: String) -> Dictionary:
+	for spec in MENU_BACKGROUNDS:
+		if str(spec["path"]) == path:
+			return spec
+	return {}
+
 func _on_viewport_resized() -> void:
 	if _resize_queued or not is_inside_tree():
 		return
@@ -251,13 +275,10 @@ func _build_menu() -> void:
 	_bg_layer.offset_bottom = PARALLAX_BLEED
 	_bg_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_bg_layer)
-	var variant := str(Game.settings.get("menu_background_variant", "harbor"))
-	var background_path := ""
-	if landscape:
-		background_path = "res://assets/ui/background_castle.png" if variant == "castle" else "res://assets/ui/background_menu.png"
-	var background := UiHelpers.make_background(landscape, 0, background_path)
-	# Keep the delivered city crisp; the plaque/logo already provide the focus.
-	background.modulate = Color(0.96, 0.96, 0.96)
+	var background := UiHelpers.make_background(landscape, 0, _menu_background_path)
+	# The painted menu scenes already have their own legibility; avoid the gameplay
+	# background filter's fullscreen samples while moving the parallax layers.
+	background.material = null
 	_bg_layer.add_child(background)
 
 	_board_layer = Control.new()
@@ -399,10 +420,10 @@ func _make_menu_board() -> void:
 	_board.set_meta("source_path", V2_DIR + str(spec["art"]))
 	_board_layer.add_child(_board)
 
-# The scenic portrait uses no foreground hero. Landscape puts two full-body heroes
-# on the open right half, clear of the four-button panel.
+# The round-2 paintings include characters of their own. The per-background policy
+# controls this optional foreground pair without relying on filenames or orientation.
 func _make_hero() -> void:
-	if not _landscape():
+	if not _landscape() or not _menu_background_show_heroes:
 		return
 	var view := get_viewport_rect().size
 	var art_paths := [
@@ -423,11 +444,6 @@ func _make_hero() -> void:
 		rect.size = Vector2(width, height)
 		rect.position = Vector2(view.x * (0.50 + i * 0.22), view.y - height + 8.0)
 		rect.z_index = 0
-		var material := ShaderMaterial.new()
-		var shader := Shader.new()
-		shader.code = HERO_SHADER
-		material.shader = shader
-		rect.material = material
 		_board_layer.add_child(rect)
 		if i == 0:
 			_hero = rect
@@ -472,7 +488,7 @@ func _layout_board() -> void:
 	var logo_size: Vector2 = _logo.custom_minimum_size
 	var board_size: Vector2
 	if landscape:
-		var height := minf(view.y - 12.0, view.x * 0.38 / aspect)
+		var height := minf(view.y - 12.0, view.x * 0.45 / aspect)
 		board_size = Vector2(height * aspect, height)
 	else:
 		var reserved := logo_size.y + MENU_GAP_LOGO + MENU_GAP_STARS + STARS_BAND + MENU_EDGE * 2.0
@@ -488,7 +504,7 @@ func _layout_board() -> void:
 		logo_pos = Vector2(origin.x + (board_size.x - logo_size.x) * 0.5, maxf(2.0, visible_top - logo_size.y * 0.58))
 		stars_pos = Vector2(0.0, view.y - STARS_BAND - 2.0)
 	else:
-		var logo_overlap := 14.0
+		var logo_overlap := 24.0
 		var total := logo_size.y + visible_height - logo_overlap + MENU_GAP_STARS + STARS_BAND
 		var top := maxf(6.0, (view.y - total) * 0.5)
 		origin = Vector2((view.x - board_size.x) * 0.5, top + logo_size.y - logo_overlap - art_top * board_size.y)
@@ -615,21 +631,6 @@ func _make_face_button(texture: Texture2D, min_size: Vector2) -> Button:
 		face.modulate = Color(1.12, 1.12, 1.12) if hovered else Color.WHITE)
 	return btn
 
-# Kit-plate style for list/option rows (9-sliced, so any width works) with hover/press tints.
-func _apply_plate_style(btn: Button, tint := Color.WHITE) -> void:
-	UiHelpers.apply_plate_style(btn, tint)
-
-# The brown kit window the list and the options sit on.
-func _make_window() -> PanelContainer:
-	var window := PanelContainer.new()
-	window.name = "Window"
-	var style := UiHelpers.kit_stylebox("panel_board" if _landscape() else "panel_board_portrait", 6, 12)
-	# The kit window has a thicker lower lip (shadow and feet).
-	style.texture_margin_bottom = 10
-	style.content_margin_bottom = 14
-	window.add_theme_stylebox_override("panel", style)
-	return window
-
 func _make_margin(parent: Control) -> MarginContainer:
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -639,49 +640,6 @@ func _make_margin(parent: Control) -> MarginContainer:
 	margin.add_theme_constant_override("margin_bottom", 8)
 	parent.add_child(margin)
 	return margin
-
-func _make_header(text: String) -> HBoxContainer:
-	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", 8)
-	header.add_child(_make_back_button())
-	var heading := Label.new()
-	heading.text = text
-	heading.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	heading.add_theme_font_size_override("font_size", 20)
-	header.add_child(heading)
-	return header
-
-func _build_levels() -> void:
-	var margin := _make_margin(self)
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 6)
-	margin.add_child(col)
-	col.add_child(_make_header(Localizer.t("select_level")))
-
-	var window := _make_window()
-	window.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	col.add_child(window)
-
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	window.add_child(scroll)
-
-	var vbox := VBoxContainer.new()
-	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	vbox.add_theme_constant_override("separation", 8)
-	scroll.add_child(vbox)
-
-	var ids: Array = LevelLoader.load_all_level_ids()
-	var total_stars := UiHelpers.symbol_label(UiHelpers.total_stars_text(), 18)
-	total_stars.name = "TotalStars"
-	total_stars.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	total_stars.add_theme_color_override("font_color", GOLD)
-	vbox.add_child(total_stars)
-
-	vbox.add_child(_make_endless_button())
-	for id in ids:
-		vbox.add_child(_make_level_button(str(id)))
 
 func _build_options() -> void:
 	var landscape := _landscape()
@@ -713,9 +671,9 @@ func _build_options() -> void:
 	else:
 		vbox.add_child(_make_option_row("ResetButton", Localizer.t("reset"), Localizer.t("reset"), _on_reset, row_height, CONFIG_ROW_ART[1]))
 	if landscape:
-		vbox.add_child(_make_continue_button(true))
+		vbox.add_child(_make_overlay_back_button())
 	else:
-		col.add_child(_make_continue_button(false))
+		col.add_child(_make_overlay_back_button())
 
 # v2 settings title plate, localized: "Configuração" (config_2) or "Settings" (Configu).
 func _make_options_title(height: float) -> Control:
@@ -892,26 +850,9 @@ func _make_v2_window() -> PanelContainer:
 	window.add_theme_stylebox_override("panel", style)
 	return window
 
-# Wide v2 plate used to leave a screen: "Continuar" in PT, "CONTINUE" (Layer 2) in EN.
-func _make_continue_button(landscape: bool) -> Button:
-	var art: String = CONTINUE_ART["pt" if Localizer.current == "pt" else "en"]
-	var texture := _v2_texture(art)
-	var width := 180.0 if landscape else 250.0
-	var btn: Button
-	if texture == null:
-		btn = Button.new()
-		btn.text = Localizer.t("back")
-		btn.custom_minimum_size = Vector2(200, 44)
-		_apply_plate_style(btn)
-	else:
-		var aspect := float(texture.get_width()) / float(maxi(1, texture.get_height()))
-		btn = _make_face_button(texture, Vector2(width, width / aspect))
-		btn.set_meta("source_path", V2_DIR + art)
-	btn.name = "BackButton"
-	btn.tooltip_text = Localizer.t("back")
-	btn.set_meta("label", Localizer.t("back"))
-	btn.pressed.connect(_on_back)
-	return btn
+# Options/help return button: the gold arrow fills a larger touch target than the header arrow.
+func _make_overlay_back_button() -> Button:
+	return _make_back_button(Vector2(48.0, 48.0))
 
 # Replaces the shared VolumeRow handle with the v2 green gem (kept vertical, centred in
 # the 32 px hit box). The row itself keeps working untouched for the in-game settings.
@@ -958,78 +899,86 @@ func _build_help() -> void:
 	text.add_theme_font_size_override("font_size", 15)
 	scroll.add_child(text)
 
-	col.add_child(_make_continue_button(_landscape()))
+	col.add_child(_make_overlay_back_button())
 
-# Flat button with a green chevron (dark outline), matching the level screen's back button.
-func _make_back_button() -> Button:
+# Gold painted back arrow. Keep the full rectangular hit target independent of the icon's
+# visible alpha bounds; only the atlas region is cropped so the imported mipmaps stay intact.
+func _make_back_button(button_size: Vector2 = Vector2(36.0, 36.0)) -> Button:
 	var btn := Button.new()
 	btn.name = "BackButton"
-	btn.custom_minimum_size = Vector2(36, 36)
+	btn.custom_minimum_size = button_size
+	btn.size = button_size
 	btn.tooltip_text = Localizer.t("back")
+	btn.set_meta("label", Localizer.t("back"))
+	btn.set_meta("source_path", BACK_ICON_ART)
 	btn.pressed.connect(_on_back)
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		btn.add_theme_stylebox_override(state, StyleBoxEmpty.new())
-	btn.draw.connect(func():
-		var c := btn.size * 0.5 + (Vector2(0, 1) if btn.is_pressed() else Vector2.ZERO)
-		var pts := PackedVector2Array([c + Vector2(5, -10), c + Vector2(-5, 0), c + Vector2(5, 10)])
-		var outline := Color("#2a1a0e")
-		var green := Color("#8be04e") if btn.is_hovered() else Color("#6fcf3a")
-		btn.draw_polyline(pts, outline, 8.0)
-		for p in pts:
-			btn.draw_circle(p, 4.0, outline)
-		btn.draw_polyline(pts, green, 4.0)
-		for p in pts:
-			btn.draw_circle(p, 2.0, green))
-	btn.mouse_entered.connect(btn.queue_redraw)
-	btn.mouse_exited.connect(btn.queue_redraw)
-	btn.button_down.connect(btn.queue_redraw)
-	btn.button_up.connect(btn.queue_redraw)
+	var icon := TextureRect.new()
+	icon.name = "BackIcon"
+	icon.texture = _cropped_back_icon()
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon.set_anchors_preset(Control.PRESET_FULL_RECT)
+	icon.offset_left = 3.0
+	icon.offset_top = 2.0
+	icon.offset_right = -3.0
+	icon.offset_bottom = -2.0
+	btn.add_child(icon)
+	if icon.texture == null:
+		btn.text = "‹"
+		btn.add_theme_font_size_override("font_size", 28)
+	btn.mouse_entered.connect(func(): icon.modulate = Color(1.14, 1.08, 0.90))
+	btn.mouse_exited.connect(func(): icon.modulate = Color.WHITE)
+	btn.button_down.connect(func():
+		icon.position.y = 1.0
+		icon.modulate = Color(0.78, 0.78, 0.78))
+	btn.button_up.connect(func():
+		icon.position.y = 0.0
+		icon.modulate = Color(1.14, 1.08, 0.90) if btn.is_hovered() else Color.WHITE)
 	return btn
 
-func _make_level_button(id: String) -> Button:
-	var btn := Button.new()
-	btn.custom_minimum_size = Vector2(240, 40)
-	btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	btn.add_theme_font_override("font", UiHelpers.symbol_font())
-	if Game.progress.is_level_unlocked(id):
-		var stars: int = Game.progress.get_stars(id)
-		var star_str := ""
-		for i in 3:
-			star_str += "★" if i < stars else "☆"
-		btn.text = "%s %s   %s" % [Localizer.t("level"), id, star_str]
-		btn.tooltip_text = "%s %s" % [Localizer.t("level"), id]
-		btn.pressed.connect(_on_level.bind(id))
-	else:
-		btn.text = "%s %s   (%s)" % [Localizer.t("level"), id, Localizer.t("locked")]
-		btn.disabled = true
-	_apply_plate_style(btn)
-	return btn
-
-# Endless entry, styled like a level button: best score once the last Level is beaten.
-func _make_endless_button() -> Button:
-	var btn := Button.new()
-	btn.name = "EndlessButton"
-	btn.custom_minimum_size = Vector2(240, 40)
-	btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	btn.add_theme_font_override("font", UiHelpers.symbol_font())
-	var tint := Color.WHITE
-	if Game.progress.is_endless_unlocked():
-		btn.text = Localizer.t("endless")
-		if Game.progress.endless_best > 0:
-			btn.text += "   ★ %s" % (Localizer.t("endless_best") % Game.progress.endless_best)
-		btn.add_theme_color_override("font_color", GOLD)
-		btn.tooltip_text = Localizer.t("endless_tip")
-		btn.pressed.connect(_on_endless)
-		tint = Color(1.12, 1.0, 0.72)
-	else:
-		btn.text = "%s   %s" % [Localizer.t("endless"), Localizer.t("endless_locked") % ProgressManager.endless_unlock_level()]
-		btn.disabled = true
-	_apply_plate_style(btn, tint)
-	return btn
+func _cropped_back_icon() -> Texture2D:
+	if _back_icon_texture_cache != null:
+		return _back_icon_texture_cache
+	var source := UiHelpers.hires_texture(BACK_ICON_ART)
+	if source == null:
+		return null
+	var image := source.get_image()
+	if image == null:
+		return source
+	if image.is_compressed():
+		image.decompress()
+	var threshold := 24
+	var left := image.get_width()
+	var top := image.get_height()
+	var right := -1
+	var bottom := -1
+	for y in image.get_height():
+		for x in image.get_width():
+			if roundi(image.get_pixel(x, y).a * 255.0) <= threshold:
+				continue
+			left = mini(left, x)
+			top = mini(top, y)
+			right = maxi(right, x)
+			bottom = maxi(bottom, y)
+	if right < left or bottom < top:
+		return source
+	var crop := AtlasTexture.new()
+	crop.atlas = source
+	crop.region = Rect2(left, top, right - left + 1, bottom - top + 1)
+	crop.filter_clip = true
+	_back_icon_texture_cache = crop
+	return _back_icon_texture_cache
 
 func _on_play() -> void:
-	_screen = Screen.LEVELS
-	_build()
+	call_deferred("_open_level_select")
+
+func _open_level_select() -> void:
+	if is_inside_tree():
+		get_tree().change_scene_to_file("res://scenes/level_select.tscn")
 
 func _on_continue() -> void:
 	var ids: Array = LevelLoader.load_all_level_ids()
@@ -1059,12 +1008,6 @@ func _on_back() -> void:
 	_screen = Screen.MENU
 	_reset_armed = false
 	_build()
-
-func _on_level(level_id: String) -> void:
-	Game.start_level(level_id)
-
-func _on_endless() -> void:
-	Game.start_endless()
 
 # Erasing progress is irreversible, so the first tap only arms it and the check mark confirms.
 func _on_reset() -> void:

@@ -41,30 +41,32 @@ func _scenario(game) -> void:
 	if menu == null:
 		return
 	menu._on_play()
-	await process_frame
-	await process_frame
-	var endless_btn := menu.find_child("EndlessButton", true, false) as Button
+	var map = await _wait_scene("LevelSelectMap", menu)
+	if map == null:
+		return
+	var endless_btn := map.find_child("EndlessButton", true, false) as Button
 	var unlock_level := ProgressManager.endless_unlock_level()
 	if endless_btn == null:
-		_fail("menu has no Endless entry on the level list")
+		_fail("world map has no Endless button")
 		return
-	_check(endless_btn.disabled, "Endless entry is disabled before Level %d is completed" % unlock_level)
-	_check(endless_btn.text.contains(Localizer.t("endless_locked") % unlock_level), "locked Endless entry says '%s' (got '%s')" % [Localizer.t("endless_locked") % unlock_level, endless_btn.text])
+	_check(endless_btn.disabled, "map Endless button is disabled before Level %d is completed" % unlock_level)
+	_check(endless_btn.tooltip_text.contains(Localizer.t("endless_locked") % unlock_level), "locked map Endless tooltip says '%s' (got '%s')" % [Localizer.t("endless_locked") % unlock_level, endless_btn.tooltip_text])
 
-	# Unlock in memory and rebuild the list.
+	# Unlock in memory and rebuild the map so it re-reads ProgressManager.
 	game.progress.levels[str(unlock_level)] = {"completed": true, "stars": 1}
 	game.progress.endless_best = 0
-	menu._build()
-	await process_frame
-	await process_frame
-	endless_btn = menu.find_child("EndlessButton", true, false) as Button
-	_check(endless_btn != null and not endless_btn.disabled, "Endless entry is enabled once Level %d is completed" % unlock_level)
+	change_scene_to_file("res://scenes/level_select.tscn")
+	var unlocked_map = await _wait_scene("LevelSelectMap", map)
+	if unlocked_map == null:
+		return
+	endless_btn = unlocked_map.find_child("EndlessButton", true, false) as Button
+	_check(endless_btn != null and not endless_btn.disabled, "map Endless button is enabled once Level %d is completed" % unlock_level)
 	if endless_btn == null or endless_btn.disabled:
 		return
 	endless_btn.pressed.emit()
 
 	# --- Round 1: HUD + scoring -------------------------------------------------
-	var scene = await _wait_level(menu)
+	var scene = await _wait_level(unlocked_map)
 	if scene == null:
 		return
 	var run: EndlessRun = game.endless_run
@@ -112,7 +114,7 @@ func _scenario(game) -> void:
 	# Flip the controller to WON: the scene's own _process -> _check_end path builds the panel.
 	var score_before_clear := run.score
 	controller.status = GameController.Status.WON
-	if not await _wait_until(func(): return _find_label(scene, Localizer.t("round_cleared")) != null):
+	if not await _wait_until(func(): return _find_label_containing(scene, Localizer.t("round_cleared")) != null):
 		_fail("round-clear panel did not appear")
 		return
 	_check(run.current_round == 2 and run.rounds_cleared == 1, "run advanced to round 2")
@@ -188,12 +190,13 @@ func _scenario(game) -> void:
 	_check(game.progress.endless_best == 300, "quitting mid-run still records the score (best %d)" % game.progress.endless_best)
 	_check(int(SaveManager.load(game.save_path).get("progress", {}).get("endless_best", -1)) == 300, "quit score was saved to disk")
 
-	# The menu entry now shows the best score.
+	# The world-map Endless button now shows the best score.
 	menu2._on_play()
-	await process_frame
-	await process_frame
-	var best_btn := menu2.find_child("EndlessButton", true, false) as Button
-	_check(best_btn != null and best_btn.text.contains("300"), "Endless entry shows the best score")
+	var map3 = await _wait_scene("LevelSelectMap", menu2)
+	if map3 == null:
+		return
+	var best_btn := map3.find_child("EndlessButton", true, false) as Button
+	_check(best_btn != null and best_btn.text.contains("300"), "map Endless button shows the best score")
 
 # Plays one legal move through the scene (so the real _on_card/_on_deck code runs).
 # With prefer_match it feeds the type already in the zone; otherwise it avoids matches.
@@ -276,6 +279,12 @@ func _wait_until(condition: Callable) -> bool:
 func _find_label(node: Node, text: String) -> Label:
 	for n in _all_nodes(node):
 		if n is Label and (n as Label).text == text:
+			return n as Label
+	return null
+
+func _find_label_containing(node: Node, text: String) -> Label:
+	for n in _all_nodes(node):
+		if n is Label and (n as Label).text.contains(text):
 			return n as Label
 	return null
 
