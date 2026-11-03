@@ -76,7 +76,7 @@ static func play(parent: Node, card: Control, config: Dictionary = {}) -> CardIm
 	fx.tree_exited.connect(_on_gone)
 	if parent is CanvasItem:
 		# Same absolute depth as a sibling card: Back (-1) goes behind it, Front (+1) over it.
-		fx.z_index = card.z_index if card.get_parent() == parent else 0
+		fx.z_index = card.z_index
 	parent.add_child(fx)
 	fx.set_meta("born_msec", Time.get_ticks_msec())
 	fx.global_position = xf * Vector2(card.size.x * 0.5, card.size.y)

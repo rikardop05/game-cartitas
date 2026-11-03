@@ -268,6 +268,13 @@ var _shifts: Array = []
 # Board cards still falling in the deal, by card id -> {node, tween, final}.
 var _deal_nodes: Dictionary = {}
 var _dealing := false
+# True once the initial deal is over (or there was nothing to deal): the board is then at its
+# final geometry. Tests await it (is_dealing() / deal_finished) before measuring the board.
+var deal_complete := false
+signal deal_finished
+# Overlay for deal FX: a sibling right above the board container (never a child of it, so the
+# container holds exactly the card nodes).
+var _deal_fx: Control
 var _end_wait_started_msec := -1
 var _layout_cache: Dictionary = {}
 var _layout_cache_size := Vector2.ZERO
@@ -403,6 +410,7 @@ func _build_ui() -> void:
 	_sound_icon = null
 	# The rebuild frees every child, ghosts included; render() re-syncs the zone afterwards.
 	_fx_layer = null
+	_deal_fx = null
 	_flights.clear()
 	_deal_nodes.clear()
 	_hidden_cards.clear()
@@ -2838,6 +2846,7 @@ func _play_deal() -> void:
 		if is_instance_valid(_board_nodes.get(card.id)):
 			cards.append(card)
 	if cards.is_empty():
+		_finish_deal_state()
 		return
 	cards.sort_custom(func(a, b): return a.layer < b.layer)
 	var depths := _blocked_depths()
@@ -2898,7 +2907,7 @@ func _on_deal_landed(card_id: String, level: int) -> void:
 		config.merge({"ring": false, "glow": false, "flash": false, "rim": false})
 	elif level == 2:
 		config["glow_strength"] = 0.5
-	CardImpactFx.play(board_container, node, _impact_config("", config))
+	CardImpactFx.play(_deal_fx_layer(), node, _impact_config("", config))
 
 # A programmatic tap on a card still in the air puts it in its place first (no half-fallen source).
 func _settle_deal_card(card_id: String) -> void:
@@ -2914,8 +2923,28 @@ func _settle_deal_card(card_id: String) -> void:
 	node.modulate = Color.WHITE
 	node.mouse_filter = Control.MOUSE_FILTER_STOP
 
-func _end_deal() -> void:
+func is_dealing() -> bool:
+	return not deal_complete
+
+func _finish_deal_state() -> void:
 	_dealing = false
+	if not deal_complete:
+		deal_complete = true
+		deal_finished.emit()
+
+func _deal_fx_layer() -> Control:
+	if _deal_fx == null or not is_instance_valid(_deal_fx):
+		_deal_fx = Control.new()
+		_deal_fx.name = "DealFx"
+		_deal_fx.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_deal_fx.z_index = board_container.z_index
+		var parent := board_container.get_parent()
+		parent.add_child(_deal_fx)
+		parent.move_child(_deal_fx, board_container.get_index() + 1)
+	return _deal_fx
+
+func _end_deal() -> void:
+	_finish_deal_state()
 	for card_id in _deal_nodes.keys().duplicate():
 		_settle_deal_card(card_id)
 	if controller != null and controller.status == GameController.Status.PLAYING and not _help_shown and not _settings_open:
