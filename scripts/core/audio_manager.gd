@@ -1,24 +1,36 @@
 class_name AudioManager
 extends Node
 
-# Owns the two background tracks and the audio buses. The menu plays Beyond the Walls; the
-# Level screen (campaign and Endless alike) plays Castle Eudora. Both loop forever and are
-# swapped with a short crossfade, so the change of scene never cuts to silence.
+# Owns the background music and the audio buses. The menu plays Beyond the Walls on a loop;
+# gameplay uses a persisted shuffle-bag of six one-shot tracks. Music belongs to this autoload,
+# not the current Level scene, so finishing, retrying or changing Levels never restarts it.
 #
 # The volume/mute the player already controls (Game.volume / Game.sound_enabled) is applied to
-# the Music bus and re-read every frame, so the Options slider and the in-game sound button act
-# on the music immediately without the UI knowing about this node.
+# the Music bus on Game.volume_changed (with a slow fallback poll), so the Options slider and
+# the in-game sound button act on the music immediately without the UI knowing about this node.
 #
 # The node is an autoload ("Audio"). Scenes only declare intent:
-#   Audio.play_menu(self)     # main menu
-#   Audio.play_gameplay(self) # Level screen
-#   Audio.release(self)       # from _exit_tree; ignored if another scene claimed in the meantime
-# The owner token is what keeps release() from cutting the music of the scene that replaced it.
+#   Audio.play_menu(self)     # crossfade to the menu track
+#   Audio.play_gameplay(self) # start gameplay music only when entering from the menu
+#   Audio.release(self)       # retained as a no-op for existing scene exit hooks
 
 signal track_changed(path: String)
 
 const MENU_TRACK := "res://assets/audio/music/beyond_the_walls.mp3"
 const GAME_TRACK := "res://assets/audio/music/castle_eudora.mp3"
+# Campaign/Endless shuffle bag. Beyond the Walls is menu-only, so it is not here.
+const GAMEPLAY_TRACKS: Array[String] = [
+	GAME_TRACK,
+	"res://assets/audio/music/magikal_dreamers.mp3",
+	"res://assets/audio/music/dinasty_oro.mp3",
+	"res://assets/audio/music/honor_and_glory.mp3",
+	"res://assets/audio/music/welcome_my_friends.mp3",
+	"res://assets/audio/music/the_great_journey.mp3",
+]
+# Legacy compatibility index retained alongside the new persisted bag/last-track state.
+const ROTATION_SETTING := "music_rotation"
+const MUSIC_BAG_SETTING := "music_bag"
+const LAST_GAMEPLAY_TRACK_SETTING := "music_last_track"
 
 # One-shot effects. The gains trim the delivered files to a common perceived level; both keep
 # their peak below -6 dB so a click never clips on top of the music.
@@ -64,14 +76,20 @@ var _sfx_players: Array[AudioStreamPlayer] = []
 var _sfx_next := 0
 var _streams: Dictionary = {}
 var _active := -1
-var _owner_id := 0
 var _fade: Tween
 var _game: Node
 var _last_bus_db := INF
 var _volume_timer: Timer
+var _active_track_path := ""
+var _music_bag: Array[String] = []
+var _last_gameplay_track := ""
+var _music_rng := RandomNumberGenerator.new()
+# True from the menu->game transition until the game->menu transition.
+var _gameplay_active := false
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	_music_rng.randomize()
 	_ensure_bus(MUSIC_BUS)
 	_ensure_bus(SFX_BUS)
 	_ensure_master_limiter()
@@ -81,6 +99,7 @@ func _ready() -> void:
 		player.bus = MUSIC_BUS
 		player.volume_db = SILENT_DB
 		player.process_mode = Node.PROCESS_MODE_ALWAYS
+		player.finished.connect(_on_music_finished.bind(i))
 		add_child(player)
 		_players.append(player)
 	for i in SFX_VOICES:
@@ -92,6 +111,7 @@ func _ready() -> void:
 		_sfx_players.append(sfx)
 	_sync_volume()
 	_bind_volume()
+	_restore_music_state()
 
 # Volume/mute is event driven: Game.volume_changed applies the slider/HUD changes at once.
 # A slow timer stays as a fallback for direct settings writes (tests/tools), replacing the
@@ -134,11 +154,101 @@ func _exit_tree() -> void:
 
 # --- Intent from the scenes -------------------------------------------------------------
 
-func play_menu(owner: Node = null) -> void:
-	_play(MENU_TRACK, owner)
+func play_menu(_owner: Node = null) -> void:
+	var menu_already_active := _active_track_path == MENU_TRACK and _active_player_is_playing()
+	_gameplay_active = false
+	if menu_already_active:
+		return
+	_play(MENU_TRACK)
 
-func play_gameplay(owner: Node = null) -> void:
-	_play(GAME_TRACK, owner)
+# Level scenes are recreated for victories, retries and Endless rounds. Those calls leave the
+# current gameplay stream and playback head untouched; only entering from the menu starts music.
+func play_gameplay(_owner: Node = null) -> void:
+	if _gameplay_active and GAMEPLAY_TRACKS.has(_active_track_path) and _active_player_is_playing():
+		return
+	_gameplay_active = true
+	_play(_next_gameplay_track())
+
+static func build_shuffle_bag(track_paths: Array[String], seed_value: int, previous_track: String = "") -> Array[String]:
+	var bag: Array[String] = []
+	for path in track_paths:
+		bag.append(path)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	for index in range(bag.size() - 1, 0, -1):
+		var swap_index := rng.randi_range(0, index)
+		var temporary := bag[index]
+		bag[index] = bag[swap_index]
+		bag[swap_index] = temporary
+	# A new cycle must not start with the last track from the previous bag.
+	if bag.size() > 1 and bag[0] == previous_track:
+		var swap_index := rng.randi_range(1, bag.size() - 1)
+		var temporary := bag[0]
+		bag[0] = bag[swap_index]
+		bag[swap_index] = temporary
+	return bag
+
+func _active_player_is_playing() -> bool:
+	return _active >= 0 and _active < _players.size() and _players[_active].playing
+
+func _next_gameplay_track() -> String:
+	if _music_bag.is_empty():
+		_music_bag = build_shuffle_bag(GAMEPLAY_TRACKS, _music_rng.randi(), _last_gameplay_track)
+	if _music_bag.is_empty():
+		return GAME_TRACK
+	_last_gameplay_track = _music_bag.pop_front()
+	_persist_music_state()
+	return _last_gameplay_track
+
+func _restore_music_state() -> void:
+	var settings: Variant = _game.get("settings") if _game != null else null
+	if not (settings is Dictionary):
+		return
+	var saved_settings := settings as Dictionary
+	_last_gameplay_track = str(saved_settings.get(LAST_GAMEPLAY_TRACK_SETTING, ""))
+	if not GAMEPLAY_TRACKS.has(_last_gameplay_track):
+		var legacy_index := int(saved_settings.get(ROTATION_SETTING, -1))
+		_last_gameplay_track = GAMEPLAY_TRACKS[legacy_index] if legacy_index >= 0 and legacy_index < GAMEPLAY_TRACKS.size() else ""
+	_music_bag.clear()
+	var saved_bag: Variant = saved_settings.get(MUSIC_BAG_SETTING, [])
+	if saved_bag is Array:
+		for entry in saved_bag:
+			var path := str(entry)
+			if GAMEPLAY_TRACKS.has(path) and not _music_bag.has(path):
+				_music_bag.append(path)
+
+func _persist_music_state() -> void:
+	if _game == null or not is_instance_valid(_game):
+		_game = get_node_or_null("/root/Game")
+	if _game == null:
+		return
+	var settings: Variant = _game.get("settings")
+	if not (settings is Dictionary):
+		return
+	var saved_settings := settings as Dictionary
+	saved_settings[MUSIC_BAG_SETTING] = _music_bag.duplicate()
+	saved_settings[LAST_GAMEPLAY_TRACK_SETTING] = _last_gameplay_track
+	saved_settings[ROTATION_SETTING] = GAMEPLAY_TRACKS.find(_last_gameplay_track)
+	_game.call("save_progress")
+
+func current_track_path() -> String:
+	return _active_track_path
+
+func active_music_player() -> AudioStreamPlayer:
+	return _players[_active] if _active >= 0 and _active < _players.size() else null
+
+func remaining_gameplay_tracks() -> Array[String]:
+	return _music_bag.duplicate()
+
+# The Audio autoload owns the finished-signal chain across all scene changes.
+func _on_music_finished(player_index: int) -> void:
+	if not _gameplay_active or player_index != _active or not GAMEPLAY_TRACKS.has(_active_track_path):
+		return
+	_play(_next_gameplay_track())
+
+# Existing scene exit hooks still call release(), but music lifetime belongs to this autoload.
+func release(_owner: Node) -> void:
+	pass
 
 # A card picked from the Board (the heavy stone landing in the Clearing Zone).
 func play_card_select() -> void:
@@ -182,26 +292,6 @@ func play_ui_click() -> void:
 func play_ui_setting() -> void:
 	_play_sfx(UI_SETTING_SFX, UI_SETTING_DB)
 
-# Gives the audio up, but only when this scene still owns it: a scene that already claimed
-# it (the one replacing this one, whichever order the tree frees them in) is untouched.
-# The fade-out is deferred by a frame, so a scene that takes over in the same frame (next
-# Level, retry, next Endless round, back to the menu) cancels it and the track never stops.
-func release(owner: Node) -> void:
-	if owner == null or _owner_id != owner.get_instance_id():
-		return
-	_owner_id = 0
-	call_deferred("_release_if_unclaimed")
-
-func _release_if_unclaimed() -> void:
-	if _owner_id != 0:
-		return
-	if _active < 0 or _players[_active] == null or not _players[_active].playing:
-		return
-	_kill_fade()
-	_fade = create_tween()
-	_fade.tween_property(_players[_active], "volume_db", SILENT_DB, FADE_SECONDS)
-	_fade.tween_callback(_players[_active].stop)
-
 # --- Mixing ----------------------------------------------------------------------------
 
 # Bus gain in dB for a 0..1 volume and a mute flag. Pure, so the headless suite can check the
@@ -231,23 +321,23 @@ static func stream_loops(stream: AudioStream) -> bool:
 
 # --- Internals -------------------------------------------------------------------------
 
-func _play(path: String, owner: Node) -> void:
+func _play(path: String) -> void:
 	var stream := _load_stream(path)
 	if stream == null:
 		return
-	# The track already playing (or fading in) is kept exactly where it is: moving from one
-	# Level to the next, retrying or starting the next Endless round must not restart the song.
+	# Public intent methods handle same-state no-ops; this guard also protects an in-flight
+	# crossfade from restarting the same stream if called twice.
 	for i in _players.size():
 		var playing := _players[i]
 		if playing.stream == stream and playing.playing:
-			_owner_id = owner.get_instance_id() if owner != null else 0
 			_active = i
+			_active_track_path = path
 			_fade_in(playing)
 			return
 	var old := _active
 	var next := 1 - old if old >= 0 else 0
 	_active = next
-	_owner_id = owner.get_instance_id() if owner != null else 0
+	_active_track_path = path
 	_kill_fade()
 	var player := _players[next]
 	player.stream = stream
@@ -303,12 +393,19 @@ func _load_stream(path: String) -> AudioStream:
 	if stream == null:
 		push_warning("AudioManager: could not load track: %s" % path)
 		return null
-	ensure_loop(stream)
+	# Only the menu track loops. Gameplay tracks must reach their end so the rotation can
+	# advance on the players' `finished` signal (the importer may have set loop either way).
+	if path == MENU_TRACK:
+		ensure_loop(stream)
+	elif stream is AudioStreamMP3:
+		(stream as AudioStreamMP3).loop = false
+	elif stream is AudioStreamOggVorbis:
+		(stream as AudioStreamOggVorbis).loop = false
 	_streams[path] = stream
 	return stream
 
-# Re-reads the player's volume/mute every frame. The UI writes it through the Game autoload;
-# polling here is what lets the slider and the HUD sound button act mid-track.
+# Applies the player's volume/mute to the Music bus. Driven by Game.volume_changed and by a
+# slow fallback timer (see _bind_volume), never by a per-frame poll.
 func _sync_volume() -> void:
 	if _game == null or not is_instance_valid(_game):
 		_game = get_node_or_null("/root/Game")

@@ -1,6 +1,6 @@
 extends RefCounted
 
-# Audio assets and mix: both music tracks and the four one-shot effects ship with the build,
+# Audio assets and mix: the menu and all gameplay tracks plus one-shot effects ship with the build,
 # load as the expected AudioStream type, and stay inside the gain the mix gives them. The
 # volume/mute mapping (Game.volume / Game.sound_enabled) is pure, so this suite needs no
 # audio device nor the registered Audio autoload.
@@ -8,25 +8,35 @@ extends RefCounted
 const TRACKS := [
 	"res://assets/audio/music/beyond_the_walls.mp3",
 	"res://assets/audio/music/castle_eudora.mp3",
+	"res://assets/audio/music/magikal_dreamers.mp3",
+	"res://assets/audio/music/dinasty_oro.mp3",
+	"res://assets/audio/music/honor_and_glory.mp3",
+	"res://assets/audio/music/welcome_my_friends.mp3",
+	"res://assets/audio/music/the_great_journey.mp3",
 ]
 
 func test_tracks_exist_on_disk() -> void:
 	for path in TRACKS:
 		Assert.is_true(FileAccess.file_exists(path), "%s exists" % path)
 
-func test_tracks_load_and_loop() -> void:
-	for path in TRACKS:
+func test_menu_track_loops_and_gameplay_tracks_are_one_shots() -> void:
+	var menu := load(AudioManager.MENU_TRACK) as AudioStream
+	Assert.is_true(menu != null, "menu track loads as an AudioStream")
+	if menu != null:
+		AudioManager.ensure_loop(menu)
+		Assert.is_true(AudioManager.stream_loops(menu), "menu track loops forever")
+		Assert.is_true(menu.get_length() > 60.0, "menu track is a full track (%.1f s)" % menu.get_length())
+	for path in AudioManager.GAMEPLAY_TRACKS:
 		var stream := load(path) as AudioStream
 		Assert.is_true(stream != null, "%s loads as an AudioStream" % path)
 		if stream == null:
 			continue
-		AudioManager.ensure_loop(stream)
-		Assert.is_true(AudioManager.stream_loops(stream), "%s is set to loop forever" % path)
-		Assert.is_true(stream.get_length() > 60.0, "%s is a full track, not a stub (%.1f s)" % [path, stream.get_length()])
+		Assert.is_false(AudioManager.stream_loops(stream), "%s plays once to signal track completion" % path)
+		Assert.is_true(stream.get_length() > 30.0, "%s is a full gameplay track, not a stub (%.1f s)" % [path, stream.get_length()])
 
-func test_menu_plays_beyond_the_walls_and_gameplay_plays_castle_eudora() -> void:
+func test_menu_and_gameplay_use_separate_track_sets() -> void:
 	Assert.equals(AudioManager.MENU_TRACK, TRACKS[0], "menu uses Beyond the Walls")
-	Assert.equals(AudioManager.GAME_TRACK, TRACKS[1], "gameplay uses Castle Eudora")
+	Assert.is_true(AudioManager.GAMEPLAY_TRACKS.has(AudioManager.GAME_TRACK), "Castle Eudora is one gameplay option")
 	Assert.not_equals(AudioManager.MENU_TRACK, AudioManager.GAME_TRACK, "menu and gameplay use different tracks")
 
 func test_music_volume_follows_game_volume_without_clipping() -> void:
@@ -84,3 +94,50 @@ func _peak_db(wav: AudioStreamWAV) -> float:
 	if peak == 0:
 		return -INF
 	return linear_to_db(float(peak) / 32768.0)
+
+# --- Campaign/Endless music rotation -------------------------------------------------------
+
+func test_gameplay_rotation_has_six_distinct_tracks() -> void:
+	Assert.equals(AudioManager.GAMEPLAY_TRACKS.size(), 6, "the rotation has six tracks")
+	Assert.is_false(AudioManager.GAMEPLAY_TRACKS.has(AudioManager.MENU_TRACK), "Beyond the Walls stays menu-only")
+	var seen := {}
+	for path in AudioManager.GAMEPLAY_TRACKS:
+		Assert.is_true(FileAccess.file_exists(path), "%s exists" % path)
+		Assert.is_false(seen.has(path), "%s appears once" % path)
+		seen[path] = true
+
+func test_shuffle_bag_uses_every_track_once_before_refill_and_no_boundary_repeat() -> void:
+	var bag := AudioManager.build_shuffle_bag(AudioManager.GAMEPLAY_TRACKS, 77123)
+	Assert.equals(bag.size(), AudioManager.GAMEPLAY_TRACKS.size(), "first shuffle bag contains six tracks")
+	var seen := {}
+	for path in bag:
+		Assert.is_true(AudioManager.GAMEPLAY_TRACKS.has(path), "%s belongs to the gameplay set" % path)
+		Assert.is_false(seen.has(path), "%s appears only once in a bag" % path)
+		seen[path] = true
+	Assert.equals(seen.size(), AudioManager.GAMEPLAY_TRACKS.size(), "all six tracks play before the bag refills")
+	var next_bag := AudioManager.build_shuffle_bag(AudioManager.GAMEPLAY_TRACKS, 9917, bag.back())
+	Assert.not_equals(next_bag.front(), bag.back(), "a refill never starts with the previous bag's last track")
+	Assert.equals(next_bag.size(), AudioManager.GAMEPLAY_TRACKS.size(), "refill still contains every gameplay track")
+
+func test_shuffle_bag_is_deterministic_with_a_seeded_rng() -> void:
+	var previous := AudioManager.GAMEPLAY_TRACKS[3]
+	var bag_a := AudioManager.build_shuffle_bag(AudioManager.GAMEPLAY_TRACKS, 20261102, previous)
+	var bag_b := AudioManager.build_shuffle_bag(AudioManager.GAMEPLAY_TRACKS, 20261102, previous)
+	Assert.equals(bag_a, bag_b, "the same seed and previous track reproduce the same bag")
+	Assert.not_equals(bag_a[0], previous, "seeded bag still avoids an immediate repeat")
+
+func test_first_shuffle_pick_is_not_fixed_to_one_level_one_track() -> void:
+	var first_tracks := {}
+	for seed_value in range(1, 80):
+		var bag := AudioManager.build_shuffle_bag(AudioManager.GAMEPLAY_TRACKS, seed_value)
+		if not bag.is_empty():
+			first_tracks[bag[0]] = true
+	Assert.is_true(first_tracks.size() > 1, "different seeds allow Level 1 to start with different gameplay tracks")
+
+func test_gameplay_tracks_end_so_the_rotation_can_advance() -> void:
+	var menu := load(AudioManager.MENU_TRACK) as AudioStream
+	Assert.is_true(AudioManager.stream_loops(menu), "the menu track loops forever")
+	for path in AudioManager.GAMEPLAY_TRACKS:
+		var stream := load(path) as AudioStream
+		Assert.is_true(stream != null, "%s loads" % path)
+		Assert.is_false(AudioManager.stream_loops(stream), "%s plays once so the rotation advances on finished" % path)
