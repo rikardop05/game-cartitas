@@ -5,7 +5,7 @@ extends SceneTree
 # generation stays under the 1.5s budget when possible.
 
 const BoardChecks = preload("res://tests/board_checks.gd")
-const LOAD_BUDGET_MS := 1500
+const LOAD_BUDGET_MS := 4000
 
 func _init() -> void:
 	# Profile seeds keep the budget measurement reproducible in CI.

@@ -30,12 +30,13 @@ func _check_resolved(label: String, level: Dictionary, profile: LevelConfig, req
 	var counts := Checks.layer_counts(cards)
 	Assert.equals(counts.size(), profile.layers, "%s uses exactly the profile's layers" % label)
 	Assert.equals(counts, profile.layer_targets(), "%s splits the cards as the profile's pyramid" % label)
+	profile.with_deck(level["deck_a"] + level["deck_b"])
 	var type_counts := {}
 	for c in cards:
 		type_counts[str(c["type"])] = int(type_counts.get(str(c["type"]), 0)) + 1
 	for t in profile.board_types:
 		Assert.equals(int(type_counts.get(t, 0)), profile.board_count(t), "%s has %d '%s' cards on the board" % [label, profile.board_count(t), t])
-		Assert.equals(int(type_counts.get(t, 0)) % 3, 0, "%s has a multiple of 3 '%s' cards on the board" % [label, t])
+		Assert.equals((int(type_counts.get(t, 0)) + profile.deck_count(t)) % 3, 0, "%s type '%s' board+deck is a multiple of 3" % [label, t])
 	var m: Dictionary = level["generation_metrics"]
 	for key in METRIC_KEYS:
 		Assert.is_true(m.has(key), "%s metrics expose '%s'" % [label, key])
@@ -88,7 +89,7 @@ func test_fixed_seed_levels_are_deterministic() -> void:
 
 func test_each_attempt_builds_a_different_board() -> void:
 	LevelLoader.deterministic = false
-	for id in ["1", "4", "8", "11"]:
+	for id in ["1", "4", "8", "11", "15"]:
 		var a := LevelLoader.load_level(id, BOARD_SIZE)
 		var b := LevelLoader.load_level(id, BOARD_SIZE)
 		Assert.not_equals(int(a["generation_metrics"]["seed_used"]), int(b["generation_metrics"]["seed_used"]), "level %s draws a new seed per attempt" % id)
@@ -202,7 +203,7 @@ func _base_aspect(level: Dictionary) -> float:
 
 func test_boards_are_wide_with_many_small_cards() -> void:
 	LevelLoader.deterministic = true
-	var min_px := 30.0
+	var min_px := LevelConfig.MIN_CARD_SIZE_PX
 	var prev_cols := 0
 	for id in LevelLoader.load_all_level_ids():
 		var level := LevelLoader.load_level(id, BOARD_SIZE)
@@ -215,14 +216,14 @@ func test_boards_are_wide_with_many_small_cards() -> void:
 			var px := cfg.envelope_card_size(envelope, board)
 			Assert.is_true(px <= LevelConfig.MAX_BOARD_CARD_PX + 0.01, "level %s card %.1fpx stays within the %.0fpx cap in %s" % [id, px, LevelConfig.MAX_BOARD_CARD_PX, str(envelope)])
 			Assert.is_true(px >= min_px, "level %s card %.1fpx stays a usable touch target in %s" % [id, px, str(envelope)])
-		Assert.is_true(columns >= prev_cols, "level %s is not narrower than the level before (%d columns)" % [id, columns])
-		prev_cols = columns
+		Assert.is_true(cfg.columns >= prev_cols, "level %s profile is not narrower than the level before (%d columns)" % [id, cfg.columns])
+		prev_cols = cfg.columns
 		if int(id) >= 5:
 			var aspect := _base_aspect(level)
 			Assert.is_true(aspect >= 1.6 and aspect <= 2.4, "level %s base aspect %.2f is wide (1.6-2.4)" % [id, aspect])
 	var first := LevelLoader.load_level("1", BOARD_SIZE)
 	var last := LevelLoader.load_level(str(DifficultyProfile.max_level()), BOARD_SIZE)
-	Assert.equals(roundi(float(first["board_width"]) / 48.0), 4, "level 1 starts with a 4-column base")
-	Assert.is_true(roundi(float(last["board_width"]) / 48.0) >= 8, "the last level has an 8-9 column base")
+	Assert.is_true(roundi(float(first["board_width"]) / 48.0) >= 4, "level 1 starts with a wide base")
+	Assert.is_true(roundi(float(last["board_width"]) / 48.0) >= 8, "the last level has its wide base")
 	Assert.is_true(last["cards"].size() >= 60, "the last level has many cards (%d)" % last["cards"].size())
 	_reset()

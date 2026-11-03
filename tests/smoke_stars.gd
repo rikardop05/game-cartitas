@@ -78,6 +78,8 @@ func _run() -> void:
 	var three: float = float(c.time_thresholds["three_stars"])
 	var two: float = float(c.time_thresholds["two_stars"])
 
+	await _check_bubbles(scene, "landscape")
+
 	# Fresh level: 3 stars, nothing fading.
 	_check(base.texture == _stars_texture(3) and scene.get("stars_shown") == 3, "a fresh level shows stars_3")
 	_check(overlay.modulate.a < 0.2, "the star at stake has barely started to fade at the start")
@@ -135,16 +137,24 @@ func _run() -> void:
 	var fx2: Node = scene.find_child("FxLayer", true, false)
 	_check(fx2 == null or fx2.get_child_count() == 0, "rebuild does not replay the puff")
 
-	# Portrait: the plaque is smaller, and the same states hold.
+	# Portrait: the plaque shares the footer row with the gear, sound and logo; same states hold.
 	var portrait = await _open_level(game, "1", "portrait", Vector2i(360, 640))
 	if portrait == null:
 		_check(false, "portrait level did not load")
 	else:
 		var pplaque = portrait.get("stars_row")
-		_check(pplaque != null and pplaque.size.is_equal_approx(Vector2(70, 28)), "portrait plaque is 70x28")
+		_check(pplaque != null and pplaque.size.is_equal_approx(Vector2(90, 36)), "portrait plaque is 90x36")
 		portrait.controller.timer.set_elapsed_seconds(float(portrait.controller.time_thresholds["three_stars"]) + 1.0)
 		await _frames(3)
 		_check(portrait.get("stars_base").texture == _stars_texture(2), "portrait: the base switches to stars_2")
+		var hero = portrait.get("mascot")
+		var cards := portrait.get("board_container") as Control
+		if hero != null and cards != null:
+			_check(hero.mouse_filter == Control.MOUSE_FILTER_IGNORE, "portrait hero ignores the mouse")
+			_check(hero.z_index > 0 and hero.z_index < 8, "portrait hero sits between the frame and the foreground panels")
+			_check(hero.get_global_rect().position.x < 0.0, "portrait hero bleeds off the left edge")
+			_check(hero.z_index < cards.z_index, "portrait hero is below the playable cards (never hides one)")
+			await _check_bubbles(portrait, "portrait")
 
 	# Campaign win panel: the earned plaque, inside the screen, in both orientations.
 	for view in [["landscape", Vector2i(640, 360)], ["portrait", Vector2i(360, 640)]]:
@@ -159,16 +169,73 @@ func _run() -> void:
 		wc.rewards = [{"type": "undo", "quantity": 1}]
 		win_scene.call("_show_end", true)
 		await _frames(3)
-		var end_stars := win_scene.find_child("EndStars", true, false) as TextureRect
-		_check(end_stars != null and end_stars.texture == _stars_texture(2), "%s: the win panel shows the stars_2 plaque" % view[0])
+		var end_stars := win_scene.find_child("VictoryStars", true, false) as TextureRect
+		var panel := win_scene.find_child("VictoryPanel", true, false) as Control
+		var board := win_scene.find_child("VictoryBoard", true, false) as Control
+		_check(end_stars != null and str(end_stars.get_meta("source_path", "")).ends_with("victory_stars_2.png"), "%s: the victory screen shows the 2-star plaque" % view[0])
+		_check(panel != null and board != null, "%s: the victory panel/board exist" % view[0])
+		_check(win_scene.find_child("VictoryCharacter", true, false) != null, "%s: the celebrating bunny is drawn" % view[0])
+		_check(win_scene.find_child("VictoryTitle", true, false) != null, "%s: the localised title is drawn" % view[0])
+		for button_name in ["VictoryContinue", "VictoryRetry", "VictoryQuit"]:
+			_check(win_scene.find_child(button_name, true, false) is Button, "%s: %s exists" % [view[0], button_name])
+		var hud_node := win_scene.find_child("Hud", true, false) as Control
+		var victory_overlay := win_scene.find_child("VictoryOverlay", true, false) as Control
+		_check(hud_node != null and victory_overlay != null and victory_overlay.z_index > hud_node.z_index, "%s: the victory shade sits above the HUD" % view[0])
 		await _wait_ms(700)
 		var screen := Rect2(Vector2.ZERO, win_scene.get_viewport_rect().size)
-		if end_stars != null:
-			_check(end_stars.get_global_rect().size.x >= 130.0 and end_stars.get_global_rect().size.x <= 180.0, "%s: plaque width is 130-180 px (got %s)" % [view[0], end_stars.get_global_rect().size])
+		if end_stars != null and panel != null:
+			var paw := end_stars.get_global_rect()
+			var box := panel.get_global_rect()
 			_check(end_stars.scale.is_equal_approx(Vector2.ONE) and end_stars.modulate.a > 0.99, "%s: the plaque popped in" % view[0])
-			var panel := end_stars.get_parent().get_parent() as Control
-			_check(screen.grow(-6.0).encloses(panel.get_global_rect()), "%s: win panel %s fits the screen %s with a 6 px margin" % [view[0], str(panel.get_global_rect()), str(screen)])
+			_check(screen.grow(-2.0).encloses(box), "%s: victory board %s fits the screen %s" % [view[0], str(box), str(screen)])
+			_check(box.encloses(paw.grow(-1.0)), "%s: the stars plaque %s sits inside the board %s" % [view[0], str(paw), str(box)])
+			for button_name in ["VictoryContinue", "VictoryRetry", "VictoryQuit"]:
+				var btn := win_scene.find_child(button_name, true, false) as Control
+				if btn != null:
+					_check(box.encloses(btn.get_global_rect()), "%s: %s sits inside the board" % [view[0], button_name])
+					_check(not btn.get_global_rect().intersects(paw), "%s: %s does not overlap the stars" % [view[0], button_name])
 	_finish(_errors)
+
+# Effective draw order of a canvas item (z_index summed up the chain while z_as_relative).
+func _effective_z(node: CanvasItem) -> int:
+	var z := 0
+	var n: Node = node
+	while n is CanvasItem:
+		var ci := n as CanvasItem
+		z += ci.z_index
+		if not ci.z_as_relative:
+			break
+		n = n.get_parent()
+	return z
+
+# The hero's bubble and the standalone instruction bubble render above the board cards,
+# let clicks through and stay inside the viewport.
+func _check_bubbles(scene: Node, label: String) -> void:
+	var cards := scene.get("board_container") as Control
+	var screen := Rect2(Vector2.ZERO, scene.get_viewport_rect().size)
+	var hero = scene.get("mascot")
+	if hero != null and cards != null:
+		hero.say_text("Tap the free cards to clear the board", 6.0, "instruction")
+		await _frames(4)
+		var root := hero.get("_bubble_root") as Control
+		var bubble := hero.get("_bubble") as Control
+		_check(root != null and root.visible, "%s: the hero bubble is shown" % label)
+		if root != null and bubble != null:
+			_check(_effective_z(root) > _effective_z(cards), "%s: the hero bubble (z %d) is above the cards (z %d)" % [label, _effective_z(root), _effective_z(cards)])
+			_check(root.mouse_filter == Control.MOUSE_FILTER_IGNORE and bubble.mouse_filter == Control.MOUSE_FILTER_IGNORE, "%s: the hero bubble ignores the mouse" % label)
+			var brect := Rect2(bubble.global_position, bubble.size)
+			_check(screen.grow(1.0).encloses(brect), "%s: the hero bubble %s stays inside the viewport" % [label, str(brect)])
+		hero.hide_bubble()
+	scene.call("_show_instruction_bubble", "Tap the free cards to clear the board")
+	await _frames(6)
+	var standalone := scene.get("_instruction_bubble") as Control
+	_check(standalone != null and is_instance_valid(standalone), "%s: the standalone instruction bubble is shown" % label)
+	if standalone != null and is_instance_valid(standalone) and cards != null:
+		_check(_effective_z(standalone) > _effective_z(cards), "%s: the instruction bubble is above the cards" % label)
+		_check(standalone.mouse_filter == Control.MOUSE_FILTER_IGNORE, "%s: the instruction bubble ignores the mouse" % label)
+		_check(screen.grow(1.0).encloses(standalone.get_global_rect()), "%s: the instruction bubble %s stays inside the viewport" % [label, str(standalone.get_global_rect())])
+		standalone.queue_free()
+		scene.set("_instruction_bubble", null)
 
 func _finish(errors: Array) -> void:
 	LevelLoader.deterministic = false

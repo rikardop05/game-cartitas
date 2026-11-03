@@ -3,7 +3,7 @@ extends RefCounted
 const PORTRAIT_AVAIL := LevelConfig.PORTRAIT_BOARD_ENVELOPE
 const LANDSCAPE_AVAIL := LevelConfig.LANDSCAPE_BOARD_ENVELOPE
 # Smallest board card that is still a comfortable touch target.
-const TOUCH_MIN_CARD_PX := 30.0
+const TOUCH_MIN_CARD_PX := LevelConfig.MIN_CARD_SIZE_PX
 
 # Rendered card size (px) of a board of the given logical size in an envelope: fitted, never above the UI cap.
 func _rendered_card(card_size: float, board: Vector2, avail: Vector2) -> float:
@@ -35,25 +35,25 @@ func test_envelope_rejects_out_of_envelope_with_diagnostics() -> void:
 	Assert.is_true(base.validate()["valid"], "baseline L1 validates")
 	# oversized base grid
 	var big := LevelConfig.create({
-		"difficulty": 11, "board_types": ["cat", "dog", "bird"], "count_per_type": 3,
+		"difficulty": 11, "board_types": ["cat", "wolf", "owl"], "count_per_type": 3,
 		"columns": 10, "rows": 8, "layers": 2, "seed": 1,
 	})
 	Assert.is_true(_errors_mention(big.validate()["errors"], "base grid"), "diagnostic names the base grid")
 	# too many layers
 	var deep := LevelConfig.create({
-		"difficulty": 11, "board_types": ["cat", "dog", "bird"], "count_per_type": 3,
+		"difficulty": 11, "board_types": ["cat", "wolf", "owl"], "count_per_type": 3,
 		"columns": 5, "rows": 5, "layers": 6, "seed": 1,
 	})
 	Assert.is_true(_errors_mention(deep.validate()["errors"], "layers"), "diagnostic names layers")
 	# too many board cards
 	var tall := LevelConfig.create({
-		"difficulty": 11, "board_types": ["cat", "dog", "bird", "fish", "flower", "moon", "star", "sun", "leaf", "heart", "gem", "crystal"], "board_cards": 75,
+		"difficulty": 11, "board_types": ["cat", "wolf", "owl", "whale", "mouse", "frog", "boar", "duck", "leaf", "heart", "gem"], "board_cards": 183,
 		"columns": 9, "rows": 5, "layers": 4, "seed": 1,
 	})
 	Assert.is_true(_errors_mention(tall.validate()["errors"], "board cards"), "diagnostic names board cards")
 	# a base layer the grid cannot hold
 	var cramped := LevelConfig.create({
-		"difficulty": 11, "board_types": ["cat", "dog", "bird", "fish", "flower", "moon"], "count_per_type": 3,
+		"difficulty": 11, "board_types": ["cat", "wolf", "owl", "whale", "mouse", "frog"], "count_per_type": 3,
 		"columns": 3, "rows": 2, "layers": 2, "seed": 1,
 	})
 	Assert.is_true(_errors_mention(cramped.validate()["errors"], "lattice"), "diagnostic names the card lattice")
@@ -80,7 +80,7 @@ func test_same_seed_reproduces_board_and_decks() -> void:
 
 func test_each_attempt_gets_a_new_solvable_board() -> void:
 	LevelLoader.deterministic = false
-	for id in ["1", "6", "11"]:
+	for id in ["1", "6", "11", "15"]:
 		var a := LevelLoader.load_level(id)
 		var b := LevelLoader.load_level(id)
 		Assert.is_false(a.has("error") or b.has("error"), "level %s loads with a random seed" % id)
@@ -103,7 +103,7 @@ func test_no_level_returned_unsolvable() -> void:
 		Assert.is_true(SolvabilityChecker.is_solvable(level), "level %s actually solvable" % id)
 
 func test_no_silent_fallback_as_success() -> void:
-	for id in range(1, 11):
+	for id in range(1, DifficultyProfile.max_level() + 1):
 		var cfg := DifficultyProfile.for_level(id)
 		var res := cfg.generate()
 		Assert.is_true(res["ok"], "level %d generates" % id)
@@ -113,12 +113,12 @@ func test_no_silent_fallback_as_success() -> void:
 
 func test_safe_config_50_loads_no_fallback_all_solvable() -> void:
 	var cfg := LevelConfig.create({
-		"difficulty": 11, "board_types": ["cat", "dog", "bird", "fish", "flower", "moon", "star", "sun", "leaf", "heart", "gem", "crystal"],
-		"count_per_type": 3, "columns": 7, "rows": 5, "layers": 4,
+		"difficulty": 11, "board_types": ["cat", "wolf", "owl", "whale", "mouse", "frog", "boar", "duck", "leaf", "heart", "gem"],
+		"count_per_type": 3, "board_cards": 36, "columns": 7, "rows": 5, "layers": 4,
 		"free_ratio": 0.35, "free_ratio_min": 0.20, "free_ratio_max": 0.50, "seed": 11001, "max_attempts": 80,
 	})
 	Assert.is_true(cfg.validate()["valid"], "safe config validates")
-	cfg.with_deck(["cat", "cat", "cat", "dog", "dog", "dog", "bird", "bird", "bird"])
+	cfg.with_deck(["cat", "cat", "wolf", "wolf", "owl", "owl", "whale", "whale", "mouse", "mouse", "frog", "frog"])
 	Assert.is_true(cfg.validate()["valid"], "safe config with deck validates")
 	Assert.is_true(cfg.fits_portrait(), "safe config fits portrait envelope")
 	var solved := 0
@@ -186,8 +186,8 @@ func _base_bad() -> Dictionary:
 			{"id": "b", "type": "cat", "x": 60, "y": 0, "layer": 0},
 			{"id": "c", "type": "cat", "x": 0, "y": 60, "layer": 0},
 		],
-		"deck_a": ["dog", "dog", "dog"],
-		"deck_b": ["dog", "dog", "dog"],
+		"deck_a": ["wolf", "wolf", "wolf"],
+		"deck_b": ["wolf", "wolf", "wolf"],
 		"time_thresholds": {"three_stars": 60, "two_stars": 120},
 	}
 

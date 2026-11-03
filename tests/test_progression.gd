@@ -81,7 +81,7 @@ func test_progression_table_and_growth() -> void:
 			str(id), int(m["board_cards"]), int(m["types"]), cfg.columns, cfg.rows, cfg.layers, free, blocked,
 			float(m["free_ratio"]), occ, str(m["cards_per_layer"]),
 		])
-	Assert.equals(DifficultyProfile.max_level(), 11, "exactly 11 parametric difficulty profiles")
+	Assert.equals(DifficultyProfile.max_level(), 15, "exactly 15 parametric difficulty profiles")
 
 func test_statistical_layouts_per_level() -> void:
 	print("STATS (min / mean / max over %d samples per level)" % SAMPLES_PER_LEVEL)
@@ -203,7 +203,7 @@ func test_statistical_visual_metrics_per_level() -> void:
 				sum[k] += vals[k]
 			Assert.is_true(bool(m["fits_portrait"]) and bool(m["fits_landscape"]), "level %d seed %d fits both envelopes" % [id, i])
 			for key in ["min_card_px_portrait", "min_card_px_landscape"]:
-				Assert.is_true(float(m[key]) <= LevelConfig.MAX_BOARD_CARD_PX + 0.01 and float(m[key]) >= 30.0, "level %d seed %d %s %.1fpx is a small touch-sized card (30-%.0fpx)" % [id, i, key, float(m[key]), LevelConfig.MAX_BOARD_CARD_PX])
+				Assert.is_true(float(m[key]) <= LevelConfig.MAX_BOARD_CARD_PX + 0.01 and float(m[key]) >= LevelConfig.MIN_CARD_SIZE_PX, "level %d seed %d %s %.1fpx is a small touch-sized card (%.0f-%.0fpx)" % [id, i, key, float(m[key]), LevelConfig.MIN_CARD_SIZE_PX, LevelConfig.MAX_BOARD_CARD_PX])
 			Assert.is_true(vals["w"] <= cfg.board_width() and vals["h"] <= cfg.board_height(), "level %d seed %d stays inside its base grid" % [id, i])
 		print("%2d | %.2f/%.2f/%.2f | %.2f/%.2f/%.2f | %.0f/%.0f/%.0f | %.0f/%.0f/%.0f | %.0f/%.0f/%.0f" % [
 			id,

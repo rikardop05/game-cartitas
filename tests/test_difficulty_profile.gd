@@ -23,9 +23,64 @@ func test_board_cards_and_type_counts_are_multiple_of_three() -> void:
 		for t in counts:
 			Assert.equals(counts[t] % 3, 0, "level %d type '%s' multiple of 3 (got %d)" % [n, t, counts[t]])
 
+func _deck_pool(id) -> Array:
+	var raw = JSON.parse_string(FileAccess.get_file_as_string(LevelLoader.level_path(id)))
+	var pool: Array = []
+	for t in raw.get("deck", []):
+		pool.append(str(t))
+	return pool
+
+func test_support_decks_are_small_and_never_close_a_trio() -> void:
+	# Support decks are support: at most 2 cards of a type in the combined pool, so
+	# drawing every deck card can never complete a trio on its own. Deck types must
+	# exist on the board, and board + deck per type stays a multiple of 3.
+	for id in LevelLoader.load_all_level_ids():
+		var raw = JSON.parse_string(FileAccess.get_file_as_string(LevelLoader.level_path(id)))
+		var cfg := DifficultyProfile.for_level(int(raw["difficulty"]))
+		var deck := _deck_pool(id)
+		Assert.is_true(deck.size() >= 6 and deck.size() <= 30, "level %s deck has 6-30 cards (got %d)" % [id, deck.size()])
+		var counts := {}
+		for t in deck:
+			counts[t] = int(counts.get(t, 0)) + 1
+		for t in counts:
+			Assert.is_true(int(counts[t]) <= 2, "level %s has at most 2 deck cards of '%s' (got %d)" % [id, t, int(counts[t])])
+			Assert.is_true(cfg.board_types.has(t), "level %s deck type '%s' is on the board" % [id, t])
+		cfg.with_deck(deck)
+		Assert.is_true(cfg.validate()["valid"], "level %s config valid with decks: %s" % [id, str(cfg.validate()["errors"])])
+		var board_total := 0
+		for t in cfg.board_types:
+			board_total += cfg.board_count(t)
+			Assert.equals((cfg.board_count(t) + cfg.deck_count(t)) % 3, 0,
+				"level %s type '%s' board+deck is a multiple of 3 (%d+%d)" % [id, t, cfg.board_count(t), cfg.deck_count(t)])
+		Assert.equals(board_total, cfg.board_cards(), "level %s per-type board counts add up to the board total" % id)
+		Assert.equals(board_total % 3, 0, "level %s board total is a multiple of 3" % id)
+
+func test_resolved_levels_keep_the_support_deck_rule() -> void:
+	LevelLoader.deterministic = true
+	for id in LevelLoader.load_all_level_ids():
+		var level := LevelLoader.load_level(id)
+		Assert.is_false(level.has("error"), "level %s resolves" % id)
+		var counts := {}
+		for t in level.get("deck_a", []) + level.get("deck_b", []):
+			counts[t] = int(counts.get(t, 0)) + 1
+		for t in counts:
+			Assert.is_true(int(counts[t]) <= 2, "level %s resolved deck has at most 2 of '%s'" % [id, t])
+		for deck_key in ["deck_a", "deck_b"]:
+			var cards: Array = level[deck_key]
+			for i in range(1, cards.size()):
+				Assert.not_equals(str(cards[i]), str(cards[i - 1]),
+					"level %s %s has no two equal cards side by side at %d" % [id, deck_key, i])
+		var board_counts := {}
+		for c in level["cards"]:
+			board_counts[str(c["type"])] = int(board_counts.get(str(c["type"]), 0)) + 1
+		for t in board_counts:
+			Assert.equals((int(board_counts[t]) + int(counts.get(t, 0))) % 3, 0,
+				"level %s type '%s' resolved board+deck is a multiple of 3" % [id, t])
+	LevelLoader.deterministic = false
+
 func test_available_types_separated_from_used_types() -> void:
 	var cfg := DifficultyProfile.for_level(10)
-	Assert.equals(cfg.available_card_types.size(), 12, "all 12 registry types available")
+	Assert.equals(cfg.available_card_types.size(), 14, "all 14 registry types available")
 	Assert.is_true(cfg.available_card_types.size() >= cfg.types_used_in_level.size(), "used is a subset of available")
 	for t in cfg.types_used_in_level:
 		Assert.is_true(cfg.available_card_types.has(t), "'%s' is an available card type" % t)
@@ -47,7 +102,7 @@ func test_generation_metrics_are_populated() -> void:
 			"free_ratio", "free_ratio_target", "free_ratio_ok", "free_cards", "blocked_cards", "max_coverage",
 			"complexity", "attempts", "seed_used", "solvable", "status", "fits_portrait", "fits_landscape"]:
 		Assert.is_true(m.has(key), "metric '%s' present" % key)
-	Assert.equals(int(m["board_cards"]), 33, "level 5 board has 33 cards")
+	Assert.equals(int(m["board_cards"]), 60, "level 5 board has 60 cards")
 	Assert.equals(int(m["same_layer_overlaps"]), 0, "level 5 has no same-layer overlap")
 
 func test_generated_board_cards_within_bounds_and_unique() -> void:
@@ -146,14 +201,14 @@ func test_same_layer_cards_are_a_full_card_apart() -> void:
 
 func test_explicit_board_cards_are_dealt_as_whole_trios() -> void:
 	# A board total that is not types x 3 gives some types one trio more.
-	var cfg := LevelConfig.create({"board_types": ["cat", "dog", "bird", "fish"], "board_cards": 18, "columns": 5, "rows": 3, "layers": 2})
+	var cfg := LevelConfig.create({"board_types": ["cat", "wolf", "owl", "whale"], "board_cards": 18, "columns": 5, "rows": 3, "layers": 2})
 	Assert.equals(cfg.board_cards(), 18, "explicit board card total")
 	var total := 0
 	for t in cfg.board_types:
 		Assert.equals(cfg.board_count(t) % 3, 0, "%s count is a multiple of 3" % t)
 		total += cfg.board_count(t)
 	Assert.equals(total, 18, "per-type counts add up to the board total")
-	Assert.equals([cfg.board_count("cat"), cfg.board_count("fish")], [6, 3], "the first types take the extra trios")
+	Assert.equals([cfg.board_count("cat"), cfg.board_count("whale")], [6, 3], "the first types take the extra trios")
 	var generated := cfg.generate()
 	Assert.is_true(generated["ok"], "explicit board total generates")
 	var counts := {}
@@ -165,8 +220,8 @@ func test_explicit_board_cards_are_dealt_as_whole_trios() -> void:
 func test_profile_rows_ask_for_wide_bases_with_a_wide_ramp() -> void:
 	var first := DifficultyProfile.for_level(1)
 	var last := DifficultyProfile.for_level(DifficultyProfile.max_level())
-	Assert.equals([first.columns, first.rows], [4, 2], "level 1 starts with a 4x2 base")
-	Assert.is_true(last.columns >= 8 and last.columns <= LevelConfig.MAX_COLUMNS, "the last level has an 8-9 column base (got %d)" % last.columns)
+	Assert.equals([first.columns, first.rows], [5, 3], "level 1 starts with a 5x3 base")
+	Assert.is_true(last.columns >= 8 and last.columns <= LevelConfig.MAX_COLUMNS, "the last level has a wide base (got %d)" % last.columns)
 	Assert.is_true(last.rows >= 4, "the last level has at least 4 rows")
 	Assert.is_true(last.board_cards() >= 60 and last.board_cards() <= LevelConfig.MAX_BOARD_CARDS, "the last level fills the wide base (%d cards)" % last.board_cards())
 	for n in range(1, DifficultyProfile.max_level() + 1):

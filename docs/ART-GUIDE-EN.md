@@ -12,7 +12,7 @@ The illustrated version to send to the artist is the PDF [`ART-DELIVERY-PT.pdf`]
 
 ## 2. Sizes (card art standard)
 
-Card faces are delivered at **high resolution** and the game scales them at draw time: **square 960×960 px PNG** (minimum 512; prefer multiples of 64 — 960 = 64 × 15 keeps the pixel-art frame aligned). The current Pack A files are 480–960 px.
+Card faces are delivered at **high resolution** and the game scales them at draw time: **square PNG** (minimum 512; prefer multiples of 64). The current set is **882–957 px** — each card is cropped at the hard frame silhouette and kept at its native square size (e.g. 957 px from a 960 px source, 882 px when the source is smaller), never upscaled to a fixed number.
 
 Why: the UI is laid out at 640×360 (landscape) / 360×640 (portrait) **logical** px but drawn at the **physical screen resolution** (`stretch mode = canvas_items`). A 40 px logical card is 80 real px in a 1280×720 window, 120 px in 1080p fullscreen, and more on bigger screens. The game builds **mipmaps** when it loads the art and draws it with **trilinear** filtering (`UiHelpers.card_texture` + `_make_card_art`), so the GPU scales straight from the original to the real size — sharp at any resolution, no re-export needed.
 
@@ -29,11 +29,12 @@ Consequence for the art: the subject must read at **~30 logical px** (strong sil
 
 ## 3. Card anatomy
 
-The PNG is drawn **as the whole card face** (no extra background or border from the game). Follow the Pack A template (`assets/cards/card_dog.png`):
+The PNG is drawn **as the whole card face** (no extra background or border from the game). Follow the current template (`assets/cards/card_mouse.png`):
 
-- A pixel-art wooden **frame** around the edge (at 960 px each frame "pixel" is 15 px), bottom shadow included.
-- A light **inner area** (white with a lilac rim) with the **illustration centred**, dark outline, ~15% breathing room to the frame.
-- **Transparent** outside the frame; corners may use fully transparent pixels.
+- A painted **dark metal frame** with rivets and a carved ornament at each corner, around the edge.
+- A **parchment inner area** with the **illustration centred**, dark outline, ~10% breathing room to the frame.
+- **Transparent** outside the frame, with a clean cut silhouette: no white halo, no drop shadow, no glow and no stray specks. The game bleeds the edge colour into the transparent pixels, so a white matte would show as a rim.
+- **The frame touches all four canvas edges**: crop at the hard alpha edge (alpha ≥ 240) and deliver a square with no transparent margin. Do not upscale a smaller source just to hit 960.
 - Same framing and lighting on every card so the set reads as one family.
 - Blocked cards are darkened by the game; do not deliver dark variants.
 
@@ -41,20 +42,92 @@ The PNG is drawn **as the whole card face** (no extra background or border from 
 
 Painted plaques and icons (stars, stopwatch, gear) live in `assets/ui/hud/` and follow the card standard: transparent high-resolution PNGs (icons >= 512 px; star plaques ~1024 px wide, one image per state `stars_1/2/3.png`), drawn with mipmaps and trilinear filtering.
 
+## 3c. Painted heroes
+
+Level heroes live in `assets/ui/heroes/` as `hero_<id>.png`: full-body painted PNGs, transparent background, no white halo, no drop shadow, cropped to the silhouette, high resolution (770-1220 px wide × 1260-1520 px tall). Drawn with mipmaps and trilinear filtering.
+
+Level map (used by the level screen):
+
+| Level | File |
+|-------|------|
+| 1 | `hero_cat.png` |
+| 2 | `hero_wolf_ranger.png` |
+| 3 | `hero_boar.png` |
+| 4 | `hero_mouse.png` |
+| 5 | `hero_owl.png` |
+| 6 | `hero_frog.png` |
+| 7 | `hero_knight.png` |
+| 8 | `hero_bunny.png` |
+| 9 | `hero_wolf_knight.png` |
+| 10 / 11 | fallback (`hero_menu_wolf.png` keeps the menu hero) |
+
+Level 8 (bunny) also has four expression variants, same size and framing as `hero_bunny.png`:
+
+| File | Use |
+|------|-----|
+| `hero_bunny_thinking.png` | thinking / waiting |
+| `hero_bunny_sequence.png` | showing the sequence |
+| `hero_bunny_bad_choice.png` | wrong choice |
+| `hero_bunny_defeat.png` | loss |
+
+The menu hero is `assets/ui/heroes/hero_menu_wolf.png` (rear-view wolf knight). The game logo is `assets/ui/branding/logo_claw_and_crown.png` (transparent, 1748×866).
+
+The bunny also has a rigged idle: `assets/ui/heroes/bunny_rig/bunny_rig.tscn` (2D skeleton + `AnimationPlayer`, autoplay `Idle`, 4 s, layered `Polygon2D` body parts in `bunny_rig/`). It plays where the bunny is the mascot (L8 idle and the Endless rounds) and hides while one of the four painted expression frames is showing.
+
+## 3d. Match FX
+
+Card-match effects live in `assets/ui/fx/`: `match_burst.png` (blue burst, plays on a triple) and `match_smoke.png` (blue smoke puffs + droplets). Both are RGBA PNGs with a transparent background and keep their soft glow (do not crop the alpha, only the empty border).
+
+## 3e. Level backgrounds
+
+Full-bleed painted backgrounds, one per level range. No alpha, no cropping: the art already covers the whole frame and is drawn stretched to the screen with linear filtering.
+
+| Levels | Set | Landscape | Portrait |
+|--------|-----|-----------|----------|
+| 1–3 | meadow | `assets/ui/background.png` (640×360) | `assets/ui/background_portrait.png` (360×640) |
+| 4–7 | autumn town | `assets/ui/background_autumn.png` (1672×941) | reuses the landscape art |
+| 8–11 | castle | `assets/ui/background_castle.png` (1280×720) | `assets/ui/background_castle_portrait.png` (532×720) |
+
+Keep contrast low and detail out of the centre: dark semi-transparent panels and the cards sit on top.
+
+## 3f. Painted panels (UI kit)
+
+Stretchable panels live in `assets/ui/kit/`; the board frame, Clearing Zone bar and deck table now live in `assets/ui/kit/v2/`. All are cropped to the silhouette (transparent margins removed, no outer shadow) and are drawn as `NinePatchRect`, so the patch margins must keep the carved corners whole:
+
+| File | Size | Use | 9-slice margin |
+|------|------|-----|----------------|
+| `assets/ui/kit/v2/bar_zone.png` | 1980×322 | Clearing Zone bar (v2; replaces the removed v1 `assets/ui/kit/bar_zone.png`) | set by `ZONE_BAR_MARGINS` in code |
+| `panel_powers_board.png` | 751×1453 | Powers board, vertical (clear area x 78–690, y 76–1368) | 96 px |
+| `panel_reserve_field.png` | 1829×741 | Reserve field — stone interior is part of the art (cards are drawn on top) | 192 px |
+| `assets/ui/kit/v2/card_available_frame.png` | 960×919 | Deck table under each Support Deck pile (v2; replaces the removed v1 `assets/ui/kit/card_available_frame.png`) | drawn stretched, not 9-sliced |
+
+The v1 `panel_board_frame.png` and `panel_menu_board.png` were removed on 2026-11-02; the landscape board frame and menu board now use `assets/ui/kit/v2/panel_board_frame.png` and `assets/ui/kit/v2/panel_menu_board.png`.
+
+## 3g. Menu assets
+
+| File | Size | Notes |
+|------|------|-------|
+| `assets/ui/background_menu.png` | 640×360 | Menu background, landscape only (no portrait variant) |
+| `assets/ui/kit/v2/Iniciar).png` | 1133×329 | "Iniciar" menu plate (v2; replaces the removed `assets/ui/branding/btn_menu_jogar.png`) |
+| `assets/ui/kit/v2/Opcoes_.png` | 1125×321 | "Opções" menu plate (v2; replaces the removed `assets/ui/branding/btn_menu_opcoes.png`) |
+| `assets/ui/kit/v2/sair_.png` | 1133×326 | "Sair" menu plate (v2; replaces the removed `assets/ui/branding/btn_menu_sair.png`) |
+
+The current menu plates are painted v2 art: draw them at any scale with linear filtering and mipmaps. The old 64×32 pixel-art `assets/ui/branding/btn_menu_*.png` buttons were removed on 2026-11-02. Keep the game logo (`assets/ui/branding/logo_claw_and_crown.png`) separate from the plates.
+
 ## 4. Palette
 
 Use a **shared limited palette** (~32 colors). Base colors per type live in `scripts/core/card_type_registry.gd`:
 
 | Type | Base color |
 |------|------------|
-| cat | `#e07a7a` |
-| dog | `#d9a05b` |
-| bird | `#e0c95b` |
-| fish | `#6bb5e0` |
-| flower | `#e08ac9` |
-| moon | `#c9b8e0` |
-| star | `#f0e060` |
-| sun | `#f0b060` |
+| mouse | `#b8a46a` |
+| cat | `#c9564f` |
+| boar | `#b0713c` |
+| owl | `#7a6bc9` |
+| wolf | `#8fa3b8` |
+| duck | `#d9a441` |
+| frog | `#7fae4a` |
+| whale | `#4f7fc9` |
 | leaf | `#6bc98a` |
 | heart | `#e06a6a` |
 | gem | `#6ac9d9` |
@@ -62,7 +135,7 @@ Use a **shared limited palette** (~32 colors). Base colors per type live in `scr
 
 UI colors already in use: level screen background `#c78454`, panel border `#f3d28d`, text `#fff1d2`, stars `#ffe36e`, placeholder frame `#fff2d5`.
 
-Note: `heart` (`#e06a6a`) and `cat` (`#e07a7a`) are nearly identical — tell them apart by symbol and silhouette, not color.
+Card subjects (current art): `mouse` hooded scholar with a book; `cat` hooded archer in a red cloak; `boar` armoured bruiser with a mace; `owl` mage with a staff; `wolf` plate knight; `duck` gunslinger with a hat; `frog` leaf-cloaked ranger; `whale` pirate captain; `leaf` green ranger (elf archer); `heart` golden paladin bunny; `gem` blue bunny knight (silver armour, blue scarf and cape); `crystal` still the placeholder. `heart` and `gem` are different characters — never reuse one for the other. `heart` (`#e06a6a`) and `cat` are both warm reds: tell them apart by silhouette and symbol, not color.
 
 Deliver a `palette/palette.png` with every color used (one 8×8 square per color).
 
@@ -72,9 +145,9 @@ Deliver a `palette/palette.png` with every color used (one 8×8 square per color
 
 | File | Size | Description |
 |------|------|-------------|
-| `assets/cards/card_<type>.png` | 960×960 (min. 512, square) | 12 card faces, one per type (frame included) |
+| `assets/cards/card_<type>.png` | native square (min. 512) | 12 card faces, one per type (frame included, cropped to the hard frame edge) |
 
-`UiHelpers.card_texture()` looks for `res://assets/cards/card_<type>.png`; without the file, the game uses the placeholder (color + emoji). The 12 types: `cat, dog, bird, fish, flower, moon, star, sun, leaf, heart, gem, crystal`.
+`UiHelpers.card_texture()` looks for `res://assets/cards/card_<type>.png`; without the file, the game uses the placeholder (color + emoji). The 12 types: `mouse, cat, boar, owl, wolf, duck, frog, whale, leaf, heart, gem, crystal`. Eleven have painted art; `crystal` still uses the placeholder.
 
 ### Phase 2 — optional (not wired in code yet; the UI uses text/emoji today)
 
@@ -86,8 +159,8 @@ Deliver a `palette/palette.png` with every color used (one 8×8 square per color
 | `assets/ui/power_refresh.png` | 16×16 | Refresh power icon (reshuffles the board and Support Decks) |
 | `assets/ui/star_filled.png` | 16×16 | Filled star (HUD) |
 | `assets/ui/star_empty.png` | 16×16 | Empty star (HUD) |
-| `assets/ui/background.png` | 640×360 | Screen background, landscape |
-| `assets/ui/background_portrait.png` | 360×640 | Screen background, portrait |
+
+Level backgrounds are listed in section 3e.
 
 The background sits behind dark semi-transparent panels and the cards: keep contrast low and avoid detail in the center.
 
@@ -114,7 +187,7 @@ A single `.zip` whose root mirrors the project (it can be unzipped straight into
 ```
 cartitas_arte_v01_YYYY-MM-DD.zip
 ├── assets/
-│   ├── cards/   card_cat.png … card_crystal.png (12)  [+ back.png]
+│   ├── cards/   card_mouse.png … card_crystal.png (12; crystal may still be a placeholder)  [+ back.png]
 │   └── ui/      (phase 2, if delivered)
 ├── palette/     palette.png
 ├── source/      editable files (.aseprite, .psd, …)
@@ -124,7 +197,7 @@ cartitas_arte_v01_YYYY-MM-DD.zip
 
 ## 9. Godot import (done by the integrator)
 
-- **Cards** (`assets/cards/`): just copy the PNG as `card_<type>.png`. The game builds the mipmaps and uses trilinear filtering on its own; no *Import* panel changes needed. Older art lives in `assets/cards/legacy/` (a folder Godot ignores).
+- **Cards** (`assets/cards/`): just copy the PNG as `card_<type>.png`. The game builds the mipmaps and uses trilinear filtering on its own; no *Import* panel changes needed. The old `assets/cards/legacy/` folder was removed on 2026-11-02; only the current `card_<type>.png` files remain.
 - **Pixel-art UI kit and icons** (`assets/ui/kit/`): Filter **Nearest** (project default), Mipmaps **off**, Compress **Lossless**, drawn at 1x or whole multiples.
 - **Painted backgrounds** (`assets/ui/`): the game applies linear filtering and the softening shader.
 

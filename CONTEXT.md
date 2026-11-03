@@ -5,17 +5,25 @@ A card-matching puzzle game built in Godot. The player clears a board by selecti
 ## Language
 
 **Level**:
-A playable stage with its own board layout, support decks, time thresholds, and first-win rewards.
+A playable stage with its own board layout, support decks, time thresholds, and first-win rewards. The campaign ships 15 Levels.
 _Avoid_: Stage, Phase, "fase" (in code)
 
 **Board**:
-The physical layout of cards in a level: a grid-aligned layered pyramid (upper layers sit on half-card offsets over the layer below), so cards overlap across layers but never within one.
+The physical layout of cards in a level: a grid-aligned layered pyramid (upper layers sit on quarter-card offsets over the layer below), so cards overlap across layers but never within one.
+
+**Design Size**:
+The logical UI coordinate space (360×640 portrait, 640×360 landscape) used for layout rects and control sizes; the `canvas_items` stretch scales it to the real window. Touch targets are checked in design px.
+_Avoid_: screen size, resolution, window pixels
+
+**Oversample**:
+The factor (1–4, in half steps) between one design pixel and a real screen pixel. 9-slice panels are baked at design size × oversample and drawn back at 1/oversample so painted corners stay sharp on 2× windows.
+_Avoid_: upscale factor (the old design-size bake), zoom, DPI
 
 **Card**:
 A single playable tile on the board. Has a unique id, a type, a position, a layer, a state, and a source (board or support deck).
 
 **Card Type**:
-The identity that determines matching. Two cards match if and only if they share the same Card Type.
+The identity that determines matching. Two cards match if and only if they share the same Card Type. The game ships 15 Card Types (14 with painted art; `crystal` is still a placeholder).
 _Avoid_: typeId (that is a field, not the concept)
 
 **Card State**:
@@ -29,7 +37,7 @@ The limited temporary area that holds selected cards. Three cards of the same ty
 _Avoid_: hand, tray
 
 **Support Deck**:
-An auxiliary finite pile of cards the player can draw from into the Clearing Zone. Each level has two.
+An auxiliary finite pile of cards the player can draw from into the Clearing Zone. Each level has two; a Card Type appears at most twice per deck, and every deck type also appears on the board.
 _Avoid_: deck (alone)
 
 **Power**:
@@ -54,6 +62,22 @@ _Avoid_: Level (inside Endless Mode), stage
 
 **Score**:
 Endless Mode points: per matched card plus a bonus per cleared Round. The campaign has no Score, only stars.
+
+**Hero**:
+The character drawn beside the board who says the instruction, tips and reactions (it replaced the single mascot "Ace"). One Hero is fixed per Level or Endless Round; every Hero speaks with the same neutral "hero" line family.
+_Avoid_: Mascot (the old single host), NPC
+
+**Hero Portrait**:
+The full-body painted image that represents a Hero (`assets/ui/heroes/hero_<id>.png`). Campaign Levels 1–9 have their own portrait; Levels 10–11 fall back to the menu wolf; Levels 12–14 use the new `cat_mage`, `rhino` and `sacer` portraits; Level 15 reuses the `wolf_knight` portrait. Endless Mode rotates the nine original heroes each Round (the three new portraits stay campaign-only).
+_Avoid_: Mascot sprite, avatar
+
+**Hero Expression**:
+An alternate Hero Portrait chosen by mood: thinking (idle), sequence (happy), bad choice (worried), defeat (sad). Every hero with a delivered set swaps frames — cat, wolf_ranger, boar, mouse, owl, frog, knight, bunny, wolf_knight, cat_mage, rhino, sacer (whale and duck sets are ready but no Level uses them yet). The bunny keeps its idle rig while the mood is IDLE; only the menu_wolf fallback keeps one portrait and varies by tint. Frames are normalised by their alpha bounds to the base portrait's height and foot line.
+_Avoid_: Frame (ambiguous with animation frames)
+
+**Logo**:
+The painted Claw & Crown wordmark (`assets/ui/branding/logo_claw_and_crown.png`) shown in the menu in place of the title text. "Cartitas Infinity" stays the internal project name.
+_Avoid_: Title (the text fallback used when the logo art is missing)
 
 **Action**:
 A single player interaction: select a card, draw a deck card, or use a power.

@@ -7,7 +7,7 @@ const DEFAULT_CARD_SIZE := 48.0
 # generator (logical space) and the renderer (level_screen / BoardLayout).
 const CARD_LOGICAL_SIZE := 48.0
 # Smallest rendered board card = MIN_CARD_SCALE x CARD_LOGICAL_SIZE (30 px, a touch target).
-const MIN_CARD_SCALE := 0.625
+const MIN_CARD_SCALE := 0.5
 const RESERVE_CARD_SCALE := 0.80
 const BOARD_PADDING := 8.0
 const HEADER_HEIGHT := 40.0
@@ -15,22 +15,22 @@ const INSTRUCTION_HEIGHT := 18.0
 const BOARD_MIN_HEIGHT := 200.0
 const MAX_VISIBLE_LAYERS := 4
 
-# Board envelope guardrails. Portrait is the reference layout: 360x640 logical
-# viewport with a 338x173 board area inside the kit's 352x192 board window.
-# Landscape (640x360) leaves a 450x189 area inside the 464x208 window. Configs
-# that cannot keep the minimum rendered card size are MARKED
+# Board envelope guardrails, measured from the real play hole (frame border + pad):
+# portrait is the reference layout (360x640 viewport, 336x177 play area inside the
+# kit's 352x192 window) and landscape (640x360) leaves 448x193 inside the 464x208
+# window. Configs that cannot keep the minimum rendered card size are MARKED
 # (fits_landscape=false), not rejected. Guardrails live here and are enforced by
-# validate(): 9x6 base grid, 4 layers, 72 board cards, min rendered card size.
+# validate(): 14x7 base grid, 5 layers, 180 board cards, min rendered card size.
 # Boards are wide with many small cards: the renderer never draws a board card
 # larger than MAX_BOARD_CARD_PX (small boards stay centered at that size).
-const PORTRAIT_BOARD_ENVELOPE := Vector2(338, 173)
-const LANDSCAPE_BOARD_ENVELOPE := Vector2(450, 189)
-const MAX_BOARD_CARD_PX := 40.0
+const PORTRAIT_BOARD_ENVELOPE := Vector2(336, 177)
+const LANDSCAPE_BOARD_ENVELOPE := Vector2(448, 193)
+const MAX_BOARD_CARD_PX := 60.0
 const MIN_CARD_SIZE_PX := 24.0
-const MAX_COLUMNS := 9
-const MAX_ROWS := 6
-const MAX_LAYERS := 4
-const MAX_BOARD_CARDS := 72
+const MAX_COLUMNS := 14
+const MAX_ROWS := 7
+const MAX_LAYERS := 5
+const MAX_BOARD_CARDS := 180
 
 var difficulty: int = 1
 var board_types: Array[String] = []
@@ -39,6 +39,9 @@ var count_per_type: int = 3
 # Trios are dealt to the board types in turn (as BoardPipeline assigns symbols), so
 # some types hold one trio more than others while every type stays a multiple of 3.
 var board_card_total: int = 0
+# Optional explicit per-type board counts (type -> copies). Empty = derived from the
+# board total / deck pool (see _derive_board_counts) or dealt as whole trios.
+var board_counts: Dictionary = {}
 var deck_types: Array[String] = []
 # Largest base-layer grid, in whole cards: BoardPipeline grows the base inside
 # columns x rows and the delivered board is cropped to what it really occupies.
@@ -47,6 +50,8 @@ var rows: int = 5
 var layers: int = 2
 # Fraction of the lower layer held by each upper layer (see BoardPipeline.layer_targets).
 var layer_ratio: float = BoardPipeline.LAYER_RATIO
+# Optional explicit cards per layer (base first); empty = geometric layer_ratio.
+var layer_counts: Array[int] = []
 # Base layer aspect (width / height): wide ~2:1 boards (many small cards, like the
 # reference). The pipeline steers growth toward aspect_target and rejects bases
 # outside [aspect_min, aspect_max] (bases of up to 3 cards are exempt); rows raise
@@ -86,10 +91,18 @@ static func create(params: Dictionary) -> LevelConfig:
 		cfg.board_types.append(str(t))
 	cfg.count_per_type = int(params.get("count_per_type", 3))
 	cfg.board_card_total = int(params.get("board_cards", 0))
+	cfg.board_counts = {}
+	var raw_counts = params.get("board_counts", {})
+	if raw_counts is Dictionary:
+		for key in raw_counts:
+			cfg.board_counts[str(key)] = int(raw_counts[key])
 	cfg.columns = int(params.get("columns", 5))
 	cfg.rows = int(params.get("rows", 5))
 	cfg.layers = int(params.get("layers", 2))
 	cfg.layer_ratio = float(params.get("layer_ratio", BoardPipeline.LAYER_RATIO))
+	cfg.layer_counts = []
+	for raw_layer_count in params.get("layer_counts", []):
+		cfg.layer_counts.append(int(raw_layer_count))
 	cfg.aspect_target = float(params.get("aspect_target", DEFAULT_ASPECT_TARGET))
 	cfg.aspect_min = float(params.get("aspect_min", DEFAULT_ASPECT_MIN))
 	cfg.aspect_max = float(params.get("aspect_max", DEFAULT_ASPECT_MAX))
@@ -106,7 +119,66 @@ func with_deck(pool: Array) -> void:
 	deck_types = []
 	for t in pool:
 		deck_types.append(str(t))
+	_derive_board_counts()
 	_recompute_types_used()
+
+# Support decks hold at most 2 cards of a type, so a deck on its own can never complete a
+# trio. The board must therefore supply the missing remainder: a type with 1 deck card
+# gets board_count % 3 == 2, with 2 deck cards it gets % 3 == 1. This spreads the board
+# total as evenly as that rule allows (counts stay within 3 of each other) and keeps the
+# board total intact. An explicit board_counts map wins over the derivation.
+func _derive_board_counts() -> void:
+	if not board_counts.is_empty():
+		return
+	if board_card_total <= 0 or board_types.is_empty():
+		return
+	var deck_counts := {}
+	for t in deck_types:
+		if board_types.has(t):
+			deck_counts[t] = int(deck_counts.get(t, 0)) + 1
+	if deck_counts.is_empty():
+		return
+	var n := board_types.size()
+	var total := board_cards()
+	var base := total / n
+	var extra := total % n
+	var counts: Array[int] = []
+	for i in n:
+		counts.append(base + (1 if i < extra else 0))
+	for i in n:
+		var need := (3 - int(deck_counts.get(board_types[i], 0)) % 3) % 3
+		var best := counts[i]
+		var best_dist := 99
+		for delta in [-2, -1, 0, 1, 2]:
+			var step := int(delta)
+			var candidate: int = counts[i] + step
+			if candidate < 0 or candidate % 3 != need:
+				continue
+			var distance := absi(step)
+			if distance < best_dist:
+				best_dist = distance
+				best = candidate
+		counts[i] = best
+	var sum := 0
+	for c in counts:
+		sum += c
+	while sum > total:
+		var largest := -1
+		for i in n:
+			if counts[i] >= 4 and (largest < 0 or counts[i] > counts[largest]):
+				largest = i
+		counts[largest] -= 3
+		sum -= 3
+	while sum < total:
+		var smallest := 0
+		for i in range(1, n):
+			if counts[i] < counts[smallest]:
+				smallest = i
+		counts[smallest] += 3
+		sum += 3
+	board_counts = {}
+	for i in n:
+		board_counts[board_types[i]] = counts[i]
 
 func _recompute_types_used() -> void:
 	types_used_in_level = []
@@ -132,6 +204,8 @@ func board_count(type_name: String) -> int:
 	var index := board_types.find(type_name)
 	if index < 0:
 		return 0
+	if board_counts.has(type_name):
+		return int(board_counts[type_name])
 	if board_card_total <= 0:
 		return count_per_type
 	# Trio t goes to type t % types: the first (trios % types) types hold one more.
@@ -152,8 +226,10 @@ func board_width() -> float:
 func board_height() -> float:
 	return maxf(card_size, rows * card_size)
 
-# Cards per layer, base first (the BoardPipeline pyramid distribution).
+# Cards per layer, base first (explicit layer_counts win over the geometric split).
 func layer_targets() -> Array:
+	if not layer_counts.is_empty():
+		return layer_counts.duplicate()
 	return BoardPipeline.layer_targets(board_cards(), layers, layer_ratio)
 
 # Rendered card size (px) when a board of the given size (default: the largest
@@ -179,12 +255,14 @@ func build_spec(geometry_seed: int, symbol_seed: int) -> BoardSpec:
 		"board_height": board_height(),
 		"layers": layers,
 		"layer_ratio": layer_ratio,
+		"layer_counts": layer_counts,
 		"aspect_target": aspect_target,
 		"aspect_min": aspect_min,
 		"aspect_max": aspect_max,
 		"geometry_seed": geometry_seed,
 		"symbol_seed": symbol_seed,
 		"card_types": board_types,
+		"type_counts": board_counts,
 	})
 
 func validate() -> Dictionary:
@@ -197,6 +275,21 @@ func validate() -> Dictionary:
 		errors.append("board cards %d is not a multiple of 3" % board_cards())
 	if total_cards() % 3 != 0:
 		errors.append("total cards %d is not a multiple of 3" % total_cards())
+	if not board_counts.is_empty():
+		var counted := 0
+		for t in board_types:
+			if not board_counts.has(t):
+				errors.append("board_counts is missing type '%s'" % t)
+				continue
+			var n := int(board_counts[t])
+			if n < 0:
+				errors.append("board_counts for '%s' must be >= 0" % t)
+			counted += n
+		for key in board_counts:
+			if not board_types.has(str(key)):
+				errors.append("board_counts has unknown type '%s'" % str(key))
+		if counted != board_cards():
+			errors.append("board_counts add up to %d, not the board total %d" % [counted, board_cards()])
 	if layers < 1:
 		errors.append("layers must be >= 1")
 	if columns < 1 or rows < 1:
@@ -222,6 +315,13 @@ func validate() -> Dictionary:
 		errors.append("free_ratio target %.2f outside declared range [%.2f, %.2f]" % [free_ratio, free_ratio_min, free_ratio_max])
 	if free_ratio_min < 0.0 or free_ratio_max > 1.0:
 		errors.append("free_ratio range must lie within [0, 1]")
+	var deck_per_type := {}
+	for t in deck_types:
+		deck_per_type[t] = int(deck_per_type.get(t, 0)) + 1
+		if not board_types.has(t):
+			errors.append("deck type '%s' does not appear on the board" % t)
+		if int(deck_per_type[t]) > 2:
+			errors.append("deck has %d cards of type '%s' (max 2 so a deck can never close a trio)" % [int(deck_per_type[t]), t])
 	for t in types_used_in_level:
 		var total := board_count(t) + deck_count(t)
 		if total % 3 != 0:
@@ -236,6 +336,7 @@ func metrics() -> Dictionary:
 	return {
 		"difficulty": difficulty,
 		"board_cards": board_cards(),
+		"board_counts": board_counts.duplicate(),
 		"deck_cards": deck_card_count(),
 		"types": board_types.size(),
 		"types_used_in_level": types_used_in_level.duplicate(),

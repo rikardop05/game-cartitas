@@ -3,7 +3,7 @@
 `LevelConfig` (`scripts/core/level_config.gd`) is the explicit, validated
 configuration for one parametric level. `DifficultyProfile`
 (`scripts/core/difficulty_profile.gd`) is the progression table: one row per
-difficulty. Adding a level 12+ is just adding a row to `DifficultyProfile.LEVELS`.
+difficulty. Adding a level 16+ is just adding a row to `DifficultyProfile.LEVELS`.
 
 Boards for every parametric Level and every Endless round are built by
 `BoardPipeline` through `LevelBoardGenerator` (`scripts/core/level_board_generator.gd`):
@@ -18,8 +18,8 @@ only serves hand-written `layout` levels (no shipped level uses it).
   "id": "1",
   "difficulty": 1,
   "clearing_capacity": 7,
-  "deck": ["cat", "cat", "cat", "dog", "dog", "dog"],
-  "time_thresholds": { "three_stars": 60, "two_stars": 120 },
+  "deck": ["cat", "cat", "wolf", "wolf", "owl", "owl", "mouse", "mouse", "gem", "gem", "crystal", "crystal"],
+  "time_thresholds": { "three_stars": 45, "two_stars": 75 },
   "rewards": [{ "type": "hold", "quantity": 1 }]
 }
 ```
@@ -31,8 +31,10 @@ only serves hand-written `layout` levels (no shipped level uses it).
     every load so each retry shows a new (still solvable) board. `false` keeps
     the profile's fixed `seed`. Tests and tools force the fixed seed for every
     level with `LevelLoader.deterministic = true`.
-- `deck` — card types drawn from during play. Each type count is a multiple
-  of 3 so totals stay valid with the board.
+- `deck` — card types drawn from during play. At most **2 cards per type** (so a deck
+  can never close a trio); every deck type must appear on the board, and board+deck per
+  type must be a multiple of 3. Shipped decks: **12** (L1–L4), **18** (L5–L6), **24**
+  (L7–L12), **27** (L13) and **30** (L14–L15).
 
 `LevelLoader.resolve` resolves `difficulty` via the profile (campaign JSONs and
 `EndlessRun.build_round_level` both go through it) and attaches: `cards`,
@@ -48,7 +50,8 @@ Fields of one `DifficultyProfile.LEVELS` row (see the header comment of the file
 | field | meaning |
 |---|---|
 | `board_types` | distinct card types placed on the board |
-| `board_cards` | board card total (multiple of 3); trios go to the types in turn, so some types hold one trio more and every type stays a multiple of 3. Without it the total is `board_types.size() × count_per_type` |
+| `board_cards` | board card total (multiple of 3); per-type counts are derived from the Support Deck pool so board+deck per type stays a multiple of 3 and the deck never holds 3 of a type. Without it the total is `board_types.size() × count_per_type` |
+| `board_counts` | optional explicit per-type board counts; empty = derived from `board_cards` and the deck pool |
 | `count_per_type` | board copies per type (multiple of 3); used only when `board_cards` is absent |
 | `columns`, `rows` | largest base-layer grid, **in whole cards** (wide: about 2:1) |
 | `layers` | pyramid height (stacking depth) |
@@ -57,37 +60,51 @@ Fields of one `DifficultyProfile.LEVELS` row (see the header comment of the file
 | `aspect_target`, `aspect_max` | optional, defaults 2.0 / 2.4: aspect the base growth steers toward, widest accepted base |
 | `free_ratio` | target share of free (not blocked) cards at the start |
 | `free_ratio_min`, `free_ratio_max` | preferred band for `free_ratio` (default target ∓ 0.15) |
-| `complexity` | informative 1..11 rating |
+| `complexity` | informative 1..15 rating |
 | `seed` | base seed |
 | `card_size`, `max_attempts` | optional: card size (default 48) and attempt budget (default 60) |
 
 Shipped progression (deterministic seeds; the base is the occupied layer-0 box, rendered
-card = fitted to the envelope, never above `MAX_BOARD_CARD_PX = 40`):
+card = fitted to the envelope, never above `MAX_BOARD_CARD_PX = 46`). The card-type ids are
+the current registry (`cat`, `mouse`, `boar`, `owl`, `wolf`, `duck`, `frog`, `whale`, `leaf`,
+`heart`, `gem`, `crystal`, `cat_mage`, `rhino`, `sacer`); the older `dog`, `bird`, `fish`,
+`flower`, `moon`, `star` and `sun` ids no longer exist:
 
-| level | types | board cards | base (cols × rows) | cards per layer | free at start | rendered card px (landscape / portrait) |
-|---|---|---|---|---|---|---|
-| 1 | 3 | 9 | 4 × 2 | 7 / 2 | 5 | 40 / 40 |
-| 2 | 5 | 15 | 4 × 3 | 10 / 5 | 7 | 40 / 40 |
-| 3 | 7 | 21 | 5 × 3 | 12 / 6 / 3 | 9 | 40 / 40 |
-| 4 | 8 | 27 | 5 × 3 | 15 / 8 / 4 | 9 | 40 / 40 |
-| 5 | 8 | 33 | 6 × 3 | 18 / 10 / 5 | 11 | 40 / 40 |
-| 6 | 9 | 39 | 7 × 3 | 21 / 12 / 6 | 13 | 40 / 40 |
-| 7 | 9 | 45 | 7 × 4 | 25 / 13 / 7 | 14 | 40 / 40 |
-| 8 | 9 | 48 | 7 × 4 | 26 / 13 / 6 / 3 | 14 | 40 / 40 |
-| 9 | 10 | 54 | 8 × 4 | 29 / 14 / 7 / 4 | 16 | 40 / 40 |
-| 10 | 10 | 57 | 8 × 4 | 30 / 15 / 8 / 4 | 16 | 40 / 40 |
-| 11 | 10 | 63 | 9 × 4 | 34 / 17 / 8 / 4 | 20 | 40 / 36.9 |
+| level | types | board | deck | total | base (cols × rows) | cards per layer | free at start | 3★ / 2★ | time_limit | rendered px (landscape / portrait) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 6 | 15 | 12 | 27 | 5 × 3 | 10 / 5 | 9 | 45 / 75 | - | 46 / 46 |
+| 2 | 6 | 30 | 12 | 42 | 7 × 3 | 20 / 10 | 13 | 65 / 110 | - | 46 / 46 |
+| 3 | 7 | 36 | 12 | 48 | 7 × 3 | 21 / 10 / 5 | 14 | 75 / 125 | - | 46 / 46 |
+| 4 | 8 | 45 | 12 | 57 | 7 × 4 | 26 / 13 / 6 | 16 | 90 / 150 | - | 46 / 44.3 |
+| 5 | 9 | 60 | 18 | 78 | 9 × 4 | 34 / 17 / 9 | 21 | 120 / 205 | - | 46 / 37.3 |
+| 6 | 9 | 69 | 18 | 87 | 9 × 5 | 38 / 20 / 11 | 25 | 135 / 230 | - | 38.6 / 35.4 |
+| 7 | 12 | 81 | 24 | 105 | 9 × 5 | 44 / 24 / 13 | 27 | 160 / 275 | - | 38.6 / 35.4 |
+| 8 | 12 | 81 | 24 | 105 | 8 × 5 | 40 / 22 / 12 / 7 | 24 | 160 / 275 | - | 38.6 / 35.4 |
+| 9 | 12 | 126 | 24 | 150 | 12 × 6 | 67 / 34 / 17 / 8 | 41 | 225 / 390 | - | 32.2 / 28.0 |
+| 10 | 12 | 132 | 24 | 156 | 12 × 6 | 70 / 35 / 18 / 9 | 38 | 235 / 410 | 900 | 32.2 / 28.0 |
+| 11 | 12 | 144 | 24 | 168 | 11 × 6 | 66 / 40 / 24 / 14 | 38 | 235 / 440 | 1080 | 32.2 / 29.5 |
+| 12 | 13 | 150 | 24 | 174 | 13 × 7 | 80 / 40 / 20 / 10 | 48 | 265 / 455 | - | 27.6 / 25.3 |
+| 13 | 14 | 156 | 27 | 183 | 13 × 7 | 83 / 42 / 21 / 10 | 50 | 275 / 480 | - | 27.6 / 25.3 |
+| 14 | 15 | 162 | 30 | 192 | 13 × 7 | 86 / 43 / 22 / 11 | 53 | 290 / 500 | 900 | 27.6 / 25.3 |
+| 15 | 15 | 168 | 30 | 198 | 13 × 7 | 90 / 45 / 22 / 11 | 50 | 300 / 515 | 1080 | 27.6 / 25.3 |
 
-L5+ bases are 1.75-2.33 wide (`aspect_min` 1.6). Generation stays under ~200 ms per level
-at the fixed seeds (about 600 ms for all 11, budget 1500 ms in `tests/probe_generation.gd`);
-a random seed costs a few solvability checks.
+The Support Deck is capped at **2 cards per type** (max **30 cards = 2 × 15 types**):
+L1–L4 ship 12, L5–L6 18, L7–L12 24, L13 27 and L14–L15 30. Every deck type also
+appears on the board and each type's board+deck total is a multiple of 3, so a deck alone
+can never close a trio.
+
+The deterministic probe (`tests/probe_generation.gd`) generates all 15 levels:
+**~1.7 s total** (budget **4000 ms**, L15 ~0.4 s). L9–L11 render **28.0–29.5 px** in
+portrait (landscape 32.2 px) and L12–L15 **25.3 px** portrait (27.6 px landscape), above
+`MIN_CARD_SIZE_PX = 24`; L12–L15 occupy a 13×7 base (624×336 px), while L14–L15 use a
+14-column profile grid.
 
 Obsolete keys of the scattered generator (`occupancy_h/v`, `overlap*`, `pitch_ratio`,
 `slot_*`, `anchor_*`) were removed from `LevelConfig`; `LevelConfig.create` ignores
 them if an old row still carries them.
 
-Levels 1–11 ship in `DifficultyProfile.LEVELS` (12+ = add a row; see
-`docs/adr/0001-post-l10-envelope-strategy.md`). Level 11 is config-only inside
+Levels 1–15 ship in `DifficultyProfile.LEVELS` (16+ = add a row; see
+`docs/adr/0001-post-l10-envelope-strategy.md`). Level 15 is config-only inside
 the envelope, proving the extension path.
 
 ## LevelConfig fields
@@ -96,15 +113,16 @@ the envelope, proving the extension path.
 |---|---|
 | `board_types` | distinct card types placed on the board |
 | `board_cards` / `count_per_type` | board card total (multiple of 3, 0 = unset) / copies per type (multiple of 3, used when the total is unset); `board_count(type)` is the per-type board count |
+| `board_counts` | optional explicit per-type board counts; empty = derived from the deck pool so board+deck per type is a multiple of 3 |
 | `columns`, `rows` | base grid in cards (`board_width() = columns × card_size`, `board_height() = rows × card_size`) |
 | `layers` | stacking depth |
 | `layer_ratio` | fraction of the lower layer held by each upper layer |
 | `aspect_target`, `aspect_min`, `aspect_max` | base aspect steering and acceptance band (defaults 2.0, 1.15, 2.4) |
 | `free_ratio` | target free cards; `free_ratio_min`/`free_ratio_max` = preferred band per profile |
-| `complexity` | 1..11 difficulty rating |
+| `complexity` | 1..15 difficulty rating |
 | `card_size` | logical card size (48) |
 | `seed`, `max_attempts` | base seed and attempt budget |
-| `available_card_types` | the 12 registry types (read-only) |
+| `available_card_types` | the 15 registry types (read-only) |
 | `types_used_in_level` | board ∪ deck types actually used |
 | `deck_types` | deck multiset (set via `with_deck`) |
 
@@ -128,6 +146,7 @@ Derived helpers: `board_cards()`, `deck_card_count()`, `total_cards()`,
 | `geometry_seed` | `seed_used` of the attempt (`config.seed + attempt`) |
 | `symbol_seed` | `LevelBoardGenerator.symbol_seed_for(seed_used)` |
 | `card_types` | `board_types` |
+| `type_counts` | `board_counts` (per-type board copies derived from the deck pool) |
 
 `BoardSpec.validate()` rejects: `layer_ratio` outside (0, 1), `layers > card_count`,
 a `card_count` below the triangular minimum `layers × (layers + 1) / 2`, non-unique or
@@ -147,8 +166,8 @@ satisfy that.
   board's left/top edge), grown compactly inside `columns × rows`.
 - **Upper layers (k > 0):** scattered, like the front cards of a shuffled pile. Every
   card of the board stores its position in **quarter-card steps** (`grid_x` / `grid_y`;
-  base cards sit on multiples of 4, so `x = grid_x × card_size / 4`; at the 40 px render
-  cap a quarter card is exactly 10 px). Candidates are all quarter-card positions inside
+  base cards sit on multiples of 4, so `x = grid_x × card_size / 4`; at the 46 px render
+  cap a quarter card is 11.5 px). Candidates are all quarter-card positions inside
   the base footprint (its bounding box) where the card
   - overlaps **at least two** cards of layer k-1 at or above the shared blocking threshold
     (it rests on the pile; `support_ids` lists every card it rests on), and
@@ -173,25 +192,28 @@ satisfy that.
 > Configs stay inside these guardrails; structural expansion requires an explicit
 > `BoardEnvelopeProfile`, never a per-level conditional.
 
-Canonical mode is **portrait** (360x640, board area 338x173 inside the 352x192 kit board
-window). Landscape (640x360) leaves a 450x189 board area inside the 464x208 window, a 450x189 board
-area.
+Canonical mode is **portrait** (360x640): the validation envelope is **336x177**, drawn inside
+a **339x196** kit board window whose inner hole is **327x185** (board container **323x181** after
+padding). The portrait frame is the new `panel_board_frame_portrait.png`, baked to the window
+size; landscape (640x360) keeps the **448x193** envelope inside the 464x208 window (inner hole
+454x193).
 
-- `MAX_COLUMNS = 9`, `MAX_ROWS = 6` — base grid in cards.
-- `MAX_LAYERS = 4`
-- `MAX_BOARD_CARDS = 72`
-- `MAX_BOARD_CARD_PX = 40` — the renderer never draws a board card larger than this (both orientations); small boards stay centered at that size and `envelope_card_size` reports the capped size.
-- `MIN_CARD_SIZE_PX = 24` — minimum rendered card size in an envelope (the renderer floors the board scale at `MIN_CARD_SCALE`, i.e. 30 px).
-- `PORTRAIT_BOARD_ENVELOPE = (332, 264)`, `LANDSCAPE_BOARD_ENVELOPE = (466, 214)`
+- `MAX_COLUMNS = 14`, `MAX_ROWS = 7` — base grid in cards.
+- `MAX_LAYERS = 5` (shipped levels use 4)
+- `MAX_BOARD_CARDS = 168`
+- `MAX_BOARD_CARD_PX = 46` — the renderer never draws a board card larger than this (both orientations); small boards stay centered at that size and `envelope_card_size` reports the capped size.
+- `MIN_CARD_SIZE_PX = 24` — minimum rendered card size in an envelope (the renderer floors the board scale at `MIN_CARD_SCALE = 0.5`, i.e. 24 px).
+- `PORTRAIT_BOARD_ENVELOPE = (336, 177)`, `LANDSCAPE_BOARD_ENVELOPE = (448, 193)`
 - `free_ratio_min ≤ free_ratio ≤ free_ratio_max`, all inside [0, 1].
 
 `validate()` **rejects** configs that: have no board types or counts that are not
 multiples of 3 (per type, board and total); exceed the grid/layer/card guardrails;
 produce an invalid `BoardSpec`; need a base layer (`layer_targets()[0]`) larger than
-`columns × rows`; do not fit the canonical portrait envelope; or declare an
-inconsistent `free_ratio` band. Configs that do not fit the landscape board envelope
+`columns × rows`; do not fit the canonical portrait envelope; declare an
+inconsistent `free_ratio` band; carry a deck type that is absent from the board; or
+put more than 2 cards of one type in the deck. Configs that do not fit the landscape board envelope
 are **marked** (`fits_landscape = false`) and surfaced as a visible layout warning in
-the level screen — they are not silently hidden. All shipped levels (1–11) fit both
+the level screen — they are not silently hidden. All shipped levels (1–15) fit both
 envelopes.
 
 ## Generation pipeline
@@ -251,9 +273,9 @@ and time-threshold consistency.
 Built from `LevelConfig.metrics()`, then extended by `LevelBoardGenerator` and
 `LevelLoader`.
 
-- **Profile** (`LevelConfig.metrics`): `difficulty`, `board_cards`, `deck_cards`,
-  `types`, `types_used_in_level`, `available_card_types`, `columns`, `rows`, `layers`,
-  `layer_ratio`, `layer_targets`, `free_ratio_target`, `free_ratio_min`,
+- **Profile** (`LevelConfig.metrics`): `difficulty`, `board_cards`, `board_counts`,
+  `deck_cards`, `types`, `types_used_in_level`, `available_card_types`, `columns`, `rows`,
+  `layers`, `layer_ratio`, `layer_targets`, `free_ratio_target`, `free_ratio_min`,
   `free_ratio_max`, `complexity`, `card_size`, `seed`.
 - **Result** (`LevelBoardGenerator`): `status` (`"ok"`), `solvable`, `generator`
   (`"board_pipeline"`), `attempts`, `seed_used`, `geometry_seed_used`,
@@ -272,12 +294,27 @@ On failure the generator returns only `{status: "failed", attempts, difficulty}`
 ## Central visual metrics
 
 `LevelConfig` consts used by the renderer: `CARD_LOGICAL_SIZE=48`,
-`MIN_CARD_SCALE=0.625` (30 px), `MAX_BOARD_CARD_PX=40`, `RESERVE_CARD_SCALE=0.80`, `BOARD_PADDING=8`,
+`MIN_CARD_SCALE=0.5` (24 px), `MAX_BOARD_CARD_PX=46`, `BOARD_PADDING=8`,
 `HEADER_HEIGHT=40`, `INSTRUCTION_HEIGHT=18`, `BOARD_MIN_HEIGHT=200`,
-`MAX_VISIBLE_LAYERS=4`. The level screen consumes the level's `card_size` and
-clamps the board scale between `MIN_CARD_SCALE` and the `MAX_BOARD_CARD_PX` cap (`BoardLayout.compute`
-`scale_limited`). The board frames are 344x272 (portrait) and 478x222 (landscape),
-which leave the 338x173 and 450x189 envelopes above.
+`MAX_VISIBLE_LAYERS=4` (`RESERVE_CARD_SCALE=0.80` is still declared but the screen no longer
+uses it). The level screen consumes the level's `card_size` and clamps the board scale between
+`MIN_CARD_SCALE` and the `MAX_BOARD_CARD_PX` cap (`BoardLayout.compute` `scale_limited`). The
+level screen draws a **339x196 portrait window** (inner hole **327x185**, board container
+**323x181**) with the baked `panel_board_frame_portrait.png`, and a **464x208 landscape window**
+(inner hole 454x193). The `LevelConfig` validation envelopes remain **336x177 (portrait)** and
+**448x193 (landscape)**; the portrait window's drawn hole is 327x185.
+
+Renderer card sizes outside the board (`level_screen.gd`): Clearing Zone **46 px landscape /
+42 px portrait**, Support Decks **42 px**, Reserve grid shrinking from **34 px landscape /
+42 px portrait** down to an **18 px** minimum as the field fills. Card faces are square
+**native 882–957 px** images, hard-cropped at the frame edge (the alpha touches all four
+sides, no transparent margin) and kept at that resolution with runtime mipmaps.
+
+Painted kit pieces used by the screen: Clearing Zone bar `bar_zone.png` **2162x314**
+(alpha-cropped 9-slice), Reserve stone field `panel_reserve_field.png` **1829x741**
+(the stone centre is part of the art; no header), powers board `panel_powers_board.png`
+**751x1453** used vertically in both orientations (no rotation), and the deck table
+`card_available_frame.png` **1160x1077** under each Support Deck pile.
 
 ## Render scale (single source)
 
@@ -285,5 +322,7 @@ Positions are generated in **logical space** (`LevelBoardGenerator` ignores the
 container). `BoardLayout.compute` (`scripts/core/board_layout.gd`) maps logical
 positions onto the container with one uniform scale; the renderer
 (`level_screen._board_layout`) applies it exactly — no snapping to a fixed pitch and
-no per-layer visual offset. Deck split is deterministic from the layout seed actually
-used (`seed_used`).
+no per-layer visual offset. After scaling, the renderer measures the final bbox
+(scaled position + rendered card size) and re-centres/clamps the offset inside the
+container; L14/L15 render with `clip=0` in every view. Deck split is deterministic from
+the layout seed actually used (`seed_used`).

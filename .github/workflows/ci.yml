@@ -49,6 +49,24 @@ jobs:
       - name: Smoke in-game settings (tests/smoke_settings.gd)
         run: ./godot --headless --script res://tests/smoke_settings.gd
 
+      - name: Smoke settings overlay (tests/smoke_settings_overlay.gd)
+        run: ./godot --headless --script res://tests/smoke_settings_overlay.gd
+
+      - name: Smoke defeat screen (tests/smoke_defeat.gd)
+        run: ./godot --headless --script res://tests/smoke_defeat.gd
+
+      - name: Smoke card juice (tests/smoke_card_juice.gd)
+        run: ./godot --headless --script res://tests/smoke_card_juice.gd
+
+      - name: Smoke hero expressions (tests/smoke_mascot_heroes.gd)
+        run: ./godot --headless --script res://tests/smoke_mascot_heroes.gd
+
+      - name: Smoke bunny rig (tests/smoke_bunny_rig.gd)
+        run: ./godot --headless --script res://tests/smoke_bunny_rig.gd
+
+      - name: Smoke music continuity (tests/smoke_music_rotation.gd)
+        run: ./godot --headless --script res://tests/smoke_music_rotation.gd
+
       - name: Board layout regression (tests/regression_board_layout.gd)
         run: ./godot --headless --script res://tests/regression_board_layout.gd
 

@@ -132,7 +132,7 @@ func _campaign(game) -> void:
 	var before := _state(c)
 	_check(before["zone"].size() > 0, "campaign: there is a state to protect")
 	var viewport := Rect2(Vector2.ZERO, scene.get_viewport_rect().size)
-	for node_name in ["LanguageButton", "OrientationButton", "MascotButton", "VolumeRow", "VolumeDown", "VolumeSlider", "VolumeUp", "SoundButton", "SettingsClose", "SettingsCornerClose"]:
+	for node_name in ["LanguageButton", "OrientationButton", "MascotButton", "VolumeRow", "VolumeSlider", "SoundButton", "SettingsClose", "SettingsCornerClose"]:
 		_check(overlay.find_child(node_name, true, false) != null, "campaign: the overlay has %s" % node_name)
 	var panel := overlay.find_child("SettingsPanel", true, false) as Control
 	_check(panel != null and viewport.encloses(panel.get_global_rect()), "campaign: the panel fits the viewport (%s in %s)" % [str(panel.get_global_rect()) if panel != null else "-", str(viewport)])
@@ -145,7 +145,7 @@ func _campaign(game) -> void:
 	if _press(scene, "LanguageButton", "campaign"):
 		await _frames(4)
 		_check(Localizer.current == "pt" and game.settings["locale"] == "pt", "campaign: language toggles to Portuguese and is stored")
-		_check(_heading(scene) != heading_before and _heading(scene) == Localizer.t("settings"), "campaign: the overlay text follows the language (%s)" % _heading(scene))
+		_check(_heading(scene) != heading_before and _heading_matches_locale(scene), "campaign: the overlay text follows the language (%s)" % _heading(scene))
 		_check((scene.find_child("SettingsButton", true, false) as Button).tooltip_text != gear_tip_before, "campaign: the HUD text follows the language")
 		_check(scene.controller == c, "campaign: the same controller after a language change")
 		_check(scene.get_node_or_null("SettingsOverlay") != null and c.status == GameController.Status.PAUSED, "campaign: the overlay stays open and the clock paused")
@@ -194,28 +194,25 @@ func _campaign(game) -> void:
 		await _wait_ms(300)
 		_check(scene.mascot != null and game.mascot_enabled(), "campaign: mascot on brings Ace back")
 
-	# Volume: minus lowers it, the glyph follows, the HUD icon too.
+	# Volume: the painted bar sets the volume, the glyph follows, the HUD icon too.
 	var volume_before: float = game.volume()
 	var icon_before: Texture2D = (scene.find_child("SoundButton", true, false) as Button).get_node("Icon").texture
 	var overlay_now: Node = scene.get_node_or_null("SettingsOverlay")
-	var minus := (overlay_now.find_child("VolumeDown", true, false) as TextureButton) if overlay_now != null else null
-	if minus != null:
-		minus.pressed.emit()
+	var volume_slider := (overlay_now.find_child("VolumeSlider", true, false) as Control) if overlay_now != null else null
+	if volume_slider != null:
+		_click_volume(volume_slider, 0.75)
 		await _frames(2)
-		_check(game.volume() < volume_before and is_equal_approx(game.volume(), 0.75), "campaign: minus lowers the volume (%.2f)" % game.volume())
+		_check(game.volume() < volume_before and is_equal_approx(game.volume(), 0.75), "campaign: the bar sets the volume to 0.75 (%.2f)" % game.volume())
 		_check(is_equal_approx(float(SaveManager.load(THROWAWAY_SAVE).get("settings", {}).get("volume", -1.0)), 0.75), "campaign: the volume is saved")
 		# Down to zero: muted, and the HUD sound icon changes with it.
-		for i in 3:
-			minus.pressed.emit()
+		_click_volume(volume_slider, 0.0)
 		await _frames(2)
 		_check(not game.sound_enabled(), "campaign: the volume reaches mute")
 		var hud_icon: Texture2D = (scene.find_child("SoundButton", true, false) as Button).get_node("Icon").texture
 		_check(hud_icon != icon_before, "campaign: the HUD sound icon follows the volume row")
-		var plus := overlay_now.find_child("VolumeUp", true, false) as TextureButton
-		plus.pressed.emit()
-		plus.pressed.emit()
+		_click_volume(volume_slider, 1.0)
 		await _frames(2)
-		_check(game.sound_enabled(), "campaign: plus brings the sound back")
+		_check(game.sound_enabled(), "campaign: the bar brings the sound back")
 
 	# Close: button, corner icon, shade tap and ui_cancel each resume the clock.
 	for closer in ["button", "corner", "shade", "cancel"]:
@@ -246,6 +243,17 @@ func _campaign(game) -> void:
 	await _wait_ms(400)
 	_check(c.timer.elapsed_seconds() > elapsed, "campaign: the clock runs again after closing")
 
+# Press and release on the volume bar at a target volume: the click lands on the handle's
+# centre, using the same groove mapping the row draws with.
+func _click_volume(slider: Control, value: float) -> void:
+	var x := VolumeRow.handle_left_for(value) + VolumeRow.HANDLE_BOX_PX * 0.5
+	for pressed in [true, false]:
+		var e := InputEventMouseButton.new()
+		e.button_index = MOUSE_BUTTON_LEFT
+		e.pressed = pressed
+		e.position = Vector2(x, slider.size.y * 0.5)
+		slider.gui_input.emit(e)
+
 func _heading(scene) -> String:
 	var overlay: Node = scene.get_node_or_null("SettingsOverlay")
 	if overlay == null:
@@ -253,9 +261,21 @@ func _heading(scene) -> String:
 	var panel: Node = overlay.find_child("SettingsPanel", true, false)
 	if panel == null:
 		return ""
+	# The v2 overlay paints its heading (SettingsTitle art, one per locale) instead of a Label.
+	var title: Node = panel.find_child("SettingsTitle", true, false)
+	if title != null:
+		return "%s|%s" % [str(title.get_meta("locale", "")), str(title.get_meta("source_path", ""))]
 	for label in panel.find_children("*", "Label", true, false):
 		return (label as Label).text
 	return ""
+
+# True when the heading shows the current language: the painted title's locale, or the
+# translated text for the Label fallback.
+func _heading_matches_locale(scene) -> bool:
+	var heading := _heading(scene)
+	if heading.contains("|"):
+		return heading.begins_with(Localizer.current + "|")
+	return heading == Localizer.t("settings")
 
 func _endless(game) -> void:
 	game.progress = ProgressManager.new()

@@ -20,7 +20,7 @@ func test_ten_levels_present() -> void:
 
 func test_generated_cards_are_within_bounds_and_layered() -> void:
 	var card_size := 48
-	var cards := LayoutGenerator.generate(["cat", "dog", "bird"], 3, {"layers": 2, "width": 240, "height": 200, "card_size": card_size, "seed": 3})
+	var cards := LayoutGenerator.generate(["cat", "wolf", "owl"], 3, {"layers": 2, "width": 240, "height": 200, "card_size": card_size, "seed": 3})
 	var layers := {}
 	for c in cards:
 		Assert.is_true(c["x"] >= 0 and c["x"] + card_size <= 240, "x in bounds")
@@ -29,7 +29,7 @@ func test_generated_cards_are_within_bounds_and_layered() -> void:
 	Assert.is_true(layers.size() >= 2, "uses multiple layers")
 
 func test_generated_ids_are_unique() -> void:
-	var cards := LayoutGenerator.generate(["cat", "dog", "bird"], 3, {"layers": 2, "width": 240, "height": 200, "card_size": 48, "seed": 5})
+	var cards := LayoutGenerator.generate(["cat", "wolf", "owl"], 3, {"layers": 2, "width": 240, "height": 200, "card_size": 48, "seed": 5})
 	var ids := {}
 	for c in cards:
 		Assert.is_false(ids.has(c["id"]), "unique id")
@@ -69,14 +69,14 @@ func test_decks_are_mixed() -> void:
 	for t in level["deck_b"]:
 		types[t] = true
 	Assert.is_true(types.size() >= 2, "level 1 decks use more than one type")
-	Assert.equals(level["deck_a"].size() + level["deck_b"].size(), 6, "level 1 deck size 6")
+	Assert.equals(level["deck_a"].size() + level["deck_b"].size(), 12, "level 1 deck size 12")
 
 func _level_with_layout(randomize: bool, seed: int) -> Dictionary:
 	return {
 		"id": "rand",
 		"clearing_capacity": 7,
 		"layout": {
-			"types": ["cat", "dog", "bird", "fish", "flower", "moon"],
+			"types": ["cat", "wolf", "owl", "whale", "mouse", "frog"],
 			"count": 3,
 			"layers": 2,
 			"width": 240,
@@ -85,7 +85,7 @@ func _level_with_layout(randomize: bool, seed: int) -> Dictionary:
 			"seed": seed,
 			"randomize_per_attempt": randomize,
 		},
-		"deck": ["cat", "cat", "cat", "dog", "dog", "dog"],
+		"deck": ["cat", "cat", "cat", "wolf", "wolf", "wolf"],
 		"time_thresholds": {"three_stars": 60, "two_stars": 120},
 		"rewards": [],
 	}
@@ -111,7 +111,7 @@ func test_fixed_seed_layouts_are_identical() -> void:
 	Assert.equals(_card_signature(a), _card_signature(b), "fixed seed layouts are identical")
 
 func test_layer0_cards_align_to_grid_pitch() -> void:
-	var cards := LayoutGenerator.generate(["cat", "dog", "bird"], 3, {"layers": 2, "width": 240, "height": 200, "card_size": 48, "seed": 12})
+	var cards := LayoutGenerator.generate(["cat", "wolf", "owl"], 3, {"layers": 2, "width": 240, "height": 200, "card_size": 48, "seed": 12})
 	var pitch := 48.0 * LayoutGenerator.DEFAULT_PITCH_RATIO
 	var layer0 := 0
 	for c in cards:
@@ -125,13 +125,13 @@ func test_layer0_cards_align_to_grid_pitch() -> void:
 	Assert.is_true(layer0 >= 2, "enough layer0 cards to sample the grid")
 
 func test_generated_seed_determinism() -> void:
-	var a := LayoutGenerator.generate(["cat", "dog", "bird", "fish"], 3, {"layers": 2, "width": 240, "height": 200, "card_size": 48, "seed": 2024})
-	var b := LayoutGenerator.generate(["cat", "dog", "bird", "fish"], 3, {"layers": 2, "width": 240, "height": 200, "card_size": 48, "seed": 2024})
+	var a := LayoutGenerator.generate(["cat", "wolf", "owl", "whale"], 3, {"layers": 2, "width": 240, "height": 200, "card_size": 48, "seed": 2024})
+	var b := LayoutGenerator.generate(["cat", "wolf", "owl", "whale"], 3, {"layers": 2, "width": 240, "height": 200, "card_size": 48, "seed": 2024})
 	Assert.equals(_card_signature({"cards": a}), _card_signature({"cards": b}), "same seed -> identical grid")
 
 func test_layer_overlap_coverage_max_75() -> void:
 	for seed in [1, 1001, 4242, 12345, 777]:
-		var cards := LayoutGenerator.generate(["cat", "dog", "bird", "fish", "flower", "moon"], 3, {"layers": 3, "width": 320, "height": 240, "card_size": 48, "seed": seed})
+		var cards := LayoutGenerator.generate(["cat", "wolf", "owl", "whale", "mouse", "frog"], 3, {"layers": 3, "width": 320, "height": 240, "card_size": 48, "seed": seed})
 		var by_layer := {}
 		for c in cards:
 			if not by_layer.has(c["layer"]):

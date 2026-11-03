@@ -1,0 +1,8 @@
+{
+  "id": "13",
+  "difficulty": 13,
+  "clearing_capacity": 7,
+  "deck": ["cat", "cat", "wolf", "wolf", "owl", "owl", "whale", "whale", "mouse", "mouse", "frog", "frog", "boar", "boar", "duck", "duck", "leaf", "leaf", "heart", "heart", "gem", "gem", "cat_mage", "cat_mage"],
+  "time_thresholds": { "three_stars": 275, "two_stars": 480 },
+  "rewards": [{ "type": "undo", "quantity": 2 }]
+}

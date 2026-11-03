@@ -8,7 +8,7 @@ extends SceneTree
 # collapse, intentional cross-layer overlap preserved, non-degenerate pitch and
 # rendered card scale.
 
-const LEVELS := ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"]
+const LEVELS := ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"]
 const VIEWS := [
 	{"name": "portrait-360x640", "orient": "portrait", "window": Vector2i(360, 640)},
 	{"name": "landscape-640x360", "orient": "landscape", "window": Vector2i(640, 360)},
@@ -20,10 +20,10 @@ const VIEWS := [
 const SAME_LAYER_EPS := 1.0
 const EPSILON := 0.01
 const DEGENERATE_PITCH := 8.0
-# Rendered board cards: never above the UI cap, never below a touch-sized minimum.
+# Rendered board cards: never above the UI cap, never below the documented touch minimum.
 const MIN_CARD_SCALE := LevelConfig.MIN_CARD_SCALE
 const MAX_CARD_PX := LevelConfig.MAX_BOARD_CARD_PX
-const MIN_CARD_PX := 30.0
+const MIN_CARD_PX := LevelConfig.MIN_CARD_SIZE_PX
 
 var _fails: Array[String] = []
 

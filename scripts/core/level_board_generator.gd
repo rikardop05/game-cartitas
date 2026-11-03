@@ -67,19 +67,102 @@ static func generate(config: LevelConfig, board_size: Vector2 = Vector2.ZERO) ->
 static func symbol_seed_for(seed_used: int) -> int:
 	return (seed_used * SYMBOL_SEED_MIX + SYMBOL_SEED_ADD) & 0x7FFFFFFF
 
-# Deterministic Support Deck split: seeded shuffle of the pool, first half to A.
-# Single implementation shared by the solvability check here and LevelLoader.
+# Deterministic Support Deck split: the copies of one type stay together in a single
+# deck (so its pair can be drawn back to back to complete a trio with one board card),
+# and whole type groups are dealt to the deck that is currently smaller. Seeded, so the
+# generator's solvability check and LevelLoader always agree.
 static func split_decks(pool: Array, seed_used: int) -> Dictionary:
-	var shuffled := pool.duplicate()
+	var counts := {}
+	var types: Array = []
+	for raw in pool:
+		var t := str(raw)
+		if not counts.has(t):
+			types.append(t)
+			counts[t] = 0
+		counts[t] = int(counts[t]) + 1
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_used
-	for i in range(shuffled.size() - 1, 0, -1):
+	for i in range(types.size() - 1, 0, -1):
 		var j := rng.randi_range(0, i)
-		var tmp = shuffled[i]
-		shuffled[i] = shuffled[j]
-		shuffled[j] = tmp
-	var half := int(ceil(shuffled.size() / 2.0))
-	return {"deck_a": shuffled.slice(0, half), "deck_b": shuffled.slice(half)}
+		var tmp = types[i]
+		types[i] = types[j]
+		types[j] = tmp
+	var deck_a: Array = []
+	var deck_b: Array = []
+	for t in types:
+		var group: Array = []
+		for _k in int(counts[t]):
+			group.append(t)
+		if deck_a.size() <= deck_b.size():
+			deck_a.append_array(group)
+		else:
+			deck_b.append_array(group)
+	var rng_a := RandomNumberGenerator.new()
+	rng_a.seed = (seed_used * 2 + 1) & 0x7FFFFFFF
+	var rng_b := RandomNumberGenerator.new()
+	rng_b.seed = (seed_used * 2 + 2) & 0x7FFFFFFF
+	return {"deck_a": _shuffle_no_adjacent(deck_a, rng_a), "deck_b": _shuffle_no_adjacent(deck_b, rng_b)}
+
+# Seeded shuffle of one deck that never puts two equal types side by side when the
+# counts allow it (two copies of a type spread through the deck). Retries with the same
+# generator until a clean order comes out, so the result is deterministic.
+static func _shuffle_no_adjacent(items: Array, rng: RandomNumberGenerator) -> Array:
+	if items.size() <= 1:
+		return items.duplicate()
+	var pair_types: Array = []
+	var only_pairs := true
+	for raw in items:
+		var t := str(raw)
+		if not pair_types.has(t):
+			pair_types.append(t)
+	for t in pair_types:
+		var n := 0
+		for raw in items:
+			if str(raw) == t:
+				n += 1
+		if n != 2:
+			only_pairs = false
+			break
+	if only_pairs and pair_types.size() > 1:
+		for i in range(pair_types.size() - 1, 0, -1):
+			var j := rng.randi_range(0, i)
+			var tmp = pair_types[i]
+			pair_types[i] = pair_types[j]
+			pair_types[j] = tmp
+		var woven: Array = []
+		for i in pair_types.size():
+			woven.append(pair_types[i])
+			if i > 0:
+				woven.append(pair_types[i - 1])
+		woven.append(pair_types[pair_types.size() - 1])
+		return woven
+	for _attempt in 64:
+		var counts := {}
+		var order: Array = []
+		for raw in items:
+			var t := str(raw)
+			if not counts.has(t):
+				order.append(t)
+				counts[t] = 0
+			counts[t] = int(counts[t]) + 1
+		var out: Array = []
+		var previous := ""
+		var stuck := false
+		while out.size() < items.size():
+			var candidates: Array = []
+			for t in order:
+				if int(counts[t]) > 0 and t != previous:
+					candidates.append(t)
+			if candidates.is_empty():
+				stuck = true
+				break
+			var pick := str(candidates[rng.randi_range(0, candidates.size() - 1)])
+			out.append(pick)
+			counts[pick] = int(counts[pick]) - 1
+			previous = pick
+		if not stuck:
+			return out
+	return items.duplicate()
 
 static func instantiate_level(config: LevelConfig, cards: Array, seed_used: int) -> Dictionary:
 	var decks := split_decks(config.deck_types, seed_used)

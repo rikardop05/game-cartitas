@@ -64,7 +64,7 @@ func test_save_load_round_trip() -> void:
 func test_endless_unlocks_after_the_last_level() -> void:
 	var last := ProgressManager.endless_unlock_level()
 	Assert.equals(last, int(LevelLoader.load_all_level_ids().back()), "unlock level is the last shipped Level")
-	Assert.is_true(last >= 11, "all shipped Levels count, not just the first 10")
+	Assert.is_true(last >= 15, "all shipped Levels count through the 15-level campaign")
 	var p := ProgressManager.new()
 	Assert.is_false(p.is_endless_unlocked(), "endless locked at start")
 	for id in range(1, last):
