@@ -11,6 +11,9 @@ const BOARD_X_COMPRESSION := 1.0
 const BOARD_Y_COMPRESSION := 1.0
 # The background inside the board window, darkened so the cards read.
 const BOARD_SHADE := Color(0.0, 0.0, 0.0, 0.5)
+# Extend the shade underneath the painted bevel so transparent edge antialiasing never
+# leaves a bright seam between the board interior and the frame.
+const BOARD_SHADE_OVERDRAW := 0.0
 # The cards sit this many px inside the window's drawn frame.
 const BOARD_PAD := 2.0
 # Thickest painted border drawn around the board, in logical px. The frame PNG is
@@ -65,6 +68,9 @@ const V2_CLOSE_ART := V2_KIT_DIR + "icon_close_v2.png"
 
 
 const LOGO_ART := "res://assets/ui/branding/logo_claw_and_crown.png"
+const BACK_ARROW_ART := "res://assets/ui/kit/v2/icon_back.png"
+const BACK_ARROW_REGION := Rect2(235.0, 105.0, 725.0, 1045.0)
+const CLOCK_PLANK_ART := "res://assets/ui/hud/clock_plank.png"
 # Where the three stars sit on the plaque art (fractions of its width / height).
 const PLAQUE_STAR_X := [0.235, 0.5, 0.765]
 const PLAQUE_STAR_Y := 0.52
@@ -93,9 +99,13 @@ const DEFEAT_RETRY_ART := {"pt": "defeat_retry_pt.png", "en": "defeat_retry_en.p
 const DEFEAT_QUIT_ART := {"pt": "defeat_quit_pt.png", "en": "defeat_quit_en.png"}
 const DEFEAT_PANEL_LANDSCAPE := Rect2(348, 48, 268, 275)
 const DEFEAT_PANEL_PORTRAIT := Rect2(45, 180, 270, 276)
-const DEFEAT_OVERLAY_Z := 9
-# The HUD is lifted above the defeat shade so the menu/help/sound controls stay usable.
-const DEFEAT_HUD_Z := 10
+# The result overlay sits above the whole stage, HUD included, so the shade dims everything.
+const DEFEAT_OVERLAY_Z := 1100
+const VICTORY_DIR := "res://assets/ui/victory/"
+const VICTORY_BOARD_ART := VICTORY_DIR + "victory_board.png"
+const VICTORY_BUNNY_ART := VICTORY_DIR + "victory_bunny.png"
+const VICTORY_TITLE_ART := {"pt": "victory_title_pt.png", "en": "victory_title_en.png"}
+const VICTORY_RETRY_ART := {"pt": "victory_retry_pt.png", "en": "victory_retry_en.png"}
 # The zone row fills the whole bar: 7 large slots with a computed step. The cards float
 # slightly above the painted surface; when 7 do not fit, the step is negative (overlap).
 const LANDSCAPE_RESERVE_CARD_SIZE := Vector2(34.0, 34.0)
@@ -145,9 +155,23 @@ void fragment() {
 }
 """
 
+# Card juice (Balatro-style, shader scripts/ui/card_juice.gdshader; credits in docs/CREDITS.md).
+# Board + deck cards: perspective tilt following the pointer, a small scale pop and a shine
+# sweep, on the ONE card under the pointer/finger. Clearing Zone cards: idle sway + foil shine.
+const JUICE_SHADER := preload("res://scripts/ui/card_juice.gdshader")
+const JUICE_MAX_TILT_DEG := 14.0      # tilt at the card edge
+const JUICE_HOVER_SCALE := 1.06
+const JUICE_SHINE := 1.0              # 0 = off
+const JUICE_FOV := 50.0
+const JUICE_POP_SECONDS := 0.14
+const JUICE_RETURN_SECONDS := 0.30
+const JUICE_SHADOW_SHIFT := 2.5       # px the shadow slides opposite to the tilt
+const ZONE_SWAY_DEG := 4.0            # idle wobble amplitude
+const ZONE_HOLO := 0.6                # foil strength, 0 = off
+
 static var _dim_shader: Shader
 static var _dim_materials := {}
-static var _chevron_texture_cache: ImageTexture
+static var _back_arrow_cache: Texture2D
 # Visible (alpha bbox) rect of each painted FX inside its texture, in texture px.
 static var _fx_optical_cache := {}
 var _layout: Dictionary = {}
@@ -412,7 +436,7 @@ func _prewarm_layout_frames() -> void:
 		UiHelpers.hires_texture(board_path), board_rect.size, BOARD_FRAME_BORDER_MAX)
 	UiHelpers.trimmed_nine_patch(
 		UiHelpers.hires_texture(RESERVE_FIELD_ART), _rect("reserve").size,
-		RESERVE_FIELD_MARGINS)
+		RESERVE_FIELD_MARGINS, "", true)
 	_zone_bar_data(_rect("zone"))
 	var powers_texture := UiHelpers.hires_texture(POWERS_BOARD_ART)
 	var powers_margins := POWERS_BOARD_MARGINS
@@ -454,7 +478,8 @@ func _build_mascot() -> void:
 		return
 	mascot = Mascot.new()
 	mascot.name = "Mascot"
-	mascot.z_index = 1
+	mascot.z_index = LevelLayout.HERO_Z
+	mascot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	mascot.visible = false  # shown by _place_mascot once the layout is known
 	if _endless != null:
 		mascot.idle_event = "idle_tip_endless"
@@ -479,13 +504,21 @@ func _place_mascot() -> void:
 			mascot.global_position.x + mascot.size.x + 6.0,
 			area.position.y + 10.0, 200.0, 60.0)
 	else:
-		# Portrait: let the full-body hero enter from the left edge, behind cards and frame.
-		mascot.global_position = Vector2(
-			area.position.x - 34.0,
-			area.position.y + (area.size.y - mascot.size.y) * 0.5)
+		# Portrait: the hero stands on the left edge (partly off-screen), in front of the board
+		# frame and behind the deck/powers/zone panels; the cards start to her right.
+		var hero := _portrait_hero_rect()
+		var scale_to_fit := minf(hero.size.x / Mascot.BASE_SIZE.x, hero.size.y / Mascot.BASE_SIZE.y)
+		mascot.size = Mascot.BASE_SIZE * scale_to_fit
+		mascot.global_position = Vector2(hero.position.x, hero.end.y - mascot.size.y) + get_global_rect().position
 		mascot.side_bubble_bounds = Rect2()
 		mascot.free_bounds = _rect("instruction_area")
 	mascot.visible = not _ended
+
+# Portrait hero box (may extend off the left edge); empty in landscape or without the mascot.
+func _portrait_hero_rect() -> Rect2:
+	if _is_landscape or not Game.mascot_enabled():
+		return Rect2()
+	return _layout.get("hero_rect", Rect2())
 
 func _say(event: String, context: Dictionary = {}) -> void:
 	if mascot != null and not _ended:
@@ -589,35 +622,18 @@ func _make_drop_shadow(texture: Texture2D, rect: Rect2, softness: float = 1.8, s
 	shadow.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	return shadow
 
-# The pixel-art "<" of the back button: drawn here (the kit has no chevron) as a 16x15 image
-# shown at 2x with the project's nearest filter, so every pixel stays crisp.
-static func _chevron_texture() -> Texture2D:
-	if _chevron_texture_cache == null:
-		var outline := Color("#000000")
-		var light := Color("#8fd032")
-		var body := Color("#74bc50")
-		var dark := Color("#477238")
-		var image := Image.create(16, 15, false, Image.FORMAT_RGBA8)
-		image.fill(Color(0, 0, 0, 0))
-		var filled := {}
-		for y in range(1, 14):
-			var x0 := 2 + absi(y - 7)
-			for x in range(x0, x0 + 5):
-				filled[Vector2i(x, y)] = true
-				var shade := body
-				if x == x0:
-					shade = light
-				elif x == x0 + 4:
-					shade = dark
-				image.set_pixel(x, y, shade)
-		for cell: Vector2i in filled.keys():
-			for dy in range(-1, 2):
-				for dx in range(-1, 2):
-					var near := cell + Vector2i(dx, dy)
-					if not filled.has(near) and near.x >= 0 and near.y >= 0 and near.x < 16 and near.y < 15:
-						image.set_pixel(near.x, near.y, outline)
-		_chevron_texture_cache = ImageTexture.create_from_image(image)
-	return _chevron_texture_cache
+# The painted gold back arrow, cropped to its visible pixels (alpha > 24; the 1254x1254 PNG
+# has a faint halo almost to its edges) so it fills the button like the other HUD icons.
+static func _back_arrow_texture() -> Texture2D:
+	if _back_arrow_cache == null:
+		var source := UiHelpers.hires_texture(BACK_ARROW_ART)
+		if source == null:
+			return null
+		var atlas := AtlasTexture.new()
+		atlas.atlas = source
+		atlas.region = BACK_ARROW_REGION
+		_back_arrow_cache = atlas
+	return _back_arrow_cache
 
 # A 9-sliced painted panel from UiHelpers' alpha-cropped data: the carved corners
 # keep their shape, the border never squashes, and nothing is stretched diagonally.
@@ -665,7 +681,7 @@ func _ensure_frame_border(data: Dictionary, target_size: Vector2, minimum: int) 
 # carved end caps stay intact and the slots can use the wooden hole.
 func _zone_bar_data(rect: Rect2) -> Dictionary:
 	return UiHelpers.trimmed_nine_patch(
-		UiHelpers.hires_texture(ZONE_BAR_ART), rect.size, ZONE_BAR_MARGINS, "zone_bar")
+		UiHelpers.hires_texture(ZONE_BAR_ART), rect.size, ZONE_BAR_MARGINS, "zone_bar", true)
 
 # A flat button showing a picture at an exact size; it nudges down one pixel while pressed
 # and brightens on hover.
@@ -697,8 +713,8 @@ func _build_hud(parent: Control) -> void:
 	_place(hud, _layout["hud"])
 	parent.add_child(hud)
 
-	var back := _make_icon_button("BackButton", _chevron_texture(), _rect("back"))
-	(back.get_node("Icon") as TextureRect).texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	var back := _make_icon_button("BackButton", _back_arrow_texture(), _rect("back"), true, 2.0)
+	(back.get_node("Icon") as TextureRect).texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	back.pressed.connect(_on_back)
 	hud.add_child(back)
 
@@ -808,8 +824,10 @@ func _make_pill_label(pill: Control, text: String, font_size: int, color: Color,
 # (Endless: the run score plate instead).
 func _build_hud_pills(hud: Control) -> void:
 	var clock_rect := _rect("clock_pill")
-	var clock_pill := _make_pill("ClockPill", clock_rect)
-	var clock_shadow := _make_drop_shadow(UiHelpers.kit_texture("pill"), clock_rect.grow(1.0), 1.5, 0.35)
+	var clock_texture := UiHelpers.hires_texture(CLOCK_PLANK_ART)
+	var clock_pill := _make_art("ClockPill", clock_texture, clock_rect, true)
+	var clock_shadow := _make_drop_shadow(
+		clock_texture, Rect2(clock_rect.position + Vector2(1.0, 2.0), clock_rect.size - Vector2(1.0, 2.0)), 1.5, 0.28)
 	if clock_shadow != null:
 		hud.add_child(clock_shadow)
 	hud.add_child(clock_pill)
@@ -864,7 +882,7 @@ func _build_board_frame(parent: Control) -> void:
 	shade.name = "BoardShade"
 	shade.color = BOARD_SHADE
 	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_place(shade, inner)
+	_place(shade, Rect2(Vector2.ZERO, rect.size).intersection(inner.grow(BOARD_SHADE_OVERDRAW)))
 	frame.add_child(shade)
 	if frame_art != null:
 		frame.add_child(frame_art)
@@ -872,7 +890,10 @@ func _build_board_frame(parent: Control) -> void:
 	board_container.name = "Board"
 	board_container.clip_contents = true
 	board_container.z_index = 2
-	_place(board_container, inner.grow(-BOARD_PAD))
+	var cards_area := inner.grow(-BOARD_PAD)
+	# The hero is drawn in front of the frame art but behind the cards (LevelLayout.HERO_Z < card
+	# layer): dense boards need the full width (touch-size floor), so she never hides a card.
+	_place(board_container, cards_area)
 	frame.add_child(board_container)
 
 # A Support Deck is a pile drawn inside its kit slot: deck A fans its card edges to the left,
@@ -886,19 +907,13 @@ func _build_deck_slot(parent: Control, deck_id: String) -> void:
 	_place(slot, rect)
 	parent.add_child(slot)
 	# The square wooden plate is the deck's table; the pile sits on top of it.
-	var table_shadow := Panel.new()
-	table_shadow.name = "DeckTableShadow"
-	table_shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var table_style := StyleBoxFlat.new()
-	table_style.bg_color = Color(0, 0, 0, 0)
-	table_style.draw_center = false
-	table_style.shadow_color = Color(0.0, 0.0, 0.0, 0.30)
-	table_style.shadow_size = 2
-	table_style.shadow_offset = Vector2(1.0, 2.0)
-	table_shadow.add_theme_stylebox_override("panel", table_style)
-	_place(table_shadow, Rect2(Vector2.ZERO, rect.size))
-	slot.add_child(table_shadow)
-	slot.add_child(_make_art("DeckTable", UiHelpers.hires_texture(DECK_TABLE_ART), Rect2(Vector2.ZERO, rect.size), true))
+	var table_texture := UiHelpers.hires_texture(DECK_TABLE_ART)
+	var table_shadow := _make_drop_shadow(
+		table_texture, Rect2(Vector2(1.0, 2.0), rect.size - Vector2(1.0, 2.0)), 1.8, 0.26)
+	if table_shadow != null:
+		table_shadow.name = "DeckTableShadow"
+		slot.add_child(table_shadow)
+	slot.add_child(_make_art("DeckTable", table_texture, Rect2(Vector2.ZERO, rect.size), true))
 	var btn := _make_deck_button(deck_id)
 	btn.position = ((rect.size - _deck_pile_size()) * 0.5).floor()
 	slot.add_child(btn)
@@ -918,7 +933,7 @@ func _build_reserve_panel(parent: Control) -> void:
 	_place(panel, rect)
 	parent.add_child(panel)
 	var frame_data := UiHelpers.trimmed_nine_patch(
-		UiHelpers.hires_texture(RESERVE_FIELD_ART), rect.size, RESERVE_FIELD_MARGINS)
+		UiHelpers.hires_texture(RESERVE_FIELD_ART), rect.size, RESERVE_FIELD_MARGINS, "", true)
 	var inner := Rect2(8.0, 8.0, rect.size.x - 16.0, rect.size.y - 16.0)
 	if not frame_data.is_empty():
 		inner = frame_data["inner"]
@@ -1083,6 +1098,7 @@ func _make_deck_button(deck_id: String) -> Button:
 	_make_flat_button_compact(btn)
 	btn.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
 	btn.pressed.connect(_on_deck.bind(deck_id))
+	_hook_juice(btn)
 	return btn
 
 func _deck_card_size() -> Vector2:
@@ -1117,6 +1133,7 @@ func render() -> void:
 		var node := _board_nodes.get(card.id) as Button
 		if not is_instance_valid(node):
 			node = _make_card_button(card, depth, _on_card.bind(card.id), card_size, false)
+			_hook_juice(node)
 			_board_nodes[card.id] = node
 			board_container.add_child(node)
 		var visual_position: Vector2 = grid_positions.get(card.id, Vector2(
@@ -1150,7 +1167,9 @@ func render() -> void:
 			node = _zone_nodes.get(key) as Control
 			if not is_instance_valid(node):
 				node = _make_card_display(zone_card.type, zone_card_size, true)
+				_apply_zone_juice(node, str(zone_card.id))
 				_zone_nodes[key] = node
+			_sync_zone_juice(node, zone_card_size)
 			# A card still flying in shows up in its slot only when its ghost lands.
 			node.modulate = Color(1, 1, 1, 0) if _hidden_cards.has(zone_card.id) else Color.WHITE
 		else:
@@ -1209,6 +1228,140 @@ func render() -> void:
 	_refresh_score()
 	_place_mascot()
 
+# ---------------------------------------------------------------- card juice
+# Only the card under the pointer/finger owns a ShaderMaterial (on its art); everyone else keeps
+# the shared depth material (or none). Tilt updates on pointer motion only; no per-frame work.
+var _juice_button: Button
+var _juice_face: Control
+var _juice_art: Control
+var _juice_mat: ShaderMaterial
+var _juice_tween: Tween
+
+func _hook_juice(btn: Button) -> void:
+	btn.gui_input.connect(_on_juice_input.bind(btn))
+	btn.mouse_exited.connect(_juice_release.bind(btn))
+
+func _juice_face_of(btn: Button) -> Control:
+	if btn.has_meta("face"):   # a Support Deck's top card
+		return btn.get_meta("face") as Control
+	if btn.get_child_count() > 0:   # a board card
+		return btn.get_child(0) as Control
+	return null
+
+func _juice_art_of(face: Control) -> TextureRect:
+	for child in face.get_children():
+		if child is TextureRect:
+			return child
+	return null
+
+func _on_juice_input(event: InputEvent, btn: Button) -> void:
+	if _ended or not is_instance_valid(btn) or btn.disabled:
+		return
+	if event is InputEventMouseMotion:
+		_juice_follow(btn, (event as InputEventMouseMotion).position)
+	elif event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.pressed:
+			_juice_follow(btn, mb.position)   # touch-down tilts too
+		elif mb.device == InputEvent.DEVICE_ID_EMULATION:
+			_juice_release(btn)               # a finger lifting is not followed by mouse_exited
+
+func _juice_follow(btn: Button, local_pos: Vector2) -> void:
+	if btn.disabled:
+		return   # blocked cards keep their exact dimmed look
+	var face := _juice_face_of(btn)
+	if face == null or not is_instance_valid(face):
+		return
+	var art := _juice_art_of(face)
+	if art == null:
+		return   # placeholder/empty slot: nothing to tilt
+	if _juice_button != btn or _juice_face != face or not is_instance_valid(_juice_mat):
+		_juice_begin(btn, face, art)
+	if _juice_tween != null and _juice_tween.is_valid():
+		_juice_tween.kill()
+		_juice_tween = null
+	var area := Rect2(Vector2.ZERO, face.size)
+	if btn.has_meta("face_rect"):
+		area = btn.get_meta("face_rect")
+	var n := ((local_pos - area.position) / area.size - Vector2(0.5, 0.5)) * 2.0
+	n = n.clamp(Vector2(-1.0, -1.0), Vector2(1.0, 1.0))
+	_juice_mat.set_shader_parameter("y_rot", n.x * JUICE_MAX_TILT_DEG)
+	_juice_mat.set_shader_parameter("x_rot", -n.y * JUICE_MAX_TILT_DEG)
+	_juice_set_shadow(face, -n * JUICE_SHADOW_SHIFT)
+
+func _juice_begin(btn: Button, face: Control, art: TextureRect) -> void:
+	_juice_end_now()
+	var mat := ShaderMaterial.new()
+	mat.shader = JUICE_SHADER
+	mat.set_shader_parameter("rect_size", art.size)
+	mat.set_shader_parameter("fov", JUICE_FOV)
+	mat.set_shader_parameter("shine_strength", JUICE_SHINE)
+	art.material = mat
+	_juice_button = btn
+	_juice_face = face
+	_juice_art = art
+	_juice_mat = mat
+	face.pivot_offset = face.size * 0.5
+	var pop := create_tween()
+	pop.tween_property(face, "scale", Vector2(JUICE_HOVER_SCALE, JUICE_HOVER_SCALE), JUICE_POP_SECONDS) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+func _juice_release(btn: Button) -> void:
+	if _juice_button != btn or not is_instance_valid(_juice_mat):
+		return
+	if _juice_tween != null and _juice_tween.is_valid():
+		_juice_tween.kill()
+	var tween := create_tween().set_parallel(true).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+	_juice_tween = tween
+	tween.tween_property(_juice_mat, "shader_parameter/x_rot", 0.0, JUICE_RETURN_SECONDS)
+	tween.tween_property(_juice_mat, "shader_parameter/y_rot", 0.0, JUICE_RETURN_SECONDS)
+	if is_instance_valid(_juice_face):
+		tween.tween_property(_juice_face, "scale", Vector2.ONE, JUICE_RETURN_SECONDS)
+		_juice_set_shadow(_juice_face, Vector2.ZERO)
+	tween.chain().tween_callback(_juice_end_now)
+
+# Back to the shared material at once (also when the card is rebuilt, blocked or removed).
+func _juice_end_now() -> void:
+	if _juice_tween != null and _juice_tween.is_valid():
+		_juice_tween.kill()
+	_juice_tween = null
+	if is_instance_valid(_juice_art):
+		_juice_art.material = null
+	if is_instance_valid(_juice_face):
+		_juice_face.scale = Vector2.ONE
+		_juice_set_shadow(_juice_face, Vector2.ZERO)
+	_juice_button = null
+	_juice_face = null
+	_juice_art = null
+	_juice_mat = null
+
+func _juice_set_shadow(face: Control, shift: Vector2) -> void:
+	var shadow := face.get_node_or_null("CardShadow") as Control
+	if shadow != null:
+		shadow.position = shift
+
+# Clearing Zone cards: each owns a small material with idle sway + holographic foil.
+func _apply_zone_juice(node: Control, card_id: String) -> void:
+	var art := _juice_art_of(node)
+	if art == null:
+		return
+	var mat := ShaderMaterial.new()
+	mat.shader = JUICE_SHADER
+	mat.set_shader_parameter("rect_size", art.size)
+	mat.set_shader_parameter("fov", JUICE_FOV)
+	mat.set_shader_parameter("sway_amount", ZONE_SWAY_DEG)
+	mat.set_shader_parameter("holo_strength", ZONE_HOLO)
+	mat.set_shader_parameter("sway_phase", float(card_id.hash() % 628) / 100.0)
+	art.material = mat
+
+func _sync_zone_juice(node: Control, card_size: Vector2) -> void:
+	var art := _juice_art_of(node)
+	if art == null or art.material == null:
+		return
+	if art.size != card_size:
+		art.size = card_size
+		(art.material as ShaderMaterial).set_shader_parameter("rect_size", card_size)
+
 func _clear(c: Node) -> void:
 	for child in c.get_children():
 		c.remove_child(child)
@@ -1235,6 +1388,8 @@ func _update_board_card_node(button: Button, depth: int, card_size: Vector2, at:
 	var disabled := depth > 0
 	if button.disabled != disabled:
 		button.disabled = disabled
+		if disabled and _juice_button == button:
+			_juice_end_now()
 	if button.get_child_count() == 0:
 		return
 	var face := button.get_child(0) as Control
@@ -1625,6 +1780,8 @@ func _update_deck_button(btn: Button, deck: DeckManager, edges_left: bool) -> vo
 	if str(btn.get_meta("deck_render_signature", "")) == signature:
 		return
 	btn.set_meta("deck_render_signature", signature)
+	if _juice_button == btn:
+		_juice_end_now()
 	_clear(btn)
 	var pile_size := _deck_pile_size()
 	btn.size = pile_size
@@ -2689,6 +2846,7 @@ func _show_end(win: bool) -> void:
 	if _ended:
 		return
 	_ended = true
+	_juice_end_now()
 	if mascot != null:
 		mascot.visible = false
 	if _instruction_bubble != null and is_instance_valid(_instruction_bubble):
@@ -2702,9 +2860,10 @@ func _show_end(win: bool) -> void:
 	if _endless != null:
 		_show_endless_end(win)
 		return
-	var granted: Array = []
 	if win:
-		granted = Game.complete_level(controller.stars, controller.rewards)
+		Game.complete_level(controller.stars, controller.rewards)
+		_show_victory_screen(false, {})
+		return
 	else:
 		# Powers spent during a lost attempt are already gone from the inventory.
 		Game.save_progress()
@@ -2713,63 +2872,11 @@ func _show_end(win: bool) -> void:
 		_show_defeat_screen()
 		return
 
-	var info := _open_end_panel()
-
-	var stage_num := Label.new()
-	stage_num.text = str(controller.level_id)
-	stage_num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	# Landscape is only 360 px tall: a smaller number leaves room for the stars plaque.
-	stage_num.add_theme_font_size_override("font_size", 32 if _is_landscape else 40)
-	stage_num.add_theme_color_override("font_color", TEXT_PRIMARY)
-	info.add_child(stage_num)
-
-	var title := Label.new()
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 18)
-	title.add_theme_color_override("font_color", TEXT_MUTED)
-	if win:
-		title.text = Localizer.t("level_complete")
-	elif controller.loss_reason == GameController.LossReason.TIMEOUT:
-		title.text = Localizer.t("time_up")
-	else:
-		title.text = Localizer.t("no_moves")
-	info.add_child(title)
-
-	if win:
-		_add_end_stars(info)
-
-		var time_line := Label.new()
-		time_line.text = "%s: %s" % [Localizer.t("time"), _format_time(controller.timer.elapsed_seconds())]
-		time_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		time_line.add_theme_color_override("font_color", TEXT_PRIMARY)
-		info.add_child(time_line)
-
-		_add_reward_lines(info, "stage_reward", granted)
-
-		var total_stars := UiHelpers.symbol_label(UiHelpers.total_stars_text(), 14)
-		total_stars.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		total_stars.add_theme_color_override("font_color", GOLD)
-		info.add_child(total_stars)
-
-	_add_end_mascot(info, win, "win" if win else "lose", {
-		"stars": controller.stars,
-		"timeout": controller.loss_reason == GameController.LossReason.TIMEOUT,
-	})
-
-	var buttons := _add_end_buttons(info)
-	if LevelLoader.level_exists(int(controller.level_id) + 1):
-		buttons.add_child(_make_end_art_button("continue", "next_level", func(): Game.start_level(int(controller.level_id) + 1)))
-	buttons.add_child(_make_end_art_button("exit", "menu", func(): Game.go_to_menu()))
-
 # The campaign defeat composition. The stage (background and HUD) stays behind a lighter
 # shade; the hero is mapped from HeroRoster and drawn large behind the stone window, which
 # carries the localised title and the two real retry/quit plates. The HUD is lifted above
 # the shade so Back/Help/Sound keep working.
 func _show_defeat_screen() -> void:
-	var hud := find_child("Hud", true, false) as Control
-	if hud != null:
-		hud.z_index = DEFEAT_HUD_Z
-
 	var overlay := Control.new()
 	overlay.name = "DefeatOverlay"
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -2911,13 +3018,14 @@ func _defeat_quit_rect() -> Rect2:
 
 func _defeat_character_rect(texture: Texture2D) -> Rect2:
 	var aspect := float(texture.get_width()) / float(maxi(1, texture.get_height()))
-	if _is_landscape:
-		var width := minf(300.0, 300.0 * aspect)
-		var height := width / aspect
-		return Rect2(22.0, 340.0 - height, width, height)
-	var width := minf(340.0, 560.0 * aspect)
-	var height := width / aspect
-	return Rect2(0.0, 56.0, width, height)
+	# Large hero on the left, allowed to bleed off the left and bottom screen edges; the
+	# stone window is drawn over her.
+	var screen_h := get_viewport_rect().size.y
+	var height := screen_h * (1.0 if _is_landscape else 0.74)
+	var width := minf(height * aspect, get_viewport_rect().size.x * (0.62 if _is_landscape else 1.05))
+	height = width / aspect
+	var top := screen_h - height + height * 0.03 if _is_landscape else 30.0
+	return Rect2(-width * (0.10 if _is_landscape else 0.20), top, width, height)
 
 # A localised defeat plate. If the PNG is missing, the old text button is used as a safe
 # fallback; the art itself carries the label, so no duplicate Label is drawn over it.
@@ -2933,33 +3041,219 @@ func _make_defeat_button(node_name: String, file_name: String, rect: Rect2, labe
 	_place(btn, rect)
 	return btn
 
+# Board-art geometry: the stone window's inner hole as fractions of the PNG (1165x1350).
+const VICTORY_HOLE := Rect2(0.235, 0.205, 0.53, 0.60)
+
+# The victory composition, same arrangement as the defeat one: the celebrating bunny large on
+# the left, the painted board with the localised title and the earned stars plaque, and the
+# painted Continue / Retry / Quit buttons. `endless` swaps the plaque for the round summary
+# (ctx["lines"]: Controls) and drops Retry; the shade covers the whole screen, HUD included.
+func _show_victory_screen(endless: bool, ctx: Dictionary) -> void:
+	var overlay := Control.new()
+	overlay.name = "VictoryOverlay"
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.z_index = DEFEAT_OVERLAY_Z
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(overlay)
+
+	var shade := ColorRect.new()
+	shade.name = "VictoryShade"
+	shade.color = Color(0, 0, 0, 0.5)
+	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shade.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.add_child(shade)
+
+	var screen := get_viewport_rect().size
+	var locale := _defeat_locale()
+
+	var board_texture := UiHelpers.hires_texture(VICTORY_BOARD_ART)
+	var board_aspect := 0.863
+	if board_texture != null:
+		board_aspect = float(board_texture.get_width()) / float(board_texture.get_height())
+	var board_h: float
+	if _is_landscape:
+		board_h = minf(screen.y - 46.0, 312.0)
+	else:
+		board_h = minf(minf(screen.y - 150.0, 360.0), (screen.x - 30.0) / board_aspect)
+	var board_w := board_h * board_aspect
+	var board_x: float
+	var board_y: float
+	if _is_landscape:
+		board_x = maxf(screen.x * 0.5, screen.x - board_w - 44.0)
+		board_y = screen.y - board_h - 6.0
+	else:
+		board_x = (screen.x - board_w) * 0.5 + 8.0
+		board_y = (screen.y - board_h) * 0.5 + 52.0
+	var board_rect := Rect2(board_x, board_y, board_w, board_h)
+
+	# The bunny: large, behind the board, bleeding off the left/bottom edges.
+	var bunny_texture := _victory_texture(VICTORY_BUNNY_ART)
+	if bunny_texture != null:
+		var aspect := float(bunny_texture.get_width()) / float(bunny_texture.get_height())
+		var bh := screen.y * (1.0 if _is_landscape else 0.95)
+		var bw := bh * aspect
+		if _is_landscape and bw > screen.x * 0.62:
+			bw = screen.x * 0.62
+			bh = bw / aspect
+		var bunny := _make_art("VictoryCharacter", bunny_texture,
+			Rect2(-bw * (0.06 if _is_landscape else 0.30), screen.y - bh + bh * 0.02 if _is_landscape else -46.0, bw, bh))
+		bunny.set_meta("source_path", VICTORY_BUNNY_ART)
+		bunny.z_index = 1
+		overlay.add_child(bunny)
+
+	var panel := Control.new()
+	panel.name = "VictoryPanel"
+	panel.z_index = 2
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(panel, board_rect)
+	overlay.add_child(panel)
+
+	if board_texture != null:
+		var board_shadow := _make_drop_shadow(board_texture, Rect2(Vector2(2, 4), board_rect.size), 2.2, 0.5)
+		if board_shadow != null:
+			panel.add_child(board_shadow)
+		var board := _make_art("VictoryBoard", board_texture, Rect2(Vector2.ZERO, board_rect.size), true)
+		board.set_meta("source_path", VICTORY_BOARD_ART)
+		panel.add_child(board)
+
+	var hole := Rect2(board_rect.size * VICTORY_HOLE.position, board_rect.size * VICTORY_HOLE.size)
+
+	# Title straddling the board's top laurel.
+	var title_path: String = VICTORY_DIR + str(VICTORY_TITLE_ART[locale])
+	var title_texture := _victory_texture(title_path)
+	if title_texture != null:
+		var tw := board_w * 0.82
+		var th := tw * float(title_texture.get_height()) / float(title_texture.get_width())
+		var title := _make_art("VictoryTitle", title_texture,
+			Rect2((board_w - tw) * 0.5, -th * 0.52, tw, th))
+		title.set_meta("source_path", title_path)
+		title.set_meta("locale", locale)
+		title.z_index = 2
+		panel.add_child(title)
+	else:
+		var fallback := _make_end_label(Localizer.t("level_complete"), 26, GOLD)
+		_place(fallback, Rect2(0, -34, board_w, 40))
+		panel.add_child(fallback)
+
+	# Buttons: [node name, art path, label key, callback].
+	var specs: Array = []
+	var has_next := endless or LevelLoader.level_exists(int(controller.level_id) + 1)
+	if has_next:
+		var cont_cb: Callable = func(): Game.restart_level()
+		if not endless:
+			cont_cb = func(): Game.start_level(int(controller.level_id) + 1)
+		specs.append(["VictoryContinue", V2_KIT_DIR + str(END_CONTINUE_ART[locale]),
+			"next_round" if endless else "next_level", cont_cb])
+	if not endless:
+		specs.append(["VictoryRetry", VICTORY_DIR + str(VICTORY_RETRY_ART[locale]), "retry",
+			func(): Game.restart_level()])
+	var quit_cb: Callable = func(): Game.go_to_menu()
+	if endless:
+		quit_cb = _on_back
+	specs.append(["VictoryQuit", V2_KIT_DIR + str(END_EXIT_ART[locale]), "menu", quit_cb])
+
+	var gap := 3.0
+	var btn_w := hole.size.x * 0.94
+	var textures: Array = []
+	var btn_h_total := 0.0
+	for spec in specs:
+		var tex := _victory_texture(str(spec[1]))
+		textures.append(tex)
+		btn_h_total += btn_w * float(tex.get_height()) / float(tex.get_width()) if tex != null else 36.0
+	btn_h_total += gap * (specs.size() - 1)
+	var top_h := hole.size.y * (0.40 if endless else 0.36)
+	var avail_buttons := hole.size.y - top_h - 4.0
+	var shrink := minf(1.0, avail_buttons / maxf(1.0, btn_h_total))
+	btn_w *= shrink
+
+	# Top block: the earned stars plaque, or the endless round summary.
+	var top_rect := Rect2(hole.position, Vector2(hole.size.x, top_h))
+	if endless:
+		var column := VBoxContainer.new()
+		column.name = "VictorySummary"
+		column.alignment = BoxContainer.ALIGNMENT_CENTER
+		column.add_theme_constant_override("separation", 1)
+		column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_place(column, top_rect)
+		column.z_index = 2
+		for line in ctx.get("lines", []):
+			column.add_child(line)
+		panel.add_child(column)
+	else:
+		var stars_path := VICTORY_DIR + "victory_stars_%d.png" % clampi(controller.stars, 1, 3)
+		var stars_texture := _victory_texture(stars_path)
+		if stars_texture != null:
+			var ratio := float(stars_texture.get_width()) / float(stars_texture.get_height())
+			var sw := minf(top_rect.size.x * 1.04, top_rect.size.y * ratio)
+			var sh := sw / ratio
+			var plaque := _make_art("VictoryStars", stars_texture,
+				Rect2(top_rect.position + Vector2((top_rect.size.x - sw) * 0.5, (top_rect.size.y - sh) * 0.5), Vector2(sw, sh)))
+			plaque.set_meta("source_path", stars_path)
+			plaque.set_meta("stars", clampi(controller.stars, 1, 3))
+			plaque.z_index = 2
+			plaque.pivot_offset = plaque.size * 0.5
+			plaque.scale = Vector2(0.3, 0.3)
+			plaque.modulate.a = 0.0
+			panel.add_child(plaque)
+			var pop := create_tween()
+			pop.set_parallel(true)
+			pop.tween_property(plaque, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			pop.tween_property(plaque, "modulate:a", 1.0, 0.2)
+
+	var by := top_rect.end.y + 4.0 + maxf(0.0, avail_buttons - btn_h_total * shrink) * 0.5
+	for i in specs.size():
+		var spec: Array = specs[i]
+		var tex: Texture2D = textures[i]
+		var size := Vector2(btn_w, 36.0 * shrink)
+		if tex != null:
+			size = Vector2(btn_w, btn_w * float(tex.get_height()) / float(tex.get_width()))
+		var rect := Rect2(Vector2(hole.position.x + (hole.size.x - size.x) * 0.5, by), size)
+		var btn: Button
+		if tex != null:
+			btn = _make_face_button(str(spec[0]), tex, size, Localizer.t(str(spec[2])), spec[3])
+			btn.set_meta("source_path", str(spec[1]))
+		else:
+			btn = _make_end_button(Localizer.t(str(spec[2])), spec[3])
+			btn.name = str(spec[0])
+		_place(btn, rect)
+		btn.z_index = 2
+		panel.add_child(btn)
+		by += size.y + gap * shrink
+
+func _victory_texture(path: String) -> Texture2D:
+	if not ResourceLoader.exists(path):
+		return null
+	return UiHelpers.hires_texture(path)
+
 # Endless end panels: a cleared round (the run goes on) or the end of the run.
 func _show_endless_end(win: bool) -> void:
-	var info := _open_end_panel()
-	var buttons: HBoxContainer
 	if win:
 		var cleared := _endless.complete_round()
 		var round_number: int = int(cleared["round"]) - 1
-		info.add_child(_make_end_label(str(round_number), 40, TEXT_PRIMARY))
-		info.add_child(_make_end_label(Localizer.t("round_cleared"), 18, TEXT_MUTED))
-		info.add_child(_make_end_label("%s  +%d" % [Localizer.t("round_bonus"), int(cleared["bonus"])], 15, GOLD))
-		_add_reward_lines(info, "power_reward", cleared["granted"])
-		info.add_child(_make_end_label("%s: %d" % [Localizer.t("score"), _endless.score], 15, TEXT_PRIMARY))
-		_add_end_mascot(info, true, "round_intro", {})
-		buttons = _add_end_buttons(info)
-		buttons.add_child(_make_end_art_button("continue", "next_round", func(): Game.restart_level()))
+		var lines: Array = []
+		lines.append(_make_end_label("%s %d" % [Localizer.t("round_cleared"), round_number], 13, TEXT_PRIMARY))
+		lines.append(_make_end_label("%s  +%d" % [Localizer.t("round_bonus"), int(cleared["bonus"])], 12, GOLD))
+		for r in cleared["granted"]:
+			var rtype := str(r.get("type", ""))
+			var reward := UiHelpers.symbol_label("%s +%d" % [_power_icon(rtype), int(r.get("quantity", 0))], 12)
+			reward.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			reward.add_theme_color_override("font_color", GOLD)
+			lines.append(reward)
+		lines.append(_make_end_label("%s: %d" % [Localizer.t("score"), _endless.score], 12, TEXT_PRIMARY))
+		_show_victory_screen(true, {"lines": lines})
+		return
+	var info := _open_end_panel()
+	var result := _finish_endless_run()
+	info.add_child(_make_end_label(Localizer.t("run_over"), 22, TEXT_MUTED))
+	info.add_child(_make_end_label(str(result["score"]), 40, TEXT_PRIMARY))
+	info.add_child(_make_end_label("%s: %d" % [Localizer.t("rounds_cleared"), int(result["rounds_cleared"])], 14, TEXT_PRIMARY))
+	if bool(result["new_best"]):
+		info.add_child(_make_end_label("★ %s" % Localizer.t("new_best"), 18, GOLD, true))
 	else:
-		var result := _finish_endless_run()
-		info.add_child(_make_end_label(Localizer.t("run_over"), 22, TEXT_MUTED))
-		info.add_child(_make_end_label(str(result["score"]), 40, TEXT_PRIMARY))
-		info.add_child(_make_end_label("%s: %d" % [Localizer.t("rounds_cleared"), int(result["rounds_cleared"])], 14, TEXT_PRIMARY))
-		if bool(result["new_best"]):
-			info.add_child(_make_end_label("★ %s" % Localizer.t("new_best"), 18, GOLD, true))
-		else:
-			info.add_child(_make_end_label("%s: %d" % [Localizer.t("best_score"), Game.progress.endless_best], 14, TEXT_MUTED))
-		_add_end_mascot(info, false, "lose", {})
-		buttons = _add_end_buttons(info)
-		buttons.add_child(_make_end_art_button("new_game", "play_again", func(): Game.start_endless()))
+		info.add_child(_make_end_label("%s: %d" % [Localizer.t("best_score"), Game.progress.endless_best], 14, TEXT_MUTED))
+	_add_end_mascot(info, false, "lose", {})
+	var buttons := _add_end_buttons(info)
+	buttons.add_child(_make_end_art_button("new_game", "play_again", func(): Game.start_endless()))
 	buttons.add_child(_make_end_art_button("exit", "menu", _on_back))
 
 # Shared end-of-round panel shell: dark shade + centered warm panel. Returns the

@@ -299,9 +299,9 @@ static func alpha_nine_patch(texture: Texture2D, target_size: Vector2, max_borde
 # and the margins are scaled with it. Use this for panels whose corner ornaments
 # must not be cut (the reserve field, the powers board). `margin_ratio` is
 # (left, top, right, bottom) as fractions of the CROPPED texture size.
-static func trimmed_nine_patch(texture: Texture2D, target_size: Vector2, margin_ratio: Rect2, cache_key: String = "") -> Dictionary:
+static func trimmed_nine_patch(texture: Texture2D, target_size: Vector2, margin_ratio: Rect2, cache_key: String = "", smart_bake: bool = false) -> Dictionary:
 	var source_key := cache_key if not cache_key.is_empty() else (texture.resource_path if texture != null else "")
-	var key := "trim|%s|%.0fx%.0f|%s|x%.2f" % [source_key, target_size.x, target_size.y, str(margin_ratio), ui_oversample()]
+	var key := "trim|%s|%.0fx%.0f|%s|x%.2f|%s" % [source_key, target_size.x, target_size.y, str(margin_ratio), ui_oversample(), str(smart_bake)]
 	if _frame_cache.has(key):
 		_cache_touch(_frame_cache_lru, key)
 		return _frame_cache[key]
@@ -346,7 +346,10 @@ static func trimmed_nine_patch(texture: Texture2D, target_size: Vector2, margin_
 		"inner": inner,
 		"source_bounds": used,
 	}
-	result.merge(_hires_nine_patch(crop, Vector2(fitted.get_width(), fitted.get_height()), result["margins"]))
+	if smart_bake:
+		result.merge(_baked_nine_patch(crop, target_size, result["margins"], Vector2(fitted.get_width(), fitted.get_height())))
+	else:
+		result.merge(_hires_nine_patch(crop, Vector2(fitted.get_width(), fitted.get_height()), result["margins"]))
 	_cache_store(_frame_cache, _frame_cache_lru, key, result, FRAME_CACHE_LIMIT)
 	return result
 
@@ -354,7 +357,12 @@ static func trimmed_nine_patch(texture: Texture2D, target_size: Vector2, margin_
 # canvas_items stretch, so a 64 px design panel is 128+ real px on a 2x window. Painted
 # 9-slices baked at design size would be upscaled by the GPU (blurry), so they are also
 # baked at this factor and drawn scaled back down (see nine_patch_rect). 1..4.
+# Tests pin the factor here (a headless SceneTree script has no main loop yet); 0 = measure the window.
+static var oversample_override := 0.0
+
 static func ui_oversample() -> float:
+	if oversample_override > 0.0:
+		return oversample_override
 	var tree := Engine.get_main_loop() as SceneTree
 	if tree == null or tree.root == null:
 		return 1.0
@@ -390,6 +398,146 @@ static func _hires_nine_patch(crop: Image, design_size: Vector2, margins: Rect2i
 		"oversample": factor,
 	}
 
+# Opt-in bake for panels whose target aspect is far from the art's (the Clearing Zone bar, the
+# Reserve strip), used instead of _hires_nine_patch. The picture is composed per slice at exactly
+# `target_size * factor` px and drawn 1:1, so nothing is stretched by the GPU:
+#  - corners: ONE copy at the fit scale (<= 1 source texel per px),
+#  - edges: ONE copy; thickness fixed, and along their length either the centred native-scale
+#    crop of the strip (when the strip is longer than needed: its ornament appears once,
+#    unscaled) or the whole strip stretched lengthwise (a uniform bar does not blur),
+#  - centre: ONE uniform "cover" crop of the source centre, no tiling or mirroring, magnified at
+#    most 1.5x (past that the crop is stretched and `centre_over_cap` reports it: it needs a
+#    taller / wider source asset).
+# Adds hires_texture / hires_margins / oversample and the info tests/test_nine_patch_sharpness.gd
+# reads: mag_corner, mag_edge (thickness), mag_centre (baked texels per source px, per axis).
+const BAKE_CENTRE_MAX_MAG := 1.5
+const BAKE_FEATHER_PX := 28
+
+# Feathers the cropped `piece` (edited in place) into `whole` (the same slice squeezed to fit):
+# whole at the borders of the cropped axes, piece from BAKE_FEATHER_PX px inside (smoothstep), so
+# the crop never jumps against the neighbouring slices. Only the feather bands are touched.
+static func _feather_blend(whole: Image, piece: Image, feather_x: bool, feather_y: bool) -> void:
+	var w := piece.get_width()
+	var h := piece.get_height()
+	var span := mini(BAKE_FEATHER_PX, mini(w if feather_x else 9999, h if feather_y else 9999) / 2)
+	if span < 1:
+		return
+	for y in h:
+		var dy := mini(y, h - 1 - y) if feather_y else span
+		var full_row := dy < span
+		var xs: Array = []
+		if full_row:
+			xs = range(w)
+		elif feather_x:
+			xs = range(span) + range(w - span, w)
+		for x in xs:
+			var dx := mini(x, w - 1 - x) if feather_x else span
+			var d := mini(dx, dy)
+			var t := float(d) / float(span)
+			t = t * t * (3.0 - 2.0 * t)
+			piece.set_pixel(x, y, whole.get_pixel(x, y).lerp(piece.get_pixel(x, y), t))
+
+static func _baked_nine_patch(crop: Image, target_size: Vector2, margins: Rect2i, fitted_size: Vector2) -> Dictionary:
+	if target_size.x <= 0.0 or target_size.y <= 0.0 or fitted_size.x <= 0.0 or fitted_size.y <= 0.0:
+		return {}
+	var w := crop.get_width()
+	var h := crop.get_height()
+	var sx := fitted_size.x / float(w)
+	var sy := fitted_size.y / float(h)
+	var factor := clampf(minf(ui_oversample(), 1.0 / maxf(sx, sy)), 1.0, 4.0)
+	var out_w := maxi(2, roundi(target_size.x * factor))
+	var out_h := maxi(2, roundi(target_size.y * factor))
+	var kx := sx * factor
+	var ky := sy * factor
+	var sl := clampi(roundi(margins.position.x / sx), 1, w / 2 - 1)
+	var st := clampi(roundi(margins.position.y / sy), 1, h / 2 - 1)
+	var sr := clampi(roundi(margins.size.x / sx), 1, w / 2 - 1)
+	var sb := clampi(roundi(margins.size.y / sy), 1, h / 2 - 1)
+	var dl := maxi(1, roundi(sl * kx))
+	var dt := maxi(1, roundi(st * ky))
+	var dr := maxi(1, roundi(sr * kx))
+	var db := maxi(1, roundi(sb * ky))
+	if dl + dr > out_w - 2:
+		var f := float(out_w - 2) / float(dl + dr)
+		dl = maxi(1, floori(dl * f))
+		dr = maxi(1, floori(dr * f))
+	if dt + db > out_h - 2:
+		var f2 := float(out_h - 2) / float(dt + db)
+		dt = maxi(1, floori(dt * f2))
+		db = maxi(1, floori(db * f2))
+	var src_x := [0, sl, w - sr, w]
+	var src_y := [0, st, h - sb, h]
+	var dst_x := [0, dl, out_w - dr, out_w]
+	var dst_y := [0, dt, out_h - db, out_h]
+	var source: Image = crop.duplicate()
+	source.convert(Image.FORMAT_RGBA8)
+	var baked := Image.create(out_w, out_h, false, Image.FORMAT_RGBA8)
+	var mag_corner := 0.0
+	var mag_edge := 0.0
+	var mag_centre := Vector2.ZERO
+	var over_cap := false
+	for row in 3:
+		for col in 3:
+			var src := Rect2i(src_x[col], src_y[row], src_x[col + 1] - src_x[col], src_y[row + 1] - src_y[row])
+			var dst := Rect2i(dst_x[col], dst_y[row], dst_x[col + 1] - dst_x[col], dst_y[row + 1] - dst_y[row])
+			if src.size.x < 1 or src.size.y < 1 or dst.size.x < 1 or dst.size.y < 1:
+				continue
+			var part := Rect2(src)
+			if col == 1 and row == 1:
+				# Centre: uniform cover crop, magnification capped.
+				var need_x := float(dst.size.x) / float(src.size.x)
+				var need_y := float(dst.size.y) / float(src.size.y)
+				var u := maxf(need_x, need_y)
+				if u > BAKE_CENTRE_MAX_MAG:
+					u = BAKE_CENTRE_MAX_MAG
+					over_cap = true
+				var cw := minf(float(src.size.x), float(dst.size.x) / u)
+				var ch := minf(float(src.size.y), float(dst.size.y) / u)
+				part = Rect2(Vector2(src.position) + (Vector2(src.size) - Vector2(cw, ch)) * 0.5, Vector2(cw, ch))
+				mag_centre = Vector2(float(dst.size.x) / cw, float(dst.size.y) / ch)
+			elif col == 1:
+				# Top / bottom edge: runs along x.
+				if float(dst.size.x) <= float(src.size.x) * kx:
+					var len_x := float(dst.size.x) / kx
+					part = Rect2(Vector2(src.position.x + (src.size.x - len_x) * 0.5, src.position.y), Vector2(len_x, src.size.y))
+				mag_edge = maxf(mag_edge, float(dst.size.y) / float(src.size.y))
+			elif row == 1:
+				# Left / right edge: runs along y.
+				if float(dst.size.y) <= float(src.size.y) * ky:
+					var len_y := float(dst.size.y) / ky
+					part = Rect2(Vector2(src.position.x, src.position.y + (src.size.y - len_y) * 0.5), Vector2(src.size.x, len_y))
+				mag_edge = maxf(mag_edge, float(dst.size.x) / float(src.size.x))
+			else:
+				mag_corner = maxf(mag_corner, maxf(float(dst.size.x) / float(src.size.x), float(dst.size.y) / float(src.size.y)))
+			var region := Rect2i(Vector2i(roundi(part.position.x), roundi(part.position.y)),
+				Vector2i(maxi(1, roundi(part.size.x)), maxi(1, roundi(part.size.y))))
+			region = region.intersection(Rect2i(0, 0, w, h))
+			var piece: Image = source.get_region(region)
+			if piece.get_width() != dst.size.x or piece.get_height() != dst.size.y:
+				piece.resize(dst.size.x, dst.size.y, Image.INTERPOLATE_LANCZOS)
+			var crop_x := part.size.x < float(src.size.x) - 0.5
+			var crop_y := part.size.y < float(src.size.y) - 0.5
+			if crop_x or crop_y:
+				# The crop skips source content, so its borders would jump against the neighbouring
+				# slices (lighting / vignette): feather them into the whole slice squeezed to fit.
+				var whole: Image = source.get_region(src)
+				whole.resize(dst.size.x, dst.size.y, Image.INTERPOLATE_LANCZOS)
+				_feather_blend(whole, piece, crop_x, crop_y)
+			baked.blit_rect(piece, Rect2i(Vector2i.ZERO, dst.size), dst.position)
+	baked.generate_mipmaps()
+	return {
+		"hires_texture": ImageTexture.create_from_image(baked),
+		"hires_margins": Rect2i(dl, dt, dr, db),
+		"oversample": factor,
+		"mag_corner": mag_corner,
+		"mag_edge": mag_edge,
+		"mag_centre": mag_centre,
+		"centre_over_cap": over_cap,
+		"copies": 1,
+		"baked_size": Vector2i(out_w, out_h),
+		"fit_scale": maxf(sx, sy),
+	}
+
 # A NinePatchRect for alpha_nine_patch / trimmed_nine_patch data filling `size` design px.
 # With an oversampled bake it is laid out `oversample` times larger and scaled back down,
 # so the corners keep their design size but are sampled at the real screen resolution.
@@ -408,6 +556,12 @@ static func nine_patch_rect(data: Dictionary, size: Vector2) -> NinePatchRect:
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	art.size = size * factor
 	art.scale = Vector2.ONE / factor
+	if hires and data.has("mag_centre"):
+		art.set_meta("nine_patch_info", {
+			"oversample": factor, "mag_corner": data["mag_corner"], "mag_edge": data["mag_edge"],
+			"mag_centre": data["mag_centre"], "centre_over_cap": data["centre_over_cap"],
+			"copies": data["copies"], "baked_size": data["baked_size"], "fit_scale": data["fit_scale"],
+		})
 	return art
 
 static var _rotated_cache: Dictionary = {}

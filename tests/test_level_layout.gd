@@ -48,3 +48,20 @@ func test_expanded_height_grows_the_board_window() -> void:
 		"640x480 grows the board into the extra vertical viewport")
 	Assert.is_true(portrait_tall["rects"]["board_frame"].size.y > portrait_base["rects"]["board_frame"].size.y + 100.0,
 		"360x800 grows the board into the extra vertical viewport")
+
+func test_portrait_hero_rect_and_layer_order() -> void:
+	for size in [Vector2(360, 640), Vector2(360, 780), Vector2(480, 640), Vector2(360, 800)]:
+		var layout := LevelLayout.compute(size)
+		var hero: Rect2 = layout["hero_rect"]
+		var rects: Dictionary = layout["rects"]
+		var deck: Rect2 = rects["deck_a"]
+		var board: Rect2 = rects["board_frame"]
+		Assert.is_true(hero.position.x < 0.0, "%s: the hero bleeds off the left edge (%s)" % [str(size), str(hero)])
+		Assert.is_true(hero.end.x <= size.x * 0.34, "%s: the hero stays in the left third (%s)" % [str(size), str(hero)])
+		Assert.is_true(hero.position.y > board.position.y and hero.position.y < board.end.y,
+			"%s: the hero starts inside the board frame" % str(size))
+		Assert.is_true(hero.end.y > deck.position.y and hero.end.y <= deck.end.y + 6.0,
+			"%s: her legs end behind the left deck slot (hero %s, deck %s)" % [str(size), str(hero), str(deck)])
+		Assert.is_true(LevelLayout.HERO_Z > 0 and LevelLayout.HERO_Z < LevelLayout.FOREGROUND_Z,
+			"the hero layer sits between the frame (0) and the deck/powers/zone panels")
+	Assert.is_false(LevelLayout.compute(Vector2(640, 360)).has("hero_rect"), "landscape has no portrait hero rect")

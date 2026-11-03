@@ -81,19 +81,24 @@ func _check_case(case: Dictionary) -> void:
 	var labels := panel.find_children("*", "Label", true, false)
 	_check(labels.is_empty(), "%s: no duplicate text Label over the defeat art" % tag)
 	var hud := scene.find_child("Hud", true, false) as Control
-	_check(hud != null and hud.visible and hud.z_index == 10,
-		"%s: HUD stays visible above the defeat shade" % tag)
-	_check(scene.find_child("BackButton", true, false) != null and scene.find_child("HelpButton", true, false) != null,
-		"%s: menu/help controls survive" % tag)
+	_check(hud != null and hud.visible and overlay.z_index > hud.z_index,
+		"%s: the defeat overlay (z%d) dims the HUD (z%d) too" % [tag, overlay.z_index, hud.z_index if hud != null else -1])
+	var shade := scene.find_child("DefeatShade", true, false) as ColorRect
+	_check(shade != null and shade.get_global_rect().is_equal_approx(Rect2(Vector2.ZERO, scene.get_viewport_rect().size)),
+		"%s: the shade covers the whole screen" % tag)
 	var screen := Rect2(Vector2.ZERO, scene.get_viewport_rect().size)
 	var panel_rect := panel.get_global_rect()
 	var character_rect := character.get_global_rect()
 	_check(screen.encloses(panel_rect), "%s: panel %s fits the screen %s" % [tag, str(panel_rect), str(screen)])
-	_check(screen.encloses(character_rect), "%s: character %s fits the screen %s" % [tag, str(character_rect), str(screen)])
+	# The hero is large and may bleed off the left/bottom edges, but her face stays on screen.
+	_check(screen.intersection(character_rect).get_area() >= character_rect.get_area() * 0.75,
+		"%s: most of the character %s is on screen %s" % [tag, str(character_rect), str(screen)])
+	_check(character_rect.position.x <= 0.0 and character_rect.position.y >= 0.0 and character_rect.end.x > screen.size.x * 0.3,
+		"%s: the character stands on the left edge (%s)" % [tag, str(character_rect)])
 	for plate in [title, retry, quit]:
 		_check(panel_rect.encloses((plate as Control).get_global_rect()),
 			"%s: %s sits inside the stone panel" % [tag, plate.name])
-	_check(character_rect.size.x >= 200.0 and character_rect.size.y >= 230.0,
+	_check(character_rect.size.x >= 230.0 and character_rect.size.y >= 330.0,
 		"%s: the hero is large (%s)" % [tag, str(character_rect.size)])
 
 func _wait_level():

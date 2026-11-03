@@ -14,6 +14,11 @@ static func compute(viewport_size: Vector2) -> Dictionary:
 		return _landscape(size)
 	return _portrait(size)
 
+## Layer order inside the level screen (back to front): background, board shade/frame,
+## HERO (z = HERO_Z, inside the BoardFrame, below the cards so she never hides one), deck slots / powers / zone (z = 8), HUD.
+const HERO_Z := 1
+const FOREGROUND_Z := 8
+
 static func _portrait(size: Vector2) -> Dictionary:
 	var w := size.x
 	var h := size.y
@@ -28,10 +33,11 @@ static func _portrait(size: Vector2) -> Dictionary:
 	var zone := Rect2(edge, reserve.position.y - zone_height - 7.0, w - edge * 2.0, zone_height)
 	var power_height := 58.0
 	var powers := Rect2(edge, zone.position.y - power_height - 6.0, w - edge * 2.0, power_height)
-	var clock_height := 36.0
-	var clock := Rect2((w - 104.0) * 0.5, powers.position.y - clock_height - 4.0, 104.0, clock_height)
+	var clock_height := 48.0
+	var clock_width := 112.0
+	var clock := Rect2((w - clock_width) * 0.5, powers.position.y - clock_height - 4.0, clock_width, clock_height)
 	var board_top := 80.0
-	var board_bottom := clock.position.y + 18.0
+	var board_bottom := clock.position.y + clock_height * 0.5
 	var board := Rect2(edge, board_top, w - edge * 2.0, maxf(80.0, board_bottom - board_top))
 	var deck_side := 58.0
 	var deck_y := powers.position.y
@@ -63,10 +69,17 @@ static func _portrait(size: Vector2) -> Dictionary:
 	var help := Rect2(w - 76.0, 7.0, 32.0, 32.0)
 	var gear := Rect2(w - 40.0, 6.0, 32.0, 32.0)
 	var title := Rect2()
-	var stopwatch := Rect2(2.0, 2.0, 32.0, 32.0)
+	var stopwatch := Rect2(4.0, 6.0, 36.0, 36.0)
 	var score := Rect2(edge, clock.position.y, 84.0, 32.0)
 	var instruction := Rect2(w - 82.0, board.position.y + 8.0, 74.0, 82.0)
 	var mascot := Rect2(0.0, board.position.y + 12.0, minf(116.0, w * 0.32), maxf(80.0, board.size.y - 24.0))
+	# The hero stands on the left edge, partly off-screen, from mid-board down to the deck row;
+	# she is drawn in front of the board frame but behind the deck/powers/zone panels (see
+	# HERO_Z), and the cards start to her right. Unlike the other rects this one may leave
+	# the viewport on purpose.
+	var hero_width := minf(w * 0.44, 160.0)
+	var hero_height := minf(h * 0.40, hero_width * 1.62)
+	var hero := Rect2(-w * 0.15, deck_a.end.y + 4.0 - hero_height, hero_width, hero_height)
 	var frame_inner := board.grow(-FRAME_MARGIN)
 	var rects := {
 		"back": back,
@@ -96,6 +109,7 @@ static func _portrait(size: Vector2) -> Dictionary:
 	interactive.append_array(power_buttons)
 	return {
 		"orientation": "portrait",
+		"hero_rect": hero,
 		"viewport": size,
 		"hud": Rect2(Vector2.ZERO, size),
 		"header_height": plaque.end.y + 3.0,
@@ -106,7 +120,7 @@ static func _portrait(size: Vector2) -> Dictionary:
 		"zone_card_size": Vector2(card_side, card_side),
 		"zone_h_separation": zone_gap,
 		"zone_v_separation": zone_gap,
-		"clock_text_inset": 34.0,
+		"clock_text_inset": 42.0,
 	}
 
 static func _landscape(size: Vector2) -> Dictionary:
@@ -156,7 +170,7 @@ static func _landscape(size: Vector2) -> Dictionary:
 		zone.position.y + (zone.size.y - card_side) * 0.5,
 		zone_row_width,
 		card_side)
-	var clock := Rect2(46.0, 6.0, 106.0, 36.0)
+	var clock := Rect2(46.0, 1.0, 112.0, 46.0)
 	var plaque := Rect2((w - 90.0) * 0.5, 6.0, 90.0, 36.0)
 	var logo := Rect2(w - 240.0, 2.0, 100.0, 40.0)
 	var back := Rect2(6.0, 8.0, 32.0, 32.0)
@@ -164,7 +178,7 @@ static func _landscape(size: Vector2) -> Dictionary:
 	var gear := Rect2(w - 90.0, 6.0, 32.0, 32.0)
 	var sound := Rect2(w - 48.0, 6.0, 32.0, 32.0)
 	var title := Rect2()
-	var stopwatch := Rect2(2.0, 2.0, 32.0, 32.0)
+	var stopwatch := Rect2(4.0, 5.0, 36.0, 36.0)
 	var score := Rect2(clock.end.x + 6.0, 6.0, 84.0, 32.0)
 	var instruction := Rect2(board.position.x + 12.0, board.position.y + 10.0, minf(180.0, board.size.x - 24.0), 58.0)
 	var mascot := Rect2(0.0, board.position.y + 8.0, minf(148.0, board.position.x), maxf(80.0, board.size.y - 16.0))
@@ -207,5 +221,5 @@ static func _landscape(size: Vector2) -> Dictionary:
 		"zone_card_size": Vector2(card_side, card_side),
 		"zone_h_separation": zone_gap,
 		"zone_v_separation": zone_gap,
-		"clock_text_inset": 34.0,
+		"clock_text_inset": 42.0,
 	}

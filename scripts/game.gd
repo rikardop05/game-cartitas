@@ -35,15 +35,53 @@ func apply_orientation() -> void:
 	var root := get_tree().root
 	if landscape:
 		root.content_scale_size = Vector2i(640, 360)
-		get_window().size = Vector2i(1280, 720)
 	else:
 		root.content_scale_size = Vector2i(360, 640)
-		get_window().size = Vector2i(720, 1280)
 	# The handheld ProjectSettings value is only read at startup; on a device
 	# the screen must be rotated through the DisplayServer.
 	if OS.has_feature("mobile"):
 		DisplayServer.screen_set_orientation(
 			DisplayServer.SCREEN_SENSOR_LANDSCAPE if landscape else DisplayServer.SCREEN_SENSOR_PORTRAIT)
+		return
+	# Keep the window's orientation ratio, but never request a desktop window taller or
+	# wider than the usable monitor area. Window mode and mobile rotation belong to the OS.
+	var window_mode := DisplayServer.window_get_mode()
+	if window_mode in [
+		DisplayServer.WINDOW_MODE_MAXIMIZED,
+		DisplayServer.WINDOW_MODE_FULLSCREEN,
+		DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN,
+	]:
+		return
+	var window := get_window()
+	var screen := DisplayServer.window_get_current_screen()
+	var usable := DisplayServer.screen_get_usable_rect(screen)
+	if usable.size.x <= 0 or usable.size.y <= 0:
+		return
+	var decorations := DisplayServer.window_get_size_with_decorations() - DisplayServer.window_get_size()
+	decorations = Vector2i(maxi(0, decorations.x), maxi(0, decorations.y))
+	var client_area := Vector2i(
+		maxi(1, usable.size.x - decorations.x),
+		maxi(1, usable.size.y - decorations.y))
+	var fitted := fit_window(client_area, landscape)
+	window.size = fitted
+	var decorated_size := fitted + decorations
+	window.position = usable.position + Vector2i(
+		floori(float(usable.size.x - decorated_size.x) * 0.5),
+		floori(float(usable.size.y - decorated_size.y) * 0.5))
+
+## Largest 9:16 or 16:9 client size that fits inside the supplied work-area bounds.
+static func fit_window(usable: Vector2i, landscape: bool) -> Vector2i:
+	var width := maxi(1, usable.x)
+	var height := maxi(1, usable.y)
+	if landscape:
+		var width_from_height := floori(float(height) * 16.0 / 9.0)
+		if width_from_height <= width:
+			return Vector2i(maxi(1, width_from_height), height)
+		return Vector2i(width, maxi(1, floori(float(width) * 9.0 / 16.0)))
+	var width_from_height := floori(float(height) * 9.0 / 16.0)
+	if width_from_height <= width:
+		return Vector2i(maxi(1, width_from_height), height)
+	return Vector2i(width, maxi(1, floori(float(width) * 16.0 / 9.0)))
 
 func set_orientation(landscape: bool) -> void:
 	settings["orientation"] = "landscape" if landscape else "portrait"

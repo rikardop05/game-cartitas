@@ -30,6 +30,9 @@ const SUITE_PATHS := [
 	"res://tests/test_defeat_screen.gd",
 	"res://tests/test_level_layout.gd",
 	"res://tests/test_asset_references.gd",
+	"res://tests/test_window_sizing.gd",
+	"res://tests/test_nine_patch_sharpness.gd",
+	"res://tests/test_volume_row.gd",
 ]
 
 func _init() -> void:
