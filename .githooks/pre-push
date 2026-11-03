@@ -28,7 +28,7 @@ while read -r _local_ref local_sha _remote_ref remote_sha; do
 	else
 		files=$(git diff --name-only "$remote_sha..$local_sha" 2>/dev/null)
 	fi
-	if echo "$files" | grep -qvE '^(docs/|README\.md$|CONTEXT\.md$|\.githooks/|\.maestri/)'; then
+	if echo "$files" | grep -qvE '^(\.github/|docs/|README\.md$|CONTEXT\.md$|\.githooks/|\.maestri/)'; then
 		range_ok=1
 	fi
 done
