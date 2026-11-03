@@ -48,6 +48,13 @@ func test_music_volume_follows_game_volume_without_clipping() -> void:
 	Assert.is_true(AudioManager.bus_db(2.0, true) <= 0.01, "a volume above 1 is clamped, never amplified")
 	Assert.is_true(AudioManager.TRACK_PEAK_DB < 0.0, "tracks keep headroom so the crossfade never clips")
 
+func test_sfx_output_is_reduced_by_twenty_percent() -> void:
+	for base_gain_db in _sfx_gains().values():
+		var adjusted_db := AudioManager.sfx_output_gain_db(float(base_gain_db))
+		var output_scale := db_to_linear(adjusted_db) / db_to_linear(float(base_gain_db))
+		Assert.is_true(absf(output_scale - 0.8) < 0.001,
+			"every one-shot effect has 0.8x output level (got %.3f)" % [output_scale])
+
 # --- One-shot effects -------------------------------------------------------------------
 
 func _sfx_gains() -> Dictionary:
@@ -83,7 +90,7 @@ func test_sfx_peak_plus_its_gain_keeps_headroom() -> void:
 		var wav := load(path) as AudioStreamWAV
 		if wav == null or wav.format != AudioStreamWAV.FORMAT_16_BITS:
 			continue
-		var peak_db := _peak_db(wav) + float(_sfx_gains()[path])
+		var peak_db := _peak_db(wav) + AudioManager.sfx_output_gain_db(float(_sfx_gains()[path]))
 		Assert.is_true(peak_db < -3.0, "%s peaks at %.1f dB with its gain (never clips)" % [path, peak_db])
 
 func _peak_db(wav: AudioStreamWAV) -> float:

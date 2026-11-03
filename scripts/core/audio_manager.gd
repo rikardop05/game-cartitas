@@ -65,6 +65,8 @@ const MUSIC_BUS := "Music"
 const SFX_BUS := "SFX"
 # Round-robin voices, so quick successive taps overlap instead of cutting each other off.
 const SFX_VOICES := 3
+# Uniform 20% reduction on the one-shot output; music levels are unaffected.
+const SFX_VOLUME_SCALE := 0.8
 # Music players never peak at 0 dB: two tracks overlap while crossfading, so this headroom
 # (plus the limiter on Master) is what keeps the sum from clipping.
 const TRACK_PEAK_DB := -2.0
@@ -319,6 +321,9 @@ static func stream_loops(stream: AudioStream) -> bool:
 		return (stream as AudioStreamOggVorbis).loop
 	return false
 
+static func sfx_output_gain_db(base_gain_db: float) -> float:
+	return base_gain_db + linear_to_db(SFX_VOLUME_SCALE)
+
 # --- Internals -------------------------------------------------------------------------
 
 func _play(path: String) -> void:
@@ -362,7 +367,7 @@ func _play_sfx(path: String, volume_db: float) -> void:
 	var player := _sfx_players[_sfx_next]
 	_sfx_next = (_sfx_next + 1) % _sfx_players.size()
 	player.stream = stream
-	player.volume_db = volume_db
+	player.volume_db = sfx_output_gain_db(volume_db)
 	player.play()
 
 # Brings `player` back to full music level and fades out any other track that was still
