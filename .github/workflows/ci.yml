@@ -67,6 +67,9 @@ jobs:
       - name: Smoke music continuity (tests/smoke_music_rotation.gd)
         run: ./godot --headless --script res://tests/smoke_music_rotation.gd
 
+      - name: Smoke card impact FX (tests/smoke_card_impact.gd)
+        run: ./godot --headless --script res://tests/smoke_card_impact.gd
+
       - name: Board layout regression (tests/regression_board_layout.gd)
         run: ./godot --headless --script res://tests/regression_board_layout.gd
 

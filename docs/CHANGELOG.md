@@ -1,5 +1,12 @@
 # Changelog — Cartitas Infinity
 
+## Queda e impacto das cartas (Fase M) — 2026-11-03
+
+- **Efeito de impacto** (`scenes/fx/card_impact_fx.tscn` + `scripts/ui/fx/card_impact_fx.gd`, `CardImpactFx.play(parent, carta, config)`): squash/bounce da carta, flash no contato, anel de choque suave, halo verde aditivo grande, faíscas vermelho-brasa/brancas, motes dourados subindo e poeira bege (atrás e na frente da borda de baixo, espalhando para os lados). Tudo some em ~1,1 s e se libera sozinho (tweens + `CPUParticles2D` pequenos; nada roda por frame depois). Cores/intensidade/duração por `config` (padrão verde + dourado).
+- **Onde toca:** pouso na Clearing Zone (o voo agora dura 0,3 s, acelera até o slot e termina no impacto; o fantasma faz o squash e entrega ao slot real), saque de deck (mesmo caminho), pouso dos "hops" após um match (só poeira leve) e a **distribuição inicial** (Level/Endless): cartas caem em cascata, camada de baixo primeiro, em 1,4 s; no máximo 12 cartas livres ganham o efeito completo, as demais só uma pequena nuvem de poeira. Entrada: cada carta ignora o ponteiro até pousar (toques programáticos a assentam na hora); o cronômetro fica pausado durante a distribuição e começa quando ela acaba.
+- **Texturas geradas por código** (`tools/gen_impact_textures.py`, Pillow + numpy; sem assets externos): `assets/ui/fx/impact/` (4 poeiras orgânicas, faísca, mote, anel, flash, glow) com mipmaps.
+- Testes novos: `smoke_card_impact.gd`, `qa_impact_capture.gd`, `probe_impact_cost.gd`. L15: deal de 171 cartas + 7 pousos sem pico (frame médio igual ao idle, ~6 ms em tela de 165 Hz); contagem de nós volta ao normal e `CardImpactFx.live_count == 0`.
+
 ## Card juice estilo Balatro + painéis nítidos — 2026-11-02
 
 - **Tilt + brilho (tabuleiro e decks):** a carta sob o ponteiro/dedo ganha inclinação em perspectiva (até ±14°), "pop" de escala (1,06) e um brilho especular que acompanha a inclinação; a sombra desliza no sentido oposto. Cartas bloqueadas mantêm o visual escurecido e nunca inclinam. No celular a inclinação começa ao tocar. Só a carta ativa tem um `ShaderMaterial` próprio; ao sair volta ao material compartilhado.

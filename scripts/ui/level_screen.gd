@@ -122,7 +122,21 @@ const MASCOT_SCALE_PORTRAIT := 1.8
 const INSTRUCTION_SECONDS := 4.0
 # Card moves are applied to the controller the instant they are tapped; these timings only
 # drive the overlay visuals (flying ghost, match flash) that catch up with the state.
-const FLIGHT_SECONDS := 0.2
+const FLIGHT_SECONDS := 0.3
+# The flight is a drop: it arcs up a little and accelerates into the slot (impact = its end).
+const FLIGHT_ARC_RATIO := 0.3
+# Initial deal: board cards fall into place bottom layer first; the whole deal fits DEAL_TOTAL_SECONDS.
+# Input policy: a card ignores the pointer until it has landed (programmatic taps settle it first);
+# the gameplay timer is paused while the cards fall and starts when the deal ends.
+const DEAL_TOTAL_SECONDS := 1.4
+const DEAL_FALL_SECONDS := 0.28
+const DEAL_DROP_RATIO := 1.4
+# At most this many cards of a deal get the full effect (ring, sparks, flash); the rest a dust puff.
+const DEAL_FULL_FX_MAX := 12
+# Deal: only this many cards get the green halo/ring/flash (spread over the cascade).
+const DEAL_HERO_FX_MAX := 4
+# After the squash the zone ghost holds this long (glow behind it) before the real card shows.
+const IMPACT_HOLD_SECONDS := 0.2
 const FLIGHT_TILT := 0.07
 const FLIGHT_START_SCALE := 1.08
 const MATCH_FADE_SECONDS := 0.25
@@ -201,6 +215,7 @@ class Flight extends RefCounted:
 	var origin_pos := Vector2.ZERO
 	var origin_scale := Vector2.ONE
 	var origin_progress := 0.0
+	var lift := 0.0
 	var last_progress := 0.0
 	var group: MatchGroup
 	var warn := false
@@ -250,6 +265,9 @@ var _fx_layer: Control
 var _flights: Dictionary = {}
 var _hidden_cards: Dictionary = {}
 var _shifts: Array = []
+# Board cards still falling in the deal, by card id -> {node, tween, final}.
+var _deal_nodes: Dictionary = {}
+var _dealing := false
 var _end_wait_started_msec := -1
 var _layout_cache: Dictionary = {}
 var _layout_cache_size := Vector2.ZERO
@@ -298,6 +316,7 @@ func _ready() -> void:
 	controller.start_level(level, _endless.power_stock if _endless != null else Game.progress.inventory)
 	_prewarm_level_shadows()
 	render()
+	_play_deal()
 	_play_intro()
 
 # Gameplay music keeps playing while the next scene loads; the menu (or the next Level)
@@ -385,6 +404,7 @@ func _build_ui() -> void:
 	# The rebuild frees every child, ghosts included; render() re-syncs the zone afterwards.
 	_fx_layer = null
 	_flights.clear()
+	_deal_nodes.clear()
 	_hidden_cards.clear()
 	_layout_cache = {}
 	_timer_display_second = -1
@@ -2260,6 +2280,7 @@ func _on_card(card_id: String) -> void:
 	var card := controller.board.get_card(card_id)
 	if card == null:
 		return
+	_settle_deal_card(card_id)
 	var source_rect := _board_card_rect(card)
 	var snap := _snapshot_zone()
 	var result := controller.select_card(card_id)
@@ -2429,6 +2450,9 @@ func visuals_settled() -> bool:
 	if _fx_layer == null or not is_instance_valid(_fx_layer):
 		return true
 	for child in _fx_layer.get_children():
+		# Landing FX are decoration that frees itself; only ghosts and flashes are "visuals".
+		if child is CardImpactFx:
+			continue
 		if not child.is_queued_for_deletion():
 			return false
 	return true
@@ -2491,25 +2515,28 @@ func _launch_flight(card_id: String, card_type: String, source_rect: Rect2, targ
 	if group != null:
 		group.pending += 1
 	_flights[card_id] = flight
+	CardImpactFx.play_trail(_fx(), source_rect.get_center(), source_rect.size.x * FLIGHT_START_SCALE)
 	var tween := ghost.create_tween()
-	tween.tween_method(_step_flight.bind(flight), 0.0, 1.0, FLIGHT_SECONDS) \
-		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.tween_method(_step_flight.bind(flight), 0.0, 1.0, FLIGHT_SECONDS)
 	tween.tween_callback(_land_flight.bind(flight))
 
 # `progress` is the eased 0..1 of the flight. The target is read live, by card id, so a ghost
 # follows its slot when a match elsewhere in the zone compacts the cards around it.
-func _step_flight(progress: float, flight: Flight) -> void:
+func _step_flight(t: float, flight: Flight) -> void:
 	var ghost := flight.ghost
 	if ghost == null or not is_instance_valid(ghost):
 		return
+	# Mild acceleration (hangs a touch, then drops: ~1.8x the average speed at contact) so it lands, not glides.
+	var progress := 0.2 * t + 0.8 * t * t
 	var rect := _flight_target(flight)
 	if not rect.is_equal_approx(flight.target):
-		flight.origin_pos = ghost.global_position
+		flight.origin_pos = ghost.global_position - Vector2(0.0, flight.lift)
 		flight.origin_scale = ghost.scale
 		flight.origin_progress = flight.last_progress
 		flight.target = rect
 	var k := clampf((progress - flight.origin_progress) / maxf(0.0001, 1.0 - flight.origin_progress), 0.0, 1.0)
-	ghost.global_position = flight.origin_pos.lerp(rect.position, k)
+	flight.lift = -sin(PI * progress) * ghost.size.y * ghost.scale.y * FLIGHT_ARC_RATIO
+	ghost.global_position = flight.origin_pos.lerp(rect.position, k) + Vector2(0.0, flight.lift)
 	ghost.scale = flight.origin_scale.lerp(Vector2.ONE * (rect.size.x / maxf(1.0, ghost.size.x)), k)
 	ghost.rotation = lerpf(FLIGHT_TILT, 0.0, progress)
 	flight.last_progress = progress
@@ -2526,23 +2553,52 @@ func _land_flight(flight: Flight) -> void:
 	if _flights.get(flight.card_id) == flight:
 		_flights.erase(flight.card_id)
 	_play_sfx("place")
-	_play_card_impact(flight.target.get_center())
+	var ghost := flight.ghost
 	if flight.group != null:
+		CardImpactFx.play(_fx(), ghost, _impact_config("", _zone_back_config({"squash": false})))
 		var group: MatchGroup = flight.group
-		group.nodes.append(flight.ghost)
+		group.nodes.append(ghost)
 		group.rects.append(flight.target)
 		group.pending -= 1
 		if group.pending <= 0:
 			_play_match(group)
 		return
-	# Plain move: the ghost hands over to the real card in its slot.
-	_hidden_cards.erase(flight.card_id)
-	var index := _zone_index_of(flight.card_id)
+	# Plain move: the card counts as placed now (state already says so); the ghost squashes and
+	# bounces under the impact FX and hands over to the real slot card when it settles.
+	# The ghost stays as the card until the big glow (drawn behind it) is gone, so the halo never
+	# washes the art: only then does the real slot card take over.
+	var done := _hand_over_flight.bind(flight.card_id, ghost, flight.warn)
+	var squashed := _hold_then.bind(ghost, done)
+	if CardImpactFx.play(_fx(), ghost, _impact_config("", _zone_back_config({"on_done": squashed}))) == null:
+		done.call()
+
+func _hold_then(ghost: Control, done: Callable) -> void:
+	if not is_instance_valid(ghost):
+		return
+	var t := ghost.create_tween()
+	t.tween_interval(IMPACT_HOLD_SECONDS)
+	t.tween_callback(done)
+
+func _hand_over_flight(card_id: String, ghost: Control, warn: bool) -> void:
+	_hidden_cards.erase(card_id)
+	var index := _zone_index_of(card_id)
 	if index >= 0 and index < zone_container.get_child_count():
 		(zone_container.get_child(index) as Control).modulate = Color.WHITE
-	_drop_fx_node(flight.ghost)
-	if flight.warn:
+	_drop_fx_node(ghost)
+	if warn:
 		_say("zone_warning")
+
+# Impact FX config for a landing; `card_type` is the hook for per-type colours later.
+func _impact_config(_card_type: String, extra: Dictionary = {}) -> Dictionary:
+	return extra
+
+# Zone landings draw their Back layer inside the zone, below the slot cards (see CardImpactFx).
+func _zone_back_config(extra: Dictionary = {}) -> Dictionary:
+	var config := extra.duplicate()
+	if zone_container != null and is_instance_valid(zone_container):
+		config["back_parent"] = zone_container.get_parent()
+		config["back_before"] = zone_container
+	return config
 
 func _zone_index_of(card_id: String) -> int:
 	for i in controller.zone.cards.size():
@@ -2627,7 +2683,7 @@ func _land_shift(shift: ZoneShift) -> void:
 	_hidden_cards.erase(shift.card_id)
 	_show_zone_card(shift.card_id)
 	if shift.lift > 0.0:
-		_play_card_impact(shift.to.get_center())
+		CardImpactFx.play(_fx(), shift.ghost, _impact_config("", _zone_back_config({"squash": false, "full": false})))
 	_drop_fx_node(shift.ghost)
 
 func _clear_shifts() -> void:
@@ -2771,21 +2827,99 @@ func _spawn_match_fx(path: String, center: Vector2, side: float, start_scale: fl
 	tween.chain().tween_property(node, "modulate:a", 0.0, 0.20)
 	tween.chain().tween_callback(node.queue_free)
 
-func _play_card_impact(center: Vector2) -> void:
-	var impact := UiHelpers.symbol_label("✦", 24)
-	impact.size = Vector2(24, 24)
-	impact.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	impact.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	impact.modulate = Color(1, 0.88, 0.35, 0.95)
-	impact.pivot_offset = Vector2(12, 12)
-	impact.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_fx().add_child(impact)
-	impact.global_position = center - Vector2(12, 12)
-	var tween := impact.create_tween()
-	tween.set_parallel(true)
-	tween.tween_property(impact, "scale", Vector2(1.6, 1.6), 0.16)
-	tween.tween_property(impact, "modulate", Color(1, 0.88, 0.35, 0), 0.16)
-	tween.chain().tween_callback(impact.queue_free)
+# --- Initial deal ---------------------------------------------------------------------
+# Every board card starts above its place, invisible and inert, and falls in a fast cascade
+# (bottom layer first). Landing = the same impact as the zone, in full for a capped subset.
+func _play_deal() -> void:
+	var cards: Array = []
+	for card in controller.board.cards:
+		if card.is_removed() or card.location != Card.Location.BOARD:
+			continue
+		if is_instance_valid(_board_nodes.get(card.id)):
+			cards.append(card)
+	if cards.is_empty():
+		return
+	cards.sort_custom(func(a, b): return a.layer < b.layer)
+	var depths := _blocked_depths()
+	var free_total := 0
+	for card in cards:
+		if int(depths.get(card.id, 0)) == 0:
+			free_total += 1
+	var stride := maxi(1, ceili(float(free_total) / float(DEAL_FULL_FX_MAX)))
+	var step := (DEAL_TOTAL_SECONDS - DEAL_FALL_SECONDS - 0.25) / float(maxi(1, cards.size() - 1))
+	_dealing = true
+	controller.timer.pause()
+	# Heroes: the few cards that get the full green effect, spread over the cascade's second half.
+	var free_ranks: Array = []
+	for i in cards.size():
+		if int(depths.get((cards[i] as Card).id, 0)) == 0:
+			free_ranks.append(i)
+	var heroes := {}
+	for j in mini(DEAL_HERO_FX_MAX, free_ranks.size()):
+		var frac := 0.35 + 0.65 * float(j) / float(maxi(1, DEAL_HERO_FX_MAX - 1))
+		heroes[free_ranks[int(frac * float(free_ranks.size() - 1))]] = true
+	var free_index := 0
+	for i in cards.size():
+		var card: Card = cards[i]
+		var node := _board_nodes[card.id] as Button
+		var level := 0
+		if int(depths.get(card.id, 0)) == 0:
+			if free_index % stride == 0:
+				level = 1
+			if heroes.has(i):
+				level = 2
+			free_index += 1
+		var final_pos := node.position
+		node.position = final_pos - Vector2(0.0, node.size.y * DEAL_DROP_RATIO)
+		node.modulate = Color(1, 1, 1, 0)
+		node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var tween := node.create_tween()
+		tween.tween_interval(step * i)
+		tween.tween_property(node, "modulate:a", 1.0, 0.07)
+		tween.parallel().tween_property(node, "position", final_pos, DEAL_FALL_SECONDS) \
+			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tween.tween_callback(_on_deal_landed.bind(card.id, level))
+		_deal_nodes[card.id] = {"node": node, "tween": tween, "final": final_pos}
+	var finish := create_tween()
+	finish.tween_interval(DEAL_TOTAL_SECONDS)
+	finish.tween_callback(_end_deal)
+
+func _on_deal_landed(card_id: String, level: int) -> void:
+	var entry: Dictionary = _deal_nodes.get(card_id, {})
+	_deal_nodes.erase(card_id)
+	if entry.is_empty() or not is_instance_valid(entry["node"]):
+		return
+	var node := entry["node"] as Button
+	node.position = entry["final"]
+	node.mouse_filter = Control.MOUSE_FILTER_STOP
+	# level 0: dust puff; 1: dust + sparks + motes (no ring/glow/flash/rim); 2: the full green effect.
+	var config := {"full": level >= 1, "squash_depth": 0.1 if level >= 1 else 0.06, "intensity": 0.85}
+	if level == 1:
+		config.merge({"ring": false, "glow": false, "flash": false, "rim": false})
+	elif level == 2:
+		config["glow_strength"] = 0.5
+	CardImpactFx.play(board_container, node, _impact_config("", config))
+
+# A programmatic tap on a card still in the air puts it in its place first (no half-fallen source).
+func _settle_deal_card(card_id: String) -> void:
+	var entry: Dictionary = _deal_nodes.get(card_id, {})
+	if entry.is_empty():
+		return
+	_deal_nodes.erase(card_id)
+	if not is_instance_valid(entry["node"]):
+		return
+	var node := entry["node"] as Button
+	(entry["tween"] as Tween).kill()
+	node.position = entry["final"]
+	node.modulate = Color.WHITE
+	node.mouse_filter = Control.MOUSE_FILTER_STOP
+
+func _end_deal() -> void:
+	_dealing = false
+	for card_id in _deal_nodes.keys().duplicate():
+		_settle_deal_card(card_id)
+	if controller != null and controller.status == GameController.Status.PLAYING and not _help_shown and not _settings_open:
+		controller.timer.resume()
 
 # Plays one of the real effects owned by the Audio autoload (Board, Deck, win, lose).
 func _play_effect(method_name: String, argument = null) -> void:
