@@ -12,7 +12,7 @@ dest_files=["res://.godot/imported/castle_eudora.mp3-a7403885e7ead83b6f63aac01ab
 
 [params]
 
-loop=true
+loop=false
 loop_offset=0
 bpm=0
 beat_count=0
