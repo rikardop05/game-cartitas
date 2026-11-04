@@ -8,6 +8,12 @@ extends RefCounted
 const FRAME_MARGIN := 12.0
 const LAND_FRAME_ASPECT := 1.74
 const CLOCK_SCALE_LANDSCAPE := 0.8
+const LANDSCAPE_BOARD_SHADE_TARGET := Vector2(444.055, 220.68)
+const LANDSCAPE_STOPWATCH_RECT := Rect2(-15.935, 19.125, 56.85, 53.695)
+const LANDSCAPE_HERO_RECT := Rect2(-207.835, -14.275, 276.895, 361.135)
+const LANDSCAPE_DECK_TABLE_SIZE := Vector2(71.0, 71.0)
+const LANDSCAPE_DECK_A_TABLE_OFFSET := Vector2(14.68, -2.15)
+const LANDSCAPE_DECK_B_TABLE_OFFSET := Vector2(-12.14, -7.22)
 
 static func compute(viewport_size: Vector2) -> Dictionary:
 	var size := Vector2(maxf(1.0, viewport_size.x), maxf(1.0, viewport_size.y))
@@ -160,9 +166,15 @@ static func _landscape(size: Vector2) -> Dictionary:
 			powers_inner.position.y + index * (power_height + power_gap),
 			powers_inner.size.x,
 			power_height))
-	var deck_y := board.end.y - deck_side
-	var deck_a := Rect2(edge, deck_y, deck_side, deck_side)
-	var deck_b := Rect2(w - edge - deck_side, deck_y, deck_side, deck_side)
+	# The 71 px table bottoms at the top of the Reserve; keep its stack hit target
+	# clear of that strip after the round-two resize.
+	var deck_y := minf(
+		board.end.y - deck_side,
+		h - 69.0 - LANDSCAPE_DECK_TABLE_SIZE.y - LANDSCAPE_DECK_A_TABLE_OFFSET.y)
+	var deck_a_origin := Vector2(edge, deck_y) + LANDSCAPE_DECK_A_TABLE_OFFSET
+	var deck_b_origin := Vector2(w - edge - deck_side, deck_y) + LANDSCAPE_DECK_B_TABLE_OFFSET
+	var deck_a := Rect2(deck_a_origin, LANDSCAPE_DECK_TABLE_SIZE)
+	var deck_b := Rect2(deck_b_origin, LANDSCAPE_DECK_TABLE_SIZE)
 	var card_side := minf(58.0, maxf(32.0, (zone.size.x - 12.0) / 7.0))
 	var zone_gap := 2.0
 	var zone_row_width := card_side * 7.0 + zone_gap * 6.0
@@ -184,9 +196,14 @@ static func _landscape(size: Vector2) -> Dictionary:
 	var gear := Rect2(w - 90.0, 6.0, 32.0, 32.0)
 	var sound := Rect2(w - 48.0, 6.0, 32.0, 32.0)
 	var title := Rect2()
-	var stopwatch := Rect2(0.0, 25.0, 40.0, 31.0)
+	var stopwatch := LANDSCAPE_STOPWATCH_RECT
 	var score := Rect2(clock.end.x + 6.0, 6.0, 84.0, 32.0)
-	var instruction := Rect2(board.position.x + 12.0, board.position.y + 10.0, minf(180.0, board.size.x - 24.0), 58.0)
+	# Use the clear strip between the stopwatch plank and stars plaque. It is just
+	# above the board's top-left corner, never over the cards or header controls.
+	var bubble_left := clock.position.x + clock.size.x * CLOCK_SCALE_LANDSCAPE + 2.0
+	var bubble_right := plaque.position.x - 2.0
+	var instruction := Rect2(
+		bubble_left, 3.0, maxf(36.0, bubble_right - bubble_left), 28.0)
 	var mascot := Rect2(0.0, board.position.y + 8.0, minf(148.0, board.position.x), maxf(80.0, board.size.y - 16.0))
 	var frame_inner := board.grow(-FRAME_MARGIN)
 	var rects := {
@@ -221,6 +238,7 @@ static func _landscape(size: Vector2) -> Dictionary:
 		"hud": Rect2(0.0, 0.0, w, maxf(header_height, logo.end.y)),
 		"header_height": header_height,
 		"rects": rects,
+		"board_shade_target": Rect2(Vector2(7.0, 7.0), LANDSCAPE_BOARD_SHADE_TARGET),
 		"interactive": interactive,
 		"power_buttons": power_buttons,
 		"zone_columns": 7,

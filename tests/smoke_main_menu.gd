@@ -224,10 +224,15 @@ func _scenario(game) -> void:
 	var panel_art := menu.find_child("PanelArt", true, false) as TextureRect
 	_check(panel_art != null and str(panel_art.get_meta("source_path", "")).ends_with("panel_options.png"),
 		"options overlay background uses panel_options.png")
-	for node_name in ["LanguageButton", "OrientationButton", "MascotButton", "VolumeRow", "VolumeSlider", "SoundButton", "ResetButton", "BackButton"]:
+	var options_nodes := ["LanguageButton", "OrientationButton", "MascotButton", "VolumeRow", "VolumeSlider", "SoundButton", "ResetButton"]
+	if bool(menu.call("_landscape")):
+		options_nodes.append_array(["OptionsClose", "OptionsConfirm"])
+	else:
+		options_nodes.append("BackButton")
+	for node_name in options_nodes:
 		_check(menu.find_child(node_name, true, false) != null, "options has %s" % node_name)
 	# The three config_row plates are the real skins of the language/orientation/mascot rows
-	# (and the volume panel reuses row 1), so none of them stays unreferenced.
+	# The volume row intentionally has no backing plate.
 	var row_arts := {
 		"LanguageButton": "config_row_1.png",
 		"OrientationButton": "config_row_2.png",
@@ -244,20 +249,29 @@ func _scenario(game) -> void:
 	var volume_row := menu.find_child("VolumeRow", true, false) as PanelContainer
 	if volume_row != null:
 		var volume_style := volume_row.get_theme_stylebox("panel")
-		_check(volume_style != null and str(volume_style.get_meta("source_path", "")).ends_with("config_row_1.png"),
-			"volume row uses config_row_1.png")
-	var back := menu.find_child("BackButton", true, false) as Button
-	if back != null:
-		var back_art := "icon_back.png"
-		_check(str(back.get_meta("source_path", "")).ends_with(back_art),
-			"options back uses the painted %s arrow" % back_art)
-		var back_icon := back.find_child("BackIcon", true, false) as TextureRect
-		_check(back_icon != null and back_icon.texture_filter == CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS,
-			"options BackButton keeps the mipmapped icon rendering")
-		if back_icon != null:
-			var back_crop := back_icon.texture as AtlasTexture
-			_check(back_crop != null and back_crop.region.size.x < 900.0 and back_crop.region.size.y < 1150.0,
-				"options arrow is cropped to its visible alpha")
+		if bool(menu.call("_landscape")):
+			_check(volume_style is StyleBoxEmpty, "landscape volume row has no backing plank")
+		else:
+			_check(volume_style is StyleBoxTexture and
+				str(volume_style.get_meta("source_path", "")).ends_with("config_row_1.png"),
+				"portrait volume row keeps its previous backing")
+	var options_close := menu.find_child("OptionsClose", true, false) as Button
+	var options_confirm := menu.find_child("OptionsConfirm", true, false) as Button
+	if bool(menu.call("_landscape")):
+		_check(options_close != null and str(options_close.get_meta("source_path", "")).ends_with("icon_close_v2.png"),
+			"landscape options close uses the painted X badge")
+		_check(options_confirm != null and str(options_confirm.get_meta("source_path", "")).ends_with("icon_accept_v2.png"),
+			"landscape options confirm uses the painted green check")
+	else:
+		_check(options_close == null and options_confirm == null and menu.find_child("BackButton", true, false) != null,
+			"portrait Options keeps its previous back control")
+	_check(menu.get("_menu_background_path") == session_background,
+		"opening Options keeps the current menu background selection")
+	var options_background := menu.find_child("Background", true, false) as TextureRect
+	_check(options_background != null and options_background.texture.resource_path == session_background,
+		"Options continues to display the current menu painting")
+	var options_exit_button := "OptionsConfirm" if bool(menu.call("_landscape")) else "BackButton"
+	var options_close_button := "OptionsClose" if bool(menu.call("_landscape")) else "BackButton"
 	var mute := menu.find_child("SoundButton", true, false) as TextureButton
 	var slider := menu.find_child("VolumeSlider", true, false) as Control
 	if mute == null or slider == null:
@@ -316,14 +330,14 @@ func _scenario(game) -> void:
 	# Leaving Options disarms a pending reset.
 	_press(menu, "ResetButton")
 	await _frames(2)
-	_press(menu, "BackButton")
+	_press(menu, options_close_button)
 	await _frames(2)
 	_press(menu, "OptionsButton")
 	await _frames(2)
 	_check(menu.find_child("ResetConfirm", true, false) == null, "leaving Options disarms the reset")
 
 	# v2 "Continuar" plate leaves Options; the gear/help badges live on the menu.
-	_press(menu, "BackButton")
+	_press(menu, options_exit_button)
 	await _frames(2)
 	_check(menu.find_child("PlayButton", true, false) != null, "Continuar plate returns to the menu")
 	_check(menu.find_child("ConfigButton", true, false) != null, "menu has the v2 gear shortcut")
@@ -331,7 +345,7 @@ func _scenario(game) -> void:
 	_press(menu, "ConfigButton")
 	await _frames(2)
 	_check(menu.find_child("OptionsTitle", true, false) != null, "gear shortcut opens Options")
-	_press(menu, "BackButton")
+	_press(menu, options_close_button)
 	await _frames(2)
 	# Help overlay from the "?" badge: localized rules, v2 interrog art and the plate closes it.
 	_press(menu, "HelpButton")

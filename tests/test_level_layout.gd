@@ -24,6 +24,12 @@ func test_responsive_rects_fit_and_controls_do_not_overlap() -> void:
 				var clock_scale := float(layout.get("clock_scale", 1.0))
 				rect = Rect2(rect.position, rect.size * clock_scale)
 				allowed = bounds.grow_individual(0.0, 16.0, 0.0, 0.0)
+			elif key == "stopwatch_in_pill" and size.x >= size.y:
+				# The hand-tuned icon rect is local to the plank and is scaled with it.
+				var clock: Rect2 = rects["clock_pill"]
+				var clock_scale := float(layout.get("clock_scale", 1.0))
+				rect = Rect2(clock.position + rect.position * clock_scale, rect.size * clock_scale)
+				allowed = bounds.grow_individual(0.0, 16.0, 0.0, 0.0)
 			Assert.is_true(allowed.encloses(rect), "%s: %s (%s) is inside %s" % [str(size), str(key), str(rect), str(allowed)])
 		var board: Rect2 = rects["board_frame"]
 		var largest_area := 0.0
@@ -55,6 +61,32 @@ func test_expanded_height_grows_the_board_window() -> void:
 		"640x480 grows the board into the extra vertical viewport")
 	Assert.is_true(portrait_tall["rects"]["board_frame"].size.y > portrait_base["rects"]["board_frame"].size.y + 100.0,
 		"360x800 grows the board into the extra vertical viewport")
+
+func test_landscape_hand_tuned_hud_and_deck_tables() -> void:
+	for size in [Vector2(640, 360), Vector2(780, 360), Vector2(640, 480)]:
+		var layout := LevelLayout.compute(size)
+		var rects: Dictionary = layout["rects"]
+		var stopwatch: Rect2 = rects["stopwatch_in_pill"]
+		Assert.is_true(stopwatch.is_equal_approx(LevelLayout.LANDSCAPE_STOPWATCH_RECT),
+			"%s keeps the editor-tuned stopwatch rect" % str(size))
+		var shade: Rect2 = layout["board_shade_target"]
+		Assert.is_true(shade.position.is_equal_approx(Vector2(7.0, 7.0)) and
+			shade.size.is_equal_approx(Vector2(444.055, 220.68)),
+			"%s carries the editor-tuned BoardShade target" % str(size))
+		var board: Rect2 = rects["board_frame"]
+		var expected_y := minf(
+			board.end.y - 58.0,
+			size.y - 69.0 - 71.0 - LevelLayout.LANDSCAPE_DECK_A_TABLE_OFFSET.y)
+		var deck_a: Rect2 = rects["deck_a"]
+		var deck_b: Rect2 = rects["deck_b"]
+		Assert.is_true(deck_a.size.is_equal_approx(Vector2(71.0, 71.0)) and
+			deck_a.position.is_equal_approx(Vector2(8.0, expected_y) + Vector2(14.68, -2.15)),
+			"%s positions the left 71x71 table at its tuned offsets" % str(size))
+		Assert.is_true(deck_b.size.is_equal_approx(Vector2(71.0, 71.0)) and
+			deck_b.position.is_equal_approx(Vector2(size.x - 66.0, expected_y) + Vector2(-12.14, -7.22)),
+			"%s positions the right 71x71 table at its tuned offsets" % str(size))
+	Assert.is_false(LevelLayout.compute(Vector2(360, 640)).has("board_shade_target"),
+		"portrait keeps its previous shade layout")
 
 func test_portrait_hero_rect_and_layer_order() -> void:
 	for size in [Vector2(360, 640), Vector2(360, 780), Vector2(480, 640), Vector2(360, 800)]:

@@ -71,16 +71,38 @@ func _check_case(case: Dictionary) -> void:
 		_check(style != null and style.texture != null and str(style.get_meta("source_path", "")).ends_with(str(row[1])),
 			"%s: %s uses %s" % [tag, row[0], row[1]])
 	var volume := panel.find_child("VolumeRow", true, false) as Control
-	var volume_style := volume.get_theme_stylebox("panel") as StyleBoxTexture if volume != null else null
-	_check(volume_style != null and volume_style.texture != null and
-		str(volume_style.get_meta("source_path", "")).ends_with("config_row_1.png"),
-		"%s: VolumeRow uses a Config row plate" % tag)
+	var volume_style := volume.get_theme_stylebox("panel") if volume != null else null
+	if str(case["orientation"]) == "landscape":
+		_check(volume_style is StyleBoxEmpty, "%s: VolumeRow has no plank backing" % tag)
+	else:
+		_check(volume_style is StyleBoxTexture and
+			str(volume_style.get_meta("source_path", "")).ends_with("config_row_1.png"),
+			"%s: portrait VolumeRow keeps its previous backing" % tag)
+	var rows_center := panel.find_child("SettingsRowsCenter", true, false) as HBoxContainer
+	if str(case["orientation"]) == "landscape":
+		_check(rows_center != null and rows_center.alignment == BoxContainer.ALIGNMENT_CENTER,
+			"%s: settings rows are horizontally centred in the panel" % tag)
+	else:
+		_check(rows_center == null, "%s: portrait settings rows keep their previous layout" % tag)
 	var corner := panel.find_child("SettingsCornerClose", true, false) as Button
 	var close := panel.find_child("SettingsClose", true, false) as Button
 	_check(corner != null and str(corner.get_meta("source_path", "")) == V2 + "icon_close_v2.png",
 		"%s: corner close uses icon_close_v2" % tag)
 	_check(close != null and str(close.get_meta("source_path", "")) == V2 + "icon_accept_v2.png",
 		"%s: confirm close uses icon_accept_v2" % tag)
+	if corner != null:
+		var corner_face := corner.find_child("Face", true, false) as Control
+		var corner_shadow := corner.find_child("Shadow", true, false) as Control
+		_check(corner_face != null and corner_face.texture_filter == CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS,
+			"%s: close badge uses mipmapped filtering" % tag)
+		if str(case["orientation"]) == "landscape":
+			_check(corner_face is NinePatchRect,
+				"%s: landscape close uses the oversampled 9-slice" % tag)
+		else:
+			_check(corner_face is TextureRect,
+				"%s: portrait close keeps its previous face rendering" % tag)
+		_check(corner_shadow != null and corner_shadow.get_parent() == corner,
+			"%s: close shadow follows its hit target" % tag)
 	var screen := Rect2(Vector2.ZERO, scene.get_viewport_rect().size)
 	var panel_rect := panel.get_global_rect()
 	_check(screen.grow(-2.0).encloses(panel_rect), "%s: panel %s fits %s" % [tag, str(panel_rect), str(screen)])

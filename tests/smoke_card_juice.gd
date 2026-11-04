@@ -93,6 +93,18 @@ func _run() -> void:
 	# Deck top card.
 	var deck: Button = scene.deck_a_btn
 	var rect: Rect2 = deck.get_meta("face_rect")
+	var expected_deck_card := Vector2(48.3, 48.3)
+	_check(deck.size.is_equal_approx(expected_deck_card),
+		"landscape deck hit area is the 1.25x face card (%s)" % str(deck.size))
+	_check(rect.position.is_zero_approx() and rect.size.is_equal_approx(deck.size),
+		"landscape deck hit area matches only the visible top card")
+	var deck_stack := deck.get_meta("deck_stack") as Control
+	var deck_slot := deck.get_parent() as Control
+	_check(deck_stack != null and deck_slot != null and
+		deck_slot.get_global_rect().encloses(deck_stack.get_global_rect()),
+		"enlarged back-card stack remains on its table")
+	_check(deck_stack != null and deck_stack.size.is_equal_approx(Vector2(62.1, 48.3)),
+		"landscape pile offsets scale with the enlarged cards and leave a table margin")
 	scene.call("_juice_follow", deck, rect.position + rect.size * Vector2(0.2, 0.8))
 	var deck_art := _art(deck.get_meta("face"))
 	_check(deck_art != null and deck_art.material is ShaderMaterial, "the deck's top card tilts too")
@@ -119,7 +131,34 @@ func _run() -> void:
 			if zart != null and zart.material is ShaderMaterial and float(zart.material.get_shader_parameter("sway_amount")) > 0.0:
 				swaying += 1
 	_check(swaying >= 1, "Clearing Zone cards carry the sway/holo material")
+	await _check_portrait_deck(game)
 	_finish(_errors)
+
+func _check_portrait_deck(game) -> void:
+	game.settings["orientation"] = "portrait"
+	game.apply_orientation()
+	root.size = Vector2i(360, 640)
+	game.current_level_id = "7"
+	change_scene_to_file("res://scenes/level.tscn")
+	var scene = null
+	for _i in 120:
+		await process_frame
+		scene = current_scene
+		if scene != null and scene.name == "LevelScreen" and scene.get("controller") != null:
+			break
+	if scene == null or scene.name != "LevelScreen":
+		_check(false, "portrait deck regression check loads the level")
+		return
+	await _frames(6)
+	var deck: Button = scene.deck_a_btn
+	var stack := deck.get_meta("deck_stack") as Control
+	_check(deck.size.is_equal_approx(Vector2(54.0, 42.0)),
+		"portrait deck keeps its previous 54x42 pile hit area")
+	var portrait_face: Rect2 = deck.get_meta("face_rect")
+	_check(portrait_face.size.is_equal_approx(Vector2(42.0, 42.0)),
+		"portrait face keeps its previous 42x42 size")
+	_check(stack != null and stack.size.is_equal_approx(Vector2(54.0, 42.0)),
+		"portrait deck stack keeps its previous 4 px edge step")
 
 func _finish(errors: Array) -> void:
 	LevelLoader.deterministic = false

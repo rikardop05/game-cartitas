@@ -206,7 +206,12 @@ func _build() -> void:
 	if _screen == Screen.MENU:
 		_build_menu()
 	else:
-		add_child(UiHelpers.make_background(_landscape()))
+		var background_path := _menu_background_path if _screen == Screen.OPTIONS else ""
+		var background := UiHelpers.make_background(_landscape(), 0, background_path)
+		if _screen == Screen.OPTIONS:
+			# Options is an overlay on the menu's already-picked painting, not a new scene.
+			background.material = null
+		add_child(background)
 		match _screen:
 			Screen.HELP:
 				_build_help()
@@ -612,35 +617,48 @@ func _make_menu_button(node_name: String, key: String, art_name: String, callbac
 	return btn
 
 # Button hosting a texture "Face" over a soft drop shadow: hover lifts it 2px, press dips it 3px.
-func _make_face_button(texture: Texture2D, min_size: Vector2) -> Button:
+func _make_face_button(texture: Texture2D, min_size: Vector2, nine_slice: bool = false) -> Button:
 	var btn := Button.new()
 	btn.custom_minimum_size = min_size
+	btn.size = min_size
 	btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		btn.add_theme_stylebox_override(state, StyleBoxEmpty.new())
+	var icon_side := minf(min_size.x, min_size.y)
+	var icon_rect := Rect2(Vector2((min_size.x - icon_side) * 0.5, 0.0), Vector2.ONE * icon_side)
 	var shadow := _make_shadow_rect(texture, 1.8, 0.5)
 	shadow.name = "Shadow"
 	shadow.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	shadow.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	shadow.set_anchors_preset(Control.PRESET_FULL_RECT)
-	shadow.offset_top = 5
-	shadow.offset_bottom = 5
+	shadow.stretch_mode = TextureRect.STRETCH_SCALE if nine_slice else TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	if nine_slice:
+		shadow.position = icon_rect.position + Vector2(0.0, 5.0)
+		shadow.size = icon_rect.size
+	else:
+		shadow.set_anchors_preset(Control.PRESET_FULL_RECT)
+		shadow.offset_top = 5
+		shadow.offset_bottom = 5
 	shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	btn.add_child(shadow)
-	var face := TextureRect.new()
+	var face: Control = UiHelpers.oversampled_badge(texture, icon_rect.size) if nine_slice else TextureRect.new()
 	face.name = "Face"
-	face.texture = texture
-	face.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	face.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	# The v2 plates are painted art; linear filtering + mipmaps keep them clean at any scale.
-	face.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	face.set_anchors_preset(Control.PRESET_FULL_RECT)
+	if face is TextureRect:
+		(face as TextureRect).texture = texture
+		(face as TextureRect).expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		(face as TextureRect).stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		# The v2 plates are painted art; linear filtering + mipmaps keep them clean at any scale.
+		face.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		face.set_anchors_preset(Control.PRESET_FULL_RECT)
+	else:
+		face.position = icon_rect.position
 	face.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	btn.add_child(face)
 	var lift := func(hovered: bool):
 		face.position.y = -2 if hovered else 0
-		shadow.offset_top = 7 if hovered else 5
-		shadow.offset_bottom = 7 if hovered else 5
+		if nine_slice:
+			shadow.position.y = 7.0 if hovered else 5.0
+		else:
+			shadow.offset_top = 7 if hovered else 5
+			shadow.offset_bottom = 7 if hovered else 5
 	btn.mouse_entered.connect(func():
 		face.modulate = Color(1.12, 1.12, 1.12)
 		lift.call(true))
@@ -650,8 +668,11 @@ func _make_face_button(texture: Texture2D, min_size: Vector2) -> Button:
 	btn.button_down.connect(func():
 		face.position.y = 3
 		face.modulate = Color(0.85, 0.85, 0.85)
-		shadow.offset_top = 2
-		shadow.offset_bottom = 2)
+		if nine_slice:
+			shadow.position.y = 2.0
+		else:
+			shadow.offset_top = 2
+			shadow.offset_bottom = 2)
 	btn.button_up.connect(func():
 		var hovered := btn.is_hovered()
 		lift.call(hovered)
@@ -691,14 +712,32 @@ func _build_options() -> void:
 	vbox.add_child(_make_option_row("OrientationButton", _orientation_label(), Localizer.t("orientation_label"), _on_toggle_orientation, row_height, CONFIG_ROW_ART[1]))
 	vbox.add_child(_make_option_row("MascotButton", _mascot_label(), Localizer.t("mascot_label"), _on_toggle_mascot, row_height, CONFIG_ROW_ART[2]))
 	var volume := VolumeRow.new(row_height)
-	_style_v2_volume_row(volume, CONFIG_ROW_ART[0], row_height)
+	_style_v2_volume_row(volume, CONFIG_ROW_ART[0], row_height, landscape)
 	vbox.add_child(volume)
 	if _reset_armed:
 		vbox.add_child(_make_reset_confirm(row_height))
 	else:
 		vbox.add_child(_make_option_row("ResetButton", Localizer.t("reset"), Localizer.t("reset"), _on_reset, row_height, CONFIG_ROW_ART[1]))
 	if landscape:
-		vbox.add_child(_make_overlay_back_button())
+		var confirm := _make_options_action_icon(
+			"OptionsConfirm", ACCEPT_V2_ART, Localizer.t("confirm"), _on_back,
+			Vector2(317.04, 65.61))
+		confirm.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		confirm.offset_left = -158.52
+		confirm.offset_top = -65.61
+		confirm.offset_right = 158.52
+		confirm.offset_bottom = 0.0
+		panel.add_child(confirm)
+		var close := _make_options_action_icon(
+			"OptionsClose", CLOSE_V2_ART, Localizer.t("close"), _on_back,
+			Vector2(280.0, 78.0))
+		close.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		close.offset_left = -280.0
+		close.offset_top = 0.0
+		close.offset_right = 0.0
+		close.offset_bottom = 78.0
+		_align_action_face_right(close)
+		panel.add_child(close)
 	else:
 		col.add_child(_make_overlay_back_button())
 
@@ -761,7 +800,17 @@ func _make_options_panel(landscape: bool) -> Control:
 	vbox.name = "OptionsBody"
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	vbox.add_theme_constant_override("separation", 2 if landscape else 4)
-	body.add_child(vbox)
+	if landscape:
+		var rows_center := HBoxContainer.new()
+		rows_center.name = "OptionsRowsCenter"
+		rows_center.alignment = BoxContainer.ALIGNMENT_CENTER
+		rows_center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		body.add_child(rows_center)
+		vbox.custom_minimum_size.x = width - side * 2.0
+		vbox.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		rows_center.add_child(vbox)
+	else:
+		body.add_child(vbox)
 	return frame
 
 # Option row on a config_row_N.png plate (9-sliced so the gem ends keep their shape).
@@ -819,12 +868,47 @@ func _v2_row_style(art_name: String, tint := Color.WHITE, row_height: int = 36) 
 	style.modulate_color = tint
 	return style
 
-# Volume gets the same config_row plate as the other rows, keeping its shared controls.
-func _style_v2_volume_row(row: Control, art_name: String, row_height: int) -> void:
+# Volume keeps its shared slider/glyph controls without an extra backing plate.
+func _style_v2_volume_row(row: Control, art_name: String, row_height: int, landscape: bool) -> void:
 	row.custom_minimum_size.x = 0
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_theme_stylebox_override("panel", _v2_row_style(art_name, Color.WHITE, row_height))
+	row.add_theme_stylebox_override("panel",
+		StyleBoxEmpty.new() if landscape else _v2_row_style(art_name, Color.WHITE, row_height))
 	_apply_v2_volume_handle(row)
+
+func _make_options_action_icon(node_name: String, art_name: String, tooltip: String, callback: Callable, button_size: Vector2) -> Button:
+	var texture := _v2_texture(art_name)
+	if texture == null:
+		var fallback := Button.new()
+		fallback.name = node_name
+		fallback.text = tooltip
+		fallback.custom_minimum_size = button_size
+		fallback.size = button_size
+		fallback.pressed.connect(callback)
+		return fallback
+	var button := _make_face_button(texture, button_size, true)
+	button.name = node_name
+	button.set_meta("source_path", V2_DIR + art_name)
+	button.tooltip_text = tooltip
+	button.set_meta("label", tooltip)
+	button.pressed.connect(callback)
+	return button
+
+func _align_action_face_right(button: Button) -> void:
+	var face := button.find_child("Face", true, false) as Control
+	var shadow := button.find_child("Shadow", true, false) as Control
+	if face != null:
+		if face is NinePatchRect:
+			face.position = Vector2(button.size.x - button.size.y, 0.0)
+		else:
+			face.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+			face.offset_left = -button.size.y
+			face.offset_top = 0.0
+			face.offset_right = 0.0
+			face.offset_bottom = button.size.y
+	if shadow != null:
+		shadow.position = Vector2(button.size.x - button.size.y + 2.0, 3.0)
+		shadow.size = Vector2(button.size.y, button.size.y)
 
 # Second step of "Reset progress": the warning plus the v2 Accept/Close badges.
 func _make_reset_confirm(height: int) -> PanelContainer:

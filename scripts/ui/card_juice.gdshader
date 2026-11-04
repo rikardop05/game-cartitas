@@ -27,6 +27,15 @@ uniform float sway_amount = 0.0;   // degrees
 uniform float sway_phase = 0.0;
 uniform float sway_speed = 1.4;
 
+// Inner-window mask: the shine and the foil are full strength on the studded metal frame and
+// only `inner_strength` on the art window (parchment + character), so the frame reads as being
+// in front of the recessed art. `inner_rect` is (min.xy, max.xy) in card UV, 0..1, measured on
+// the baked frame of assets/cards/card_*.png (~957px: left 17.5%, top 18.5%, right 82.5%,
+// bottom 81.5%); `inner_feather` is the soft edge width in UV units.
+uniform vec4 inner_rect = vec4(0.175, 0.185, 0.825, 0.815);
+uniform float inner_strength : hint_range(0.0, 1.0) = 0.3;
+uniform float inner_feather = 0.025;
+
 varying flat vec2 o;
 varying vec3 p;
 varying vec2 tilt;
@@ -78,18 +87,25 @@ void fragment() {
 	COLOR.rgb = mix(vec3(grey), COLOR.rgb, saturation) * brightness;
 
 	vec2 c = uv; // -0.5..0.5 across the card
+	// 1 on the art window, 0 on the metal frame, feathered on each side.
+	vec2 w = uv + 0.5; // card UV, 0..1
+	float win = smoothstep(inner_rect.x, inner_rect.x + inner_feather, w.x)
+		* (1.0 - smoothstep(inner_rect.z - inner_feather, inner_rect.z, w.x))
+		* smoothstep(inner_rect.y, inner_rect.y + inner_feather, w.y)
+		* (1.0 - smoothstep(inner_rect.w - inner_feather, inner_rect.w, w.y));
+	float fx_scale = mix(1.0, inner_strength, win);
 	if (shine_strength > 0.0) {
 		// A soft diagonal sweep whose position follows the tilt.
 		float axis = dot(c, normalize(vec2(1.0, -0.7)));
 		float centre = tilt.x * 0.8 - tilt.y * 0.5;
 		float band = exp(-pow((axis - centre) * 4.5, 2.0));
-		COLOR.rgb += shine_strength * band * 0.5 * COLOR.a * vec3(1.0, 0.96, 0.86);
+		COLOR.rgb += shine_strength * band * 0.5 * COLOR.a * fx_scale * vec3(1.0, 0.96, 0.86);
 	}
 	if (holo_strength > 0.0) {
 		float h = fract((c.x * 0.9 + c.y * 1.1) * 1.3 + TIME * 0.12 + tilt.x * 0.6 + sway_phase * 0.1);
 		vec3 foil = rainbow(h);
 		float bands = 0.5 + 0.5 * sin((c.x - c.y) * 7.0 + TIME * 0.9 + sway_phase);
 		float lum = 0.55 + 0.45 * grey;
-		COLOR.rgb += foil * holo_strength * (0.25 + 0.75 * bands) * 0.32 * lum * COLOR.a;
+		COLOR.rgb += foil * holo_strength * (0.25 + 0.75 * bands) * 0.32 * lum * COLOR.a * fx_scale;
 	}
 }

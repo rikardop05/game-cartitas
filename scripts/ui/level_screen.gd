@@ -40,9 +40,11 @@ const MATCH_FX_SECONDS := 0.34
 # The Clearing Zone bar's painted body inside its file (the file has wide transparent margins)
 # and the share of the width its carved end caps take when 9-sliced.
 const ZONE_BAR_ART := "res://assets/ui/kit/v2/bar_zone.png"
-# Fractions of the cropped bar: the dark bevel and the carved end caps stay intact,
-# the slots sit inside the wooden hole.
+# Portrait keeps the prior slice. Landscape cuts just outside the metal end bevel so
+# the same continuous wood grain runs through the stretched centre without a seam.
 const ZONE_BAR_MARGINS := Rect2(0.08, 0.10, 0.08, 0.10)
+const ZONE_BAR_MARGINS_LANDSCAPE := Rect2(0.055, 0.10, 0.055, 0.10)
+const MATCH_FX_VISUAL_SCALE := 0.5
 # Endless uses the autumn background like the later Levels.
 const ENDLESS_BACKGROUND_LEVEL := 999
 # Frame thickness (source px) when a kit panel is 9-sliced: border plus its shadow line.
@@ -111,13 +113,16 @@ const VICTORY_RETRY_ART := {"pt": "victory_retry_pt.png", "en": "victory_retry_e
 const LANDSCAPE_RESERVE_CARD_SIZE := Vector2(34.0, 34.0)
 const PORTRAIT_RESERVE_CARD_SIZE := Vector2(42.0, 42.0)
 const DECK_CARD_SIZE := Vector2(42.0, 42.0)
+# The 71 px table's inset bevel limits the safe pile width. 1.15x grows the full
+# 54 px stack to 62.1 px, approximately halving its former 8.5 px side margins.
+const LANDSCAPE_DECK_CARD_SCALE := 1.15
 # A Support Deck is a pile: one face-up card plus up to PILE_MAX_EDGES card edges.
-# 42 + 3*4 = 54 = the visible deck-pile width inside the responsive stone slot.
+# Portrait remains 42 + 3*4 = 54; landscape scales to 48.3 + 3*4.6 = 62.1 inside
+# the 71 px table, retaining a small even margin and a top-face-only hit target.
 const PILE_EDGE_STEP := 4.0
 const PILE_MAX_EDGES := 3
 # The hero portraits are 2:3 and replace the old 46x55 NPCs: 64x96 landscape keeps a
 # free band for the bubble above the hero; portrait has room for a bigger figure.
-const MASCOT_SCALE_LANDSCAPE := 1.6
 const MASCOT_SCALE_PORTRAIT := 1.8
 const INSTRUCTION_SECONDS := 4.0
 # Card moves are applied to the controller the instant they are tapped; these timings only
@@ -182,6 +187,12 @@ const JUICE_RETURN_SECONDS := 0.30
 const JUICE_SHADOW_SHIFT := 2.5       # px the shadow slides opposite to the tilt
 const ZONE_SWAY_DEG := 4.0            # idle wobble amplitude
 const ZONE_HOLO := 0.6                # foil strength, 0 = off
+# Shine/foil at 30% on the card's art window and 100% on the metal frame (frame in front,
+# character recessed); tweak here. The rect is the baked frame's inner edge in card UV (0..1),
+# measured on assets/cards/card_*.png (~957px: left 17.5%, top 18.5%, right 82.5%, bottom 81.5%).
+const JUICE_INNER_RECT := Rect2(0.175, 0.185, 0.65, 0.63)
+const JUICE_INNER_STRENGTH := 0.3
+const JUICE_INNER_FEATHER := 0.025    # soft edge, UV units
 
 static var _dim_shader: Shader
 static var _dim_materials := {}
@@ -252,7 +263,6 @@ var _help_shown := false
 # The in-game settings overlay is open (the clock is paused; a rebuild re-creates the overlay).
 var _settings_open := false
 var _level_id: String = ""
-var _sfx_player: AudioStreamPlayer
 var _card_size: float = 48.0
 var _fits_landscape := true
 var _scale_limited := false
@@ -285,6 +295,8 @@ var _blocker_cache: Dictionary = {}
 var _blocker_cache_signature := ""
 # Matches whose flash has played (the rapid-tap smoke asserts on it).
 var match_flashes := 0
+# Combo trauma shake on the level content (scripts/ui/fx/screen_shake.gd).
+var _shake: ScreenShake
 # The Endless run being played, or null for a campaign Level.
 var _endless: EndlessRun
 
@@ -397,6 +409,13 @@ func _on_resized() -> void:
 func _build_ui() -> void:
 	_is_landscape = _viewport_is_landscape()
 	_layout = LevelLayout.compute(get_viewport_rect().size)
+	if _is_landscape and _endless != null:
+		# Endless uses a score plate where campaign levels show stars. Place the
+		# bubble in the open header band between that plate and the logo instead.
+		var rects: Dictionary = _layout["rects"]
+		var bubble_left: float = rects["score_pill"].end.x + 4.0
+		var bubble_right: float = rects["logo"].position.x - 2.0
+		rects["instruction_area"] = Rect2(bubble_left, 3.0, maxf(36.0, bubble_right - bubble_left), 28.0)
 	_prewarm_layout_frames()
 	# The rebuild frees the help overlay too, so undo the pause it applied.
 	if _help_shown and controller != null:
@@ -425,7 +444,6 @@ func _build_ui() -> void:
 		remove_child(child)
 		child.queue_free()
 	# Any node held across rebuilds is gone now.
-	_sfx_player = null
 	_layout_warning = null
 
 	add_child(UiHelpers.make_background(_is_landscape, _background_level()))
@@ -437,6 +455,7 @@ func _build_ui() -> void:
 	layout.set_anchors_preset(Control.PRESET_FULL_RECT)
 	layout.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(layout)
+	_shake = ScreenShake.attach(self, layout)
 	_build_hud(layout)
 	_build_board_frame(layout)
 	_build_deck_slot(layout, "a")
@@ -524,17 +543,20 @@ func _place_mascot() -> void:
 	var area := _mascot_area.get_global_rect()
 	if area.size.x <= 0.0 or area.size.y <= 0.0:
 		return
-	mascot.size = Mascot.BASE_SIZE * (MASCOT_SCALE_LANDSCAPE if _is_landscape else MASCOT_SCALE_PORTRAIT)
 	if _is_landscape:
-		# Landscape: bottom-align in the frame, left edge of the MascotArea.
-		mascot.global_position = Vector2(area.position.x, area.end.y - mascot.size.y)
+		# Editor-tuned landscape box is local to BoardFrame. Mascot draws every base
+		# portrait, expression and the bunny rig into this same box, preserving the
+		# alpha-bound normalisation across all moods.
+		var hero_rect := LevelLayout.LANDSCAPE_HERO_RECT
+		mascot.position = hero_rect.position
+		mascot.size = hero_rect.size
 		mascot.free_bounds = Rect2()
-		mascot.side_bubble_bounds = Rect2(
-			mascot.global_position.x + mascot.size.x + 6.0,
-			area.position.y + 10.0, 200.0, 60.0)
+		# The clear header band above the frame keeps speech out of the dealt cards.
+		mascot.side_bubble_bounds = _rect("instruction_area")
 	else:
 		# Portrait: the hero stands on the left edge (partly off-screen), in front of the board
 		# frame and behind the deck/powers/zone panels; the cards start to her right.
+		mascot.size = Mascot.BASE_SIZE * MASCOT_SCALE_PORTRAIT
 		var hero := _portrait_hero_rect()
 		var scale_to_fit := minf(hero.size.x / Mascot.BASE_SIZE.x, hero.size.y / Mascot.BASE_SIZE.y)
 		mascot.size = Mascot.BASE_SIZE * scale_to_fit
@@ -709,8 +731,9 @@ func _ensure_frame_border(data: Dictionary, target_size: Vector2, minimum: int) 
 # The Clearing Zone bar: the new painted plank, alpha-cropped and 9-sliced so the
 # carved end caps stay intact and the slots can use the wooden hole.
 func _zone_bar_data(rect: Rect2) -> Dictionary:
+	var margins := ZONE_BAR_MARGINS_LANDSCAPE if _is_landscape else ZONE_BAR_MARGINS
 	return UiHelpers.trimmed_nine_patch(
-		UiHelpers.hires_texture(ZONE_BAR_ART), rect.size, ZONE_BAR_MARGINS, "zone_bar", true)
+		UiHelpers.hires_texture(ZONE_BAR_ART), rect.size, margins, "zone_bar", true)
 
 # A flat button showing a picture at an exact size; it nudges down one pixel while pressed
 # and brightens on hover.
@@ -920,7 +943,15 @@ func _build_board_frame(parent: Control) -> void:
 	shade.name = "BoardShade"
 	shade.color = BOARD_SHADE
 	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_place(shade, Rect2(Vector2.ZERO, rect.size).intersection(inner.grow(BOARD_SHADE_OVERDRAW)))
+	var shade_rect := Rect2(Vector2.ZERO, rect.size).intersection(inner.grow(BOARD_SHADE_OVERDRAW))
+	if _is_landscape:
+		# The dark backing tucks underneath the painted frame, as tuned in the editor.
+		# Keep it inside the frame control (the frame art is drawn over it), while cards
+		# remain clipped to the stricter painted-hole rectangle below.
+		var shade_target: Rect2 = _layout.get("board_shade_target", Rect2())
+		var frame_safe := Rect2(Vector2(7.0, 7.0), Vector2(maxf(0.0, rect.size.x - 14.0), maxf(0.0, rect.size.y - 14.0)))
+		shade_rect = shade_target.intersection(frame_safe)
+	_place(shade, shade_rect)
 	frame.add_child(shade)
 	if frame_art != null:
 		frame.add_child(frame_art)
@@ -952,8 +983,21 @@ func _build_deck_slot(parent: Control, deck_id: String) -> void:
 		table_shadow.name = "DeckTableShadow"
 		slot.add_child(table_shadow)
 	slot.add_child(_make_art("DeckTable", table_texture, Rect2(Vector2.ZERO, rect.size), true))
+	var pile_size := _deck_pile_size()
+	var pile_origin := ((rect.size - pile_size) * 0.5).floor()
+	var stack := Control.new()
+	stack.name = "DeckStack"
+	stack.position = pile_origin
+	stack.size = pile_size
+	stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	slot.add_child(stack)
 	var btn := _make_deck_button(deck_id)
-	btn.position = ((rect.size - _deck_pile_size()) * 0.5).floor()
+	var card_size := _deck_card_size()
+	var face_offset := Vector2(pile_size.x - card_size.x, 0.0) if deck_id == "a" else Vector2.ZERO
+	btn.position = pile_origin + face_offset if _is_landscape else pile_origin
+	btn.set_meta("deck_stack", stack)
+	btn.set_meta("deck_pile_origin", pile_origin)
+	btn.set_meta("deck_face_offset", face_offset)
 	slot.add_child(btn)
 	if deck_id == "a":
 		deck_a_btn = btn
@@ -1131,7 +1175,9 @@ func _make_deck_button(deck_id: String) -> Button:
 	btn.name = "Deck%sButton" % deck_id.to_upper()
 	btn.flat = true
 	btn.focus_mode = Control.FOCUS_NONE
-	btn.custom_minimum_size = _deck_pile_size()
+	var hit_size := _deck_card_size() if _is_landscape else _deck_pile_size()
+	btn.custom_minimum_size = hit_size
+	btn.size = hit_size
 	btn.tooltip_text = "%s %s" % [Localizer.t("support_deck"), deck_id.to_upper()]
 	_make_flat_button_compact(btn)
 	btn.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
@@ -1140,12 +1186,15 @@ func _make_deck_button(deck_id: String) -> Button:
 	return btn
 
 func _deck_card_size() -> Vector2:
-	return DECK_CARD_SIZE
+	return DECK_CARD_SIZE * (LANDSCAPE_DECK_CARD_SCALE if _is_landscape else 1.0)
 
-# The button covers the face card plus the room the pile's edges can take.
+func _deck_pile_edge_step() -> float:
+	return PILE_EDGE_STEP * (LANDSCAPE_DECK_CARD_SCALE if _is_landscape else 1.0)
+
+# The pile shows its back-card edges, but only the face card is the clickable hit area.
 func _deck_pile_size() -> Vector2:
 	var card := _deck_card_size()
-	return Vector2(card.x + PILE_MAX_EDGES * PILE_EDGE_STEP, card.y)
+	return Vector2(card.x + PILE_MAX_EDGES * _deck_pile_edge_step(), card.y)
 
 func render() -> void:
 	var layout := _board_layout()
@@ -1334,6 +1383,9 @@ func _juice_begin(btn: Button, face: Control, art: TextureRect) -> void:
 	mat.set_shader_parameter("rect_size", art.size)
 	mat.set_shader_parameter("fov", JUICE_FOV)
 	mat.set_shader_parameter("shine_strength", JUICE_SHINE)
+	mat.set_shader_parameter("inner_rect", Vector4(JUICE_INNER_RECT.position.x, JUICE_INNER_RECT.position.y, JUICE_INNER_RECT.end.x, JUICE_INNER_RECT.end.y))
+	mat.set_shader_parameter("inner_strength", JUICE_INNER_STRENGTH)
+	mat.set_shader_parameter("inner_feather", JUICE_INNER_FEATHER)
 	art.material = mat
 	_juice_button = btn
 	_juice_face = face
@@ -1390,6 +1442,9 @@ func _apply_zone_juice(node: Control, card_id: String) -> void:
 	mat.set_shader_parameter("sway_amount", ZONE_SWAY_DEG)
 	mat.set_shader_parameter("holo_strength", ZONE_HOLO)
 	mat.set_shader_parameter("sway_phase", float(card_id.hash() % 628) / 100.0)
+	mat.set_shader_parameter("inner_rect", Vector4(JUICE_INNER_RECT.position.x, JUICE_INNER_RECT.position.y, JUICE_INNER_RECT.end.x, JUICE_INNER_RECT.end.y))
+	mat.set_shader_parameter("inner_strength", JUICE_INNER_STRENGTH)
+	mat.set_shader_parameter("inner_feather", JUICE_INNER_FEATHER)
 	art.material = mat
 
 func _sync_zone_juice(node: Control, card_size: Vector2) -> void:
@@ -1820,15 +1875,22 @@ func _update_deck_button(btn: Button, deck: DeckManager, edges_left: bool) -> vo
 	btn.set_meta("deck_render_signature", signature)
 	if _juice_button == btn:
 		_juice_end_now()
+	var stack := btn.get_meta("deck_stack") as Control
+	if stack != null:
+		_clear(stack)
 	_clear(btn)
 	var pile_size := _deck_pile_size()
-	btn.size = pile_size
-	var face_rect := Rect2(Vector2(pile_size.x - card_size.x if edges_left else 0.0, 0.0), card_size)
+	var pile_origin: Vector2 = btn.get_meta("deck_pile_origin", Vector2.ZERO)
+	var face_offset: Vector2 = btn.get_meta("deck_face_offset", Vector2.ZERO)
+	var face_position := Vector2.ZERO if _is_landscape else face_offset
+	btn.position = pile_origin + face_offset if _is_landscape else pile_origin
+	btn.size = card_size if _is_landscape else pile_size
+	var face_rect := Rect2(face_position, card_size)
 	btn.set_meta("face_rect", face_rect)
 	if deck.is_empty():
 		btn.disabled = true
 		var empty := _make_empty_slot(card_size)
-		empty.position = face_rect.position
+		empty.position = face_position
 		btn.add_child(empty)
 		btn.set_meta("face", empty)
 		_fade_out_deck(btn)
@@ -1844,23 +1906,28 @@ func _update_deck_button(btn: Button, deck: DeckManager, edges_left: bool) -> vo
 	btn.visible = true
 	btn.disabled = false
 	var edges := _pile_edges(deck)
+	var edge_step := _deck_pile_edge_step()
 	# Far cards first, then nearer ones, so the top card covers them naturally.
 	for i in range(edges, 0, -1):
 		var type_index := deck.current_index + i
 		if type_index >= deck.card_types.size():
 			continue
 		var lower := _make_card_rect(str(deck.card_types[type_index]), 0, card_size)
-		lower.position = face_rect.position + Vector2(
-			(-1.0 if edges_left else 1.0) * float(i) * PILE_EDGE_STEP, 0.0)
+		lower.position = face_offset + Vector2(
+			(-1.0 if edges_left else 1.0) * float(i) * edge_step, 0.0)
 		lower.modulate = Color(1, 1, 1, 1).darkened(0.05 * float(i))
-		btn.add_child(lower)
+		if stack != null:
+			stack.add_child(lower)
 	var face := _make_card_rect(deck.current_type(), 0, card_size, true)
-	face.position = face_rect.position
+	face.position = face_position
 	btn.add_child(face)
 	btn.set_meta("face", face)
 	var badge := Panel.new()
-	badge.size = Vector2(16, 12)
-	badge.position = face_rect.position + Vector2(card_size.x - badge.size.x - 2.0, 2.0)
+	var badge_scale := card_size.x / DECK_CARD_SIZE.x
+	badge.size = Vector2(16.0, 12.0) * badge_scale
+	badge.position = face_position + Vector2(
+		card_size.x - badge.size.x - 2.0 * badge_scale,
+		2.0 * badge_scale)
 	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var badge_style := StyleBoxFlat.new()
 	badge_style.bg_color = Color(0, 0, 0, 0.58)
@@ -2058,8 +2125,8 @@ func _build_settings_overlay() -> void:
 	var col := panel.find_child("SettingsBody", true, false) as VBoxContainer
 	if col == null:
 		return
-	# Heading with the kit's green close icon in the top-right corner. The v2 settings
-	# plate is localised (config_2/Configu); the text Label is only a missing-art fallback.
+	# The v2 settings plate is localised (config_2/Configu); the text Label is only
+	# a missing-art fallback. The close badge is positioned independently below.
 	var header := HBoxContainer.new()
 	col.add_child(header)
 	var title_art: String = str(V2_SETTINGS_TITLE_ART["pt" if Localizer.current == "pt" else "en"])
@@ -2086,27 +2153,65 @@ func _build_settings_overlay() -> void:
 		heading.add_theme_font_size_override("font_size", 16)
 		heading.add_theme_color_override("font_color", TEXT_PRIMARY)
 		header.add_child(heading)
-	var corner_close := _make_v2_action_icon(
-		"SettingsCornerClose", V2_CLOSE_ART, Localizer.t("close"),
-		_close_settings, 28 if _is_landscape else 30)
-	corner_close.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	header.add_child(corner_close)
+	if not _is_landscape:
+		var portrait_close := _make_v2_action_icon(
+			"SettingsCornerClose", V2_CLOSE_ART, Localizer.t("close"),
+			_close_settings, Vector2(30.0, 30.0))
+		portrait_close.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		header.add_child(portrait_close)
 	var row_height := 30 if _is_landscape else 36
-	col.add_child(_make_settings_row("LanguageButton", Localizer.t("language"), _on_settings_language, row_height, V2_CONFIG_ROW_ART[0]))
-	col.add_child(_make_settings_row("OrientationButton", _settings_orientation_text(), _on_settings_orientation, row_height, V2_CONFIG_ROW_ART[1]))
-	col.add_child(_make_settings_row("MascotButton", _settings_mascot_text(), _on_settings_mascot, row_height, V2_CONFIG_ROW_ART[2]))
+	var rows: VBoxContainer
+	if _is_landscape:
+		var rows_center := HBoxContainer.new()
+		rows_center.name = "SettingsRowsCenter"
+		rows_center.alignment = BoxContainer.ALIGNMENT_CENTER
+		rows_center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		col.add_child(rows_center)
+		rows = VBoxContainer.new()
+		rows.name = "SettingsRows"
+		rows.custom_minimum_size.x = 260.0
+		rows.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		rows.add_theme_constant_override("separation", 2)
+		rows_center.add_child(rows)
+	else:
+		rows = col
+	rows.add_child(_make_settings_row("LanguageButton", Localizer.t("language"), _on_settings_language, row_height, V2_CONFIG_ROW_ART[0]))
+	rows.add_child(_make_settings_row("OrientationButton", _settings_orientation_text(), _on_settings_orientation, row_height, V2_CONFIG_ROW_ART[1]))
+	rows.add_child(_make_settings_row("MascotButton", _settings_mascot_text(), _on_settings_mascot, row_height, V2_CONFIG_ROW_ART[2]))
 	var volume := VolumeRow.new(row_height)
 	volume.changed.connect(_refresh_sound_icon)
 	volume.custom_minimum_size.x = 0
 	volume.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	volume.add_theme_stylebox_override("panel", _v2_row_style(
-		V2_CONFIG_ROW_ART[0], Color.WHITE, row_height))
-	col.add_child(volume)
-	var close := _make_v2_action_icon(
-		"SettingsClose", V2_ACCEPT_ART, Localizer.t("close"),
-		_close_settings, 32 if _is_landscape else 36)
-	close.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	col.add_child(close)
+	volume.add_theme_stylebox_override(
+		"panel", StyleBoxEmpty.new() if _is_landscape else _v2_row_style(
+			V2_CONFIG_ROW_ART[0], Color.WHITE, row_height))
+	rows.add_child(volume)
+	if _is_landscape:
+		var close := _make_v2_action_icon(
+			"SettingsClose", V2_ACCEPT_ART, Localizer.t("confirm"),
+			_close_settings, Vector2(317.04, 65.61), true)
+		close.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		close.offset_left = -158.52
+		close.offset_top = -65.61
+		close.offset_right = 158.52
+		close.offset_bottom = 0.0
+		panel.add_child(close)
+		var corner_close := _make_v2_action_icon(
+			"SettingsCornerClose", V2_CLOSE_ART, Localizer.t("close"),
+			_close_settings, Vector2(280.0, 78.0), true)
+		corner_close.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		corner_close.offset_left = -280.0
+		corner_close.offset_top = 0.0
+		corner_close.offset_right = 0.0
+		corner_close.offset_bottom = 78.0
+		_align_action_face_right(corner_close)
+		panel.add_child(corner_close)
+	else:
+		var confirm := _make_v2_action_icon(
+			"SettingsClose", V2_ACCEPT_ART, Localizer.t("confirm"),
+			_close_settings, Vector2(36.0, 36.0))
+		confirm.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		rows.add_child(confirm)
 	# Every option inside the gear window clicks with the same sound as the gear itself.
 	_connect_settings_clicks(overlay)
 
@@ -2158,18 +2263,35 @@ func _make_settings_panel() -> Control:
 	return frame
 
 # Circular v2 Accept/Close badge (the painted icon carries the action; no text label).
-func _make_v2_action_icon(node_name: String, art_path: String, label: String, callback: Callable, icon_size: int) -> Button:
+func _make_v2_action_icon(node_name: String, art_path: String, label: String, callback: Callable, button_size: Vector2, nine_slice: bool = false) -> Button:
 	var texture := UiHelpers.hires_texture(art_path)
 	if texture == null:
 		var fallback := Button.new()
 		fallback.name = node_name
 		fallback.text = label
-		fallback.custom_minimum_size = Vector2(icon_size, icon_size)
+		fallback.custom_minimum_size = button_size
+		fallback.size = button_size
 		fallback.pressed.connect(callback)
 		return fallback
-	var btn := _make_face_button(node_name, texture, Vector2(icon_size, icon_size), label, callback)
+	var btn := _make_face_button(node_name, texture, button_size, label, callback, nine_slice)
 	btn.set_meta("source_path", art_path)
 	return btn
+
+func _align_action_face_right(button: Button) -> void:
+	var face := button.find_child("Face", true, false) as Control
+	var shadow := button.find_child("Shadow", true, false) as Control
+	if face != null:
+		if face is NinePatchRect:
+			face.position = Vector2(button.size.x - button.size.y, 0.0)
+		else:
+			face.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+			face.offset_left = -button.size.y
+			face.offset_top = 0.0
+			face.offset_right = 0.0
+			face.offset_bottom = button.size.y
+	if shadow != null:
+		shadow.position = Vector2(button.size.x - button.size.y + 2.0, 3.0)
+		shadow.size = Vector2(button.size.y, button.size.y)
 
 func _apply_v2_row_style(btn: Button, art_path: String, row_height: int) -> void:
 	for state in ["normal", "hover", "pressed", "disabled"]:
@@ -2296,7 +2418,7 @@ func _on_card(card_id: String) -> void:
 	# A card taken from the Board has its own landing sound; a refused tap plays nothing.
 	if bool(result.get("ok", false)):
 		_play_effect("play_card_select")
-	_apply_move(card.type, card_id, source_rect, snap, result, false)
+	_apply_move(card.type, card_id, source_rect, snap, result)
 
 func _on_deck(deck_id: String) -> void:
 	if not _accepts_taps():
@@ -2309,7 +2431,7 @@ func _on_deck(deck_id: String) -> void:
 	# A draw from a Support Deck has its own sound; a refused draw plays nothing.
 	if bool(result.get("ok", false)):
 		_play_effect("play_deck_draw")
-	_apply_move(card_type, "", source_rect, snap, result, false)
+	_apply_move(card_type, "", source_rect, snap, result)
 
 func _on_reserve_return(card_id: String) -> void:
 	if not _accepts_taps():
@@ -2324,8 +2446,7 @@ func _on_reserve_return(card_id: String) -> void:
 
 # Redraws from the new state at once, then launches the visuals of the move. `card_id` is ""
 # for a deck draw (the controller makes the card up). `snap` is the zone before the move.
-# `select_sfx` is false when the caller already played the move's own sound (Board, Deck).
-func _apply_move(card_type: String, card_id: String, source_rect: Rect2, snap: Dictionary, result: Dictionary, select_sfx: bool = true) -> void:
+func _apply_move(card_type: String, card_id: String, source_rect: Rect2, snap: Dictionary, result: Dictionary) -> void:
 	if not bool(result["ok"]):
 		# A refused tap must never look like a frozen game: say why when the zone is full.
 		if controller.status == GameController.Status.PLAYING and controller.zone.is_full():
@@ -2333,8 +2454,6 @@ func _apply_move(card_type: String, card_id: String, source_rect: Rect2, snap: D
 			_say("zone_warning")
 		_check_end()
 		return
-	if select_sfx:
-		_play_sfx("select")
 	var matched: Array = result["matched_ids"]
 	# Score right away: a winning move ends the round once its flash has played.
 	_record_endless_match(matched.size())
@@ -2561,7 +2680,6 @@ func _flight_target(flight: Flight) -> Rect2:
 func _land_flight(flight: Flight) -> void:
 	if _flights.get(flight.card_id) == flight:
 		_flights.erase(flight.card_id)
-	_play_sfx("place")
 	var ghost := flight.ghost
 	if flight.group != null:
 		CardImpactFx.play(_fx(), ghost, _impact_config("", _zone_back_config({"squash": false})))
@@ -2729,6 +2847,9 @@ func _play_match(group: MatchGroup) -> void:
 	match_flashes += 1
 	_play_effect("play_match")
 	_say("match")
+	# Phase Q combo shake: trauma stacks per match, combo_changed is the future combo-SFX hook.
+	if _shake != null:
+		_shake.add_match()
 	for rect: Rect2 in group.rects:
 		var flash := Panel.new()
 		flash.size = rect.size
@@ -2764,9 +2885,10 @@ func _play_match(group: MatchGroup) -> void:
 # Kept short and entirely on the FX layer so rapid taps never wait for it.
 func _play_match_burst(center: Vector2, card_side: float) -> void:
 	var side := maxf(72.0, card_side * MATCH_FX_CARD_SPAN)
-	# Same card centre for both layers: no vertical offset, delay or spin.
-	_spawn_match_fx(MATCH_BURST_ART, center, side, 0.15, 1.08)
-	_spawn_match_fx(MATCH_SMOKE_ART, center, side * 1.14, 0.15, 1.12)
+	# Burst and its blue smoke keep their timing/colour and share the card centre;
+	# both visible layers are reduced together so the effect's final footprint halves.
+	_spawn_match_fx(MATCH_BURST_ART, center, side * MATCH_FX_VISUAL_SCALE, 0.15, 1.08)
+	_spawn_match_fx(MATCH_SMOKE_ART, center, side * 1.14 * MATCH_FX_VISUAL_SCALE, 0.15, 1.12)
 
 # The painted FX files carry wide transparent margins, so centring the whole texture rect
 # made the visible puff sit visibly above the card. This returns the alpha bounding box
@@ -2960,43 +3082,6 @@ func _play_effect(method_name: String, argument = null) -> void:
 		audio.call(method_name)
 	else:
 		audio.call(method_name, argument)
-
-# Short synthesized beeps still used by the match/puff/reserve visuals, until those get art too.
-func _play_sfx(kind: String) -> void:
-	if not Game.sound_enabled():
-		return
-	if _sfx_player == null or not is_instance_valid(_sfx_player):
-		_sfx_player = AudioStreamPlayer.new()
-		_sfx_player.name = "PlaceholderSfx"
-		add_child(_sfx_player)
-	_sfx_player.volume_db = linear_to_db(Game.volume())
-	var stream := AudioStreamGenerator.new()
-	stream.mix_rate = 22050.0
-	stream.buffer_length = 0.18
-	_sfx_player.stream = stream
-	_sfx_player.play()
-	var playback := _sfx_player.get_stream_playback() as AudioStreamGeneratorPlayback
-	if playback == null:
-		return
-	var frequency := 440.0
-	var duration := 0.08
-	match kind:
-		"select":
-			frequency = 700.0
-		"place":
-			frequency = 520.0
-		"puff":
-			frequency = 260.0
-			duration = 0.12
-	var frames := int(stream.mix_rate * duration)
-	var buffer := PackedVector2Array()
-	buffer.resize(frames)
-	for i in frames:
-		var t := float(i) / stream.mix_rate
-		var envelope := 1.0 - float(i) / float(frames)
-		var sample := sin(TAU * frequency * t) * 0.16 * envelope
-		buffer[i] = Vector2(sample, sample)
-	playback.push_buffer(buffer)
 
 # The end panel waits for the visuals still in flight (the last match must be seen), but
 # never longer than END_WAIT_MAX_MSEC. _process keeps calling this until the panel is up.
@@ -3639,7 +3724,7 @@ func _make_end_art_button(kind: String, label_key: String, callback: Callable) -
 
 # A flat button with a painted face (no text). The face is centred in the hit box, so a
 # taller plate such as the PT retry banner never distorts; hover brightens and press dips it.
-func _make_face_button(node_name: String, texture: Texture2D, size: Vector2, label: String, callback: Callable) -> Button:
+func _make_face_button(node_name: String, texture: Texture2D, size: Vector2, label: String, callback: Callable, nine_slice: bool = false) -> Button:
 	var btn := Button.new()
 	btn.name = node_name
 	btn.custom_minimum_size = size
@@ -3649,23 +3734,32 @@ func _make_face_button(node_name: String, texture: Texture2D, size: Vector2, lab
 	btn.mouse_filter = Control.MOUSE_FILTER_STOP
 	btn.tooltip_text = label
 	btn.set_meta("label", label)
+	var icon_side := minf(size.x, size.y)
+	var icon_rect := Rect2(Vector2((size.x - icon_side) * 0.5, 0.0), Vector2.ONE * icon_side)
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		btn.add_theme_stylebox_override(state, StyleBoxEmpty.new())
 	btn.pressed.connect(callback)
-	var shadow := _make_drop_shadow(texture, Rect2(Vector2(2, 3), size), 1.8, 0.45)
+	var shadow_rect := Rect2(Vector2(2, 3), size)
+	if nine_slice:
+		shadow_rect = Rect2(icon_rect.position + Vector2(2.0, 3.0), icon_rect.size)
+	var shadow := _make_drop_shadow(texture, shadow_rect, 1.8, 0.45)
 	if shadow != null:
 		shadow.name = "Shadow"
 		shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		shadow.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 		btn.add_child(shadow)
-	var face := TextureRect.new()
+	var face: Control = UiHelpers.oversampled_badge(texture, icon_rect.size) if nine_slice else TextureRect.new()
 	face.name = "Face"
-	face.texture = texture
-	face.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	face.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	face.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	if face is TextureRect:
+		(face as TextureRect).texture = texture
+		(face as TextureRect).expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		(face as TextureRect).stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		face.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	face.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_place(face, Rect2(Vector2.ZERO, size))
+	if nine_slice:
+		face.position = icon_rect.position
+	else:
+		_place(face, Rect2(Vector2.ZERO, size))
 	btn.add_child(face)
 	btn.button_down.connect(func(): face.position.y = 1.0)
 	btn.button_up.connect(func(): face.position.y = 0.0)
@@ -3840,7 +3934,6 @@ func _puff_star(index: int) -> void:
 	var pop := stars_row.create_tween()
 	pop.tween_property(stars_row, "scale", Vector2(1.12, 1.12), 0.09)
 	pop.tween_property(stars_row, "scale", Vector2.ONE, 0.16)
-	_play_sfx("puff")
 	var fx := _fx()
 	var flash := UiHelpers.symbol_label("✦", 22)
 	flash.size = Vector2(22, 22)

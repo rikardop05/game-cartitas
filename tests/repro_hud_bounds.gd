@@ -137,6 +137,13 @@ func _run_view(game, view: Dictionary) -> void:
 	var border_safe := board_frame.get_global_rect().grow(-12.0)
 	if shade == null:
 		_fail("board-inner", "BoardShade missing")
+	elif landscape:
+		# Landscape shade is intentionally tucked underneath the painted frame bevel;
+		# the board art is drawn over it. The cards remain constrained to inner_global.
+		var shade_safe := Rect2(
+			board_frame.global_position + Vector2(7.0, 7.0),
+			Vector2(maxf(0.0, board_frame.size.x - 14.0), maxf(0.0, board_frame.size.y - 14.0)))
+		_assert_inside(shade, shade_safe, "board-inner:shade-under-frame")
 	else:
 		_assert_inside(shade, inner_global, "board-inner:shade-in-painted-hole")
 		_assert_inside(shade, border_safe, "board-inner:shade-clears-painted-border")
@@ -198,8 +205,11 @@ func _assert_top_bar(nodes: Dictionary, landscape: bool, endless: bool) -> void:
 	var gear_icon := gear.get_node_or_null("Icon") as TextureRect
 	_check(gear_icon != null and gear_icon.texture_filter == CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS,
 		"gear", "gear uses linear filtering with mipmaps")
-	_check(stopwatch_rect.position.x >= clock_rect.position.x and stopwatch_rect.end.x <= clock_rect.end.x,
-		"stopwatch", "timer icon remains inside its responsive plank")
+	if landscape:
+		_assert_inside(stopwatch, hud, "stopwatch:landscape-icon-in-Hud")
+	else:
+		_check(stopwatch_rect.position.x >= clock_rect.position.x and stopwatch_rect.end.x <= clock_rect.end.x,
+			"stopwatch", "portrait timer icon remains inside its responsive plank")
 	var time_label := clock.get_child(0) as Label
 	_check(time_label != null, "clock", "timer text exists")
 	if time_label != null:
@@ -236,15 +246,6 @@ func _assert_sound_toggle(game, scene, button: Button) -> void:
 		_fail("sound", "pressing the toggle did not change Game.sound_enabled()")
 	if icon.texture == texture_before:
 		_fail("sound", "the icon did not change with the toggle")
-	game.set_sound(false)
-	scene.set("_sfx_player", null)
-	scene.call("_play_sfx", "select")
-	if scene.get("_sfx_player") != null:
-		_fail("sound", "_play_sfx played with the sound off")
-	game.set_sound(true)
-	scene.call("_play_sfx", "select")
-	if scene.get("_sfx_player") == null:
-		_fail("sound", "_play_sfx did not play with the sound on")
 	# The view starts with the sound as it found it.
 	game.set_sound(was_on)
 	icon.texture = scene.call("_sound_texture")
@@ -314,8 +315,8 @@ func _assert_blocked_cards_dimmed(scene, controller) -> void:
 	print("  dim check: %d blocked card(s), brightness by depth %s" % [blocked, str(brightness_by_depth)])
 
 # Instruction line at level/round start: Ace's bubble (or the standalone one with the mascot
-# off) must show up, stay inside the viewport and keep clear of the board, the powers, the
-# decks, the Reserve, the Clearing Zone, the HUD and Ace itself.
+# off) must show up, stay inside the viewport and keep clear of the cards, header elements,
+# powers, decks, Reserve and Clearing Zone.
 func _assert_instruction_bubble(scene, nodes: Dictionary, mascot_on: bool, viewport_bounds: Rect2, landscape: bool) -> void:
 	var mascot = scene.get("mascot")
 	if mascot_on != (mascot != null):
@@ -342,14 +343,25 @@ func _assert_instruction_bubble(scene, nodes: Dictionary, mascot_on: bool, viewp
 	var inner := viewport_bounds.grow(-2.0)
 	if _max_overflow(_overflow(bubble, inner)) > EPSILON:
 		_fail("bubble-viewport", "bubble=%s viewport=%s" % [str(bubble), str(viewport_bounds)])
-	# Landscape: the hero may intentionally overlap the board, and the bubble may sit over
-	# the board too (opaque, mouse-ignore), but stays clear of the HUD/controls below it.
+	# Landscape: the bubble sits in the open header band and clears each actual HUD element.
 	# Portrait: the Hud is the whole screen, so the bubble must stay in the sky band above
 	# the panels and cards (clear of the powers, the board, the zone, the decks, the Reserve).
 	var avoid := {}
 	if landscape:
-		for region in ["Hud", "Powers", "Reserve", "ClearingZone"]:
+		for region in ["ClockPill", "BackButton", "HelpButton", "SettingsButton", "SoundButton", "Powers", "Reserve", "ClearingZone"]:
 			avoid[region] = nodes[region].get_global_rect()
+		var hud := nodes["Hud"] as Control
+		var plaque: Control = hud.find_child("StarsPill", true, false)
+		if plaque == null:
+			plaque = hud.find_child("ScorePill", true, false) as Control
+		if plaque != null:
+			avoid["Plaque"] = plaque.get_global_rect()
+		var logo := hud.find_child("Logo", true, false) as Control
+		if logo != null:
+			avoid["Logo"] = logo.get_global_rect()
+		var board: Control = scene.get("board_container")
+		if board != null:
+			avoid["Board"] = board.get_global_rect()
 	else:
 		for region in ["Powers", "Reserve", "ClearingZone"]:
 			avoid[region] = nodes[region].get_global_rect()

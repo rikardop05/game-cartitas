@@ -27,6 +27,7 @@ const SUITE_PATHS := [
 	"res://tests/test_backgrounds.gd",
 	"res://tests/test_star_thresholds.gd",
 	"res://tests/test_audio.gd",
+	"res://tests/test_screen_shake.gd",
 	"res://tests/test_defeat_screen.gd",
 	"res://tests/test_level_layout.gd",
 	"res://tests/test_asset_references.gd",
