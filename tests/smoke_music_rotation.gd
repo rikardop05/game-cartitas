@@ -38,6 +38,7 @@ func _run() -> void:
 	_finish()
 
 func _scenario() -> void:
+	_check_volume_reaches_both_buses()
 	_audio.play_menu()
 	change_scene_to_file("res://scenes/main.tscn")
 	var menu = await _wait_scene("MainMenu", null)
@@ -140,6 +141,24 @@ func _scenario() -> void:
 	_check(gameplay_after_menu != AudioManager.MENU_TRACK, "menu-to-game crossfade replaces the menu track")
 	_check(bool(_audio.get("_gameplay_active")), "gameplay mode is active after the menu transition")
 	_check(_saved_music_state_is_valid(gameplay_after_menu), "the resumed shuffle-bag state persists")
+
+# One slider and one mute for everything: the Music and the SFX bus follow Game.volume together.
+func _check_volume_reaches_both_buses() -> void:
+	var music := AudioServer.get_bus_index(AudioManager.MUSIC_BUS)
+	var sfx := AudioServer.get_bus_index(AudioManager.SFX_BUS)
+	if not _check(music >= 0 and sfx >= 0, "Music and SFX buses exist"):
+		return
+	_game.set_volume(0.5, false)
+	_audio.call("_sync_volume")
+	var half_db := AudioManager.bus_db(0.5, true)
+	_check(absf(AudioServer.get_bus_volume_db(music) - half_db) < 0.01, "the volume slider sets the Music bus")
+	_check(absf(AudioServer.get_bus_volume_db(sfx) - half_db) < 0.01, "the volume slider sets the SFX bus too")
+	_game.set_volume(0.0, false)
+	_audio.call("_sync_volume")
+	_check(AudioServer.get_bus_volume_db(sfx) <= AudioManager.SILENT_DB, "mute silences the sound effects")
+	_game.set_volume(1.0, false)
+	_audio.call("_sync_volume")
+	_check(absf(AudioServer.get_bus_volume_db(sfx)) < 0.01, "full volume restores the effects to unity gain")
 
 func _assert_continuity(track: String, player_index: int, player: AudioStreamPlayer, old_position: float, context: String) -> bool:
 	if not _check(_audio.current_track_path() == track, "%s keeps the same track" % context):

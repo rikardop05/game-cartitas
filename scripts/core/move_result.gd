@@ -37,6 +37,10 @@ var defeat: bool = false
 var matched_ids: Array[String] = []
 var status: int = 0
 var zone_index: int = -1
+# Phase S1: only a Refresh fills this (state BEFORE the redistribution, for the level screen
+# animation): {"board_before": {id: {position, layer, type}}, "deck_a_before": int,
+# "deck_b_before": int}. The after-state is simply the controller's own state.
+var refresh: Dictionary = {}
 
 func _init(p_ok: bool = false, p_reason: Reason = Reason.OK, p_status: int = 0, p_defeat: bool = false) -> void:
 	ok = p_ok
@@ -48,7 +52,7 @@ func message() -> String:
 	return LEGACY_MESSAGES[reason]
 
 func to_dict() -> Dictionary:
-	return {
+	var out := {
 		"ok": ok,
 		"message": message(),
 		"defeat": defeat,
@@ -56,3 +60,7 @@ func to_dict() -> Dictionary:
 		"status": status,
 		"zone_index": zone_index,
 	}
+	# Kept out of every other move so the solver's hot path never allocates it.
+	if not refresh.is_empty():
+		out["refresh"] = refresh
+	return out

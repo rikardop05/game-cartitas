@@ -4,11 +4,18 @@ extends RefCounted
 static func is_solvable(level: Dictionary) -> bool:
 	var g := GameController.new()
 	g.set_seed(12345)
+	# Phase S1: the generator was validated against the pre-S1 positional shuffle, so the solver
+	# keeps simulating exactly that (see GameController.REFRESH_POSITION_SHUFFLE). Changing it
+	# here would rewrite every generated board.
+	g.refresh_rule = GameController.REFRESH_POSITION_SHUFFLE
 	g.start_level(level, {"hold": 5, "undo": 5, "refresh": 5})
 	play_until_end(g, 800)
 	return g.status == GameController.Status.WON
 
 static func play_until_end(g: GameController, max_steps: int) -> void:
+	# Phase S1: the solver keeps simulating the pre-S1 positional shuffle (see is_solvable), so
+	# every caller of the solver sees exactly the behaviour the generator was tuned against.
+	g.refresh_rule = GameController.REFRESH_POSITION_SHUFFLE
 	var steps := 0
 	while g.status == GameController.Status.PLAYING and steps < max_steps:
 		steps += 1

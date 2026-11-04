@@ -160,9 +160,27 @@ func _report(level_id: String, view: Dictionary, scene, controller, container: C
 	for l in layer_lines:
 		print(l)
 
+const THROWAWAY_SAVE := "user://regression_board_layout_throwaway_save.json"
+
 func _run() -> void:
 	LevelLoader.deterministic = true
 	var game = root.get_node("Game")
+	# Loading levels persists music/menu state through Game.save_path: keep it off the real save.
+	var real_save_path: String = game.save_path
+	game.save_path = THROWAWAY_SAVE
+	await _run_levels(game)
+	game.save_path = real_save_path
+	if FileAccess.file_exists(THROWAWAY_SAVE):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(THROWAWAY_SAVE))
+	if _fails.is_empty():
+		print("REGRESSION BOARD LAYOUT OK")
+		quit(0)
+	else:
+		for f in _fails:
+			printerr("REGRESSION FAIL: " + f)
+		quit(1)
+
+func _run_levels(game) -> void:
 	for level_id in LEVELS:
 		for view in VIEWS:
 			game.settings["orientation"] = view["orient"]
@@ -186,13 +204,6 @@ func _run() -> void:
 				continue
 			var container: Control = scene.get("board_container")
 			_report(level_id, view, scene, controller, container)
-	if _fails.is_empty():
-		print("REGRESSION BOARD LAYOUT OK")
-		quit(0)
-	else:
-		for f in _fails:
-			printerr("REGRESSION FAIL: " + f)
-		quit(1)
 
 func _init() -> void:
 	call_deferred("_run")

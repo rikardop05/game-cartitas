@@ -35,7 +35,6 @@ func _run() -> void:
 	game.save_path = THROWAWAY_SAVE
 	LevelLoader.deterministic = true
 	game.settings["orientation"] = "landscape"
-	game.settings["mascot"] = false
 	game.apply_orientation()
 	root.size = Vector2i(640, 360)
 	game.current_level_id = "6"

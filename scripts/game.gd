@@ -5,7 +5,7 @@ extends Node
 signal volume_changed(volume: float, enabled: bool)
 
 var progress: ProgressManager
-var settings: Dictionary = {"locale": "pt", "orientation": "portrait", "mascot": true}
+var settings: Dictionary = {"locale": "pt", "orientation": "portrait"}
 var current_level_id: String = ""
 # The active Endless run, or null during campaign play. The level scene reads it to
 # decide between a campaign Level and an Endless round.
@@ -20,6 +20,9 @@ var _mascot_lines: MascotLines
 
 func _ready() -> void:
 	progress = ProgressManager.new()
+	load_save()
+
+func load_save() -> void:
 	var data: Dictionary = SaveManager.load(save_path)
 	if not data.is_empty():
 		if data.has("progress"):
@@ -28,6 +31,8 @@ func _ready() -> void:
 		settings = {"locale": "pt", "orientation": "portrait"}
 		settings.merge(saved_settings, true)
 		Localizer.current = str(settings.get("locale", "pt"))
+	# Old profiles may still contain the removed Mascot On/Off preference.
+	settings.erase("mascot")
 	apply_orientation()
 
 func apply_orientation() -> void:
@@ -89,11 +94,7 @@ func set_orientation(landscape: bool) -> void:
 	apply_orientation()
 
 func mascot_enabled() -> bool:
-	return bool(settings.get("mascot", true))
-
-func set_mascot(enabled: bool) -> void:
-	settings["mascot"] = enabled
-	save_progress()
+	return true
 
 # Sound effects volume, 0..1. Saves from before the slider only had settings["sound"].
 func volume() -> float:

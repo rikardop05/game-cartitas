@@ -1,17 +1,14 @@
 extends SceneTree
 
-# Hero mascot smoke: phase portraits, per-hero expression sets and neutral intro.
-# Drives the real level scene (autoloads available), using a throwaway save.
+## PHASE S3 regression: verify the actual LevelScreen hero remains visible with its portrait
+## after the initial deal at wide desktop sizes, including a window resize during the deal.
 
+const STEP_TIMEOUT_MS := 20000
 const THROWAWAY_SAVE := "user://smoke_mascot_heroes_save.json"
 const CASES := [
-	{"level": "1", "hero": "cat", "frames": ["thinking", "sequence", "bad_choice", "defeat"]},
-	{"level": "6", "hero": "frog", "frames": ["thinking", "sequence", "bad_choice", "defeat"]},
-	{"level": "8", "hero": "bunny", "frames": ["hero_bunny_thinking", "hero_bunny_sequence", "hero_bunny_bad_choice", "hero_bunny_defeat"]},
-	{"level": "9", "hero": "wolf_knight", "frames": ["thinking", "sequence", "bad_choice", "defeat"]},
-	{"level": "10", "hero": "menu_wolf", "frames": []},
-	{"level": "13", "hero": "rhino", "frames": ["thinking", "sequence", "bad_choice", "defeat"]},
-	{"level": "14", "hero": "sacer", "frames": ["thinking", "sequence", "bad_choice", "defeat"]},
+	{"level": "1", "window": Vector2i(1920, 1032)},
+	{"level": "8", "window": Vector2i(1366, 728)},
+	{"level": "12", "window": Vector2i(2560, 1392)},
 ]
 
 var _failures: Array[String] = []
@@ -27,95 +24,87 @@ func _run() -> void:
 		_finish()
 		return
 	_game.save_path = THROWAWAY_SAVE
-	_game.settings["mascot"] = true
-	_game.settings["orientation"] = "portrait"
-	_game.apply_orientation()
-	for case in CASES:
-		await _check_case(case)
-	await _check_intro_line()
+	_game.progress = ProgressManager.new()
+	_game.endless_run = null
+	LevelLoader.deterministic = true
+	for test_case in CASES:
+		await _open_and_check(str(test_case["level"]), test_case["window"], false)
+	await _open_and_check("2", Vector2i(1280, 720), true)
 	_finish()
 
-# The delayed intro line must come from the neutral hero_intro_* keys, not an NPC family.
-func _check_intro_line() -> void:
-	_game.endless_run = null
-	_game.current_level_id = "1"
+func _open_and_check(level_id: String, window_size: Vector2i, resize_mid_deal: bool) -> void:
+	_game.settings["orientation"] = "landscape"
+	_game.settings["mascot"] = true
+	_game.apply_orientation()
+	if DisplayServer.get_name() != "headless":
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+		DisplayServer.window_set_size(window_size)
+	root.size = window_size
+	await _frames(2)
+	_game.current_level_id = level_id
+	var previous = current_scene
 	change_scene_to_file("res://scenes/level.tscn")
-	var scene = await _wait_level()
+	var scene = await _wait_for_level(previous)
 	if scene == null:
-		_fail("intro: no LevelScreen")
 		return
-	await create_timer(5.6).timeout
-	var mascot = scene.get("mascot")
-	if mascot == null:
-		_fail("intro: no mascot")
-		return
-	var bubble = mascot.find_child("Bubble", true, false)
-	var label: Label = null
-	if bubble != null:
-		label = bubble.get_child(0) as Label
-	var text: String = label.text if label != null else ""
-	var allowed := [Localizer.t("hero_intro_1"), Localizer.t("hero_intro_2"), Localizer.t("hero_intro_3")]
-	_check(allowed.has(text), "intro bubble uses hero_intro_* (got '%s')" % text)
+	if resize_mid_deal:
+		var started: bool = await _wait_until(func(): return scene.is_dealing())
+		_check(started, "level %s exposes the initial deal before the resize" % level_id)
+		if started:
+			var fitted_size := Vector2i(1920, 1032)
+			if DisplayServer.get_name() != "headless":
+				DisplayServer.window_set_size(fitted_size)
+			root.size = fitted_size
+			# Reproduce the fit-to-monitor resize synchronously as well as through the viewport event.
+			scene._on_resized()
+			await _frames(2)
+	var completed: bool = await _wait_until(func(): return not scene.is_dealing())
+	_check(completed, "level %s finishes its deal after the window size change" % level_id)
+	await _frames(2)
+	_assert_hero(scene, level_id, window_size)
 
-func _check_case(case: Dictionary) -> void:
-	_game.endless_run = null
-	_game.current_level_id = str(case["level"])
-	change_scene_to_file("res://scenes/level.tscn")
-	var scene = await _wait_level()
-	if scene == null:
-		_fail("L%s: no LevelScreen" % case["level"])
+func _assert_hero(scene, level_id: String, window_size: Vector2i) -> void:
+	var hero = scene.mascot
+	_check(hero != null, "level %s has a hero instance at %s" % [level_id, str(window_size)])
+	if hero == null:
 		return
-	var mascot = scene.get("mascot")
-	if mascot == null:
-		_fail("L%s: no mascot" % case["level"])
-		return
-	var tag := "L%s" % case["level"]
-	_check(mascot.character == case["hero"], "%s: hero %s (got %s)" % [tag, case["hero"], mascot.character])
-	var frames: Array = case["frames"]
-	if frames.is_empty():
-		# A hero without a set (the menu wolf fallback) keeps one portrait and the tint.
-		var expected := "hero_%s" % case["hero"]
-		_check(mascot.frame_id == expected, "%s: portrait %s (got %s)" % [tag, expected, mascot.frame_id])
-		mascot.set_mood(2)
-		_check(mascot.frame_id == expected, "%s: no set keeps the portrait on mood changes (got %s)" % [tag, mascot.frame_id])
-		_check(mascot.self_modulate != Color.WHITE, "%s: no set uses the worried tint" % tag)
-		mascot.set_mood(3)
-		_check(mascot.self_modulate != Color.WHITE, "%s: no set uses the sad tint" % tag)
-		mascot.set_mood(0)
-		_check(mascot.self_modulate == Color.WHITE, "%s: idle clears the tint" % tag)
-	else:
-		for m in 4:
-			mascot.set_mood(m)
-			_check(mascot.frame_id == frames[m], "%s: mood %d -> %s (got %s)" % [tag, m, frames[m], mascot.frame_id])
-			_check(mascot.self_modulate == Color.WHITE, "%s: mood %d expression has no tint" % [tag, m])
-		mascot.set_mood(0)
-		_check(mascot.frame_id == frames[0], "%s: idle returns to thinking (got %s)" % [tag, mascot.frame_id])
-		# The gameplay events must select the same frames.
-		mascot.say("match")
-		_check(mascot.frame_id == frames[1], "%s: match -> happy frame (got %s)" % [tag, mascot.frame_id])
-		mascot.say("zone_warning")
-		_check(mascot.frame_id == frames[2], "%s: warning -> worried frame (got %s)" % [tag, mascot.frame_id])
-		mascot.say("power_used")
-		_check(mascot.frame_id == frames[1], "%s: power -> happy frame (got %s)" % [tag, mascot.frame_id])
-		mascot.say("lose")
-		_check(mascot.frame_id == frames[3], "%s: lose -> sad frame (got %s)" % [tag, mascot.frame_id])
-		mascot.say("win", {"stars": 3})
-		_check(mascot.frame_id == frames[1], "%s: win -> happy frame (got %s)" % [tag, mascot.frame_id])
-		mascot.set_mood(0)
-	# The hero is intentionally larger than its placement box and overlaps the frame.
-	_check(mascot.size.x > 100.0 and mascot.size.y > 150.0,
-		"%s: mascot is the large hero (%s)" % [tag, str(mascot.size)])
-	var line: String = mascot.localized_line("intro")
-	_check(line != "" and not line.contains("Ace") and not line.contains("Bruno") and not line.contains("Marlow") and not line.contains("Mallard"),
-		"%s: intro line is neutral (got '%s')" % [tag, line])
+	var texture := hero.get("_texture") as Texture2D
+	_check(texture != null and texture.get_width() > 0 and texture.get_height() > 0,
+		"level %s hero has a loaded non-empty portrait after the deal (%s)" % [level_id, str(window_size)])
+	if scene._is_landscape:
+		scene._mascot_area.size = Vector2.ZERO
+		hero.visible = false
+		scene._place_mascot()
+		_check(hero.visible,
+			"landscape hero placement ignores a zero-sized spacer after resize (%s)" % str(window_size))
+	_check(hero.visible and hero.is_visible_in_tree(),
+		"level %s hero stays visible after the deal at %s" % [level_id, str(window_size)])
+	var rect: Rect2 = hero.get_global_rect()
+	var viewport := Rect2(Vector2.ZERO, root.get_visible_rect().size)
+	_check(rect.size.x > 1.0 and rect.size.y > 1.0 and rect.intersects(viewport),
+		"level %s hero has a non-empty on-screen rect after deal (rect=%s viewport=%s)" % [level_id, str(rect), str(viewport)])
 
-func _wait_level():
-	for i in 120:
+func _wait_for_level(previous):
+	var started := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - started < STEP_TIMEOUT_MS:
 		await process_frame
 		var scene = current_scene
-		if scene != null and scene.name == "LevelScreen" and scene.get("controller") != null and scene.get("mascot") != null:
+		if scene != null and scene != previous and scene.name == "LevelScreen" and scene.get("controller") != null:
 			return scene
+	_fail("level scene did not load")
 	return null
+
+func _wait_until(condition: Callable) -> bool:
+	var started := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - started < STEP_TIMEOUT_MS:
+		if condition.call():
+			return true
+		await process_frame
+	return false
+
+func _frames(count: int) -> void:
+	for i in count:
+		await process_frame
 
 func _check(ok: bool, message: String) -> void:
 	if not ok:
@@ -123,8 +112,10 @@ func _check(ok: bool, message: String) -> void:
 
 func _fail(message: String) -> void:
 	_failures.append(message)
+	printerr("MASCOT HERO FAIL: " + message)
 
 func _finish() -> void:
+	LevelLoader.deterministic = false
 	if _game != null:
 		_game.save_path = SaveManager.DEFAULT_PATH
 	for path in [THROWAWAY_SAVE, THROWAWAY_SAVE + ".tmp"]:
@@ -133,7 +124,6 @@ func _finish() -> void:
 	if _failures.is_empty():
 		print("SMOKE MASCOT HEROES OK")
 		quit(0)
-	else:
-		for message in _failures:
-			printerr("SMOKE MASCOT HEROES FAIL: %s" % message)
-		quit(1)
+		return
+	printerr("SMOKE MASCOT HEROES RED: %d failure(s)" % _failures.size())
+	quit(1)

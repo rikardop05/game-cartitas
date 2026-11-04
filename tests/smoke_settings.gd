@@ -1,7 +1,7 @@
 extends SceneTree
 
-# In-game settings (gear in the top bar): opening pauses the clock; language, orientation and
-# mascot apply at once without touching the level state (zone, board, clock); the volume row
+# In-game settings (gear in the top bar): opening pauses the clock; language and orientation
+# apply without touching the level state (zone, board, clock); the volume row
 # changes Game.volume(); closing (button, corner icon, shade tap, ui_cancel) resumes the clock.
 # Works in a campaign Level and in Endless. Settings are saved through Game.save_path, which is
 # pointed at a throwaway file before anything runs (the player's save is never written).
@@ -34,9 +34,17 @@ func _run() -> void:
 		return
 	# First thing: nothing below may write to the real save.
 	game.save_path = THROWAWAY_SAVE
+	game.progress = ProgressManager.new()
+	var legacy_save := {
+		"progress": game.progress.to_dict(),
+		"settings": {"locale": "en", "orientation": "landscape", "mascot": false},
+	}
+	_check(SaveManager.save(legacy_save, THROWAWAY_SAVE), "legacy save with mascot=false is written")
+	game.load_save()
+	_check(not game.settings.has("mascot"), "loading a legacy save removes the mascot setting key")
+	_check(game.mascot_enabled(), "a legacy mascot=false save still enables the hero")
 	LevelLoader.deterministic = true
 	game.settings["orientation"] = "landscape"
-	game.settings["mascot"] = true
 	game.settings["locale"] = "en"
 	game.settings["volume"] = 1.0
 	game.settings["sound"] = true
@@ -132,8 +140,10 @@ func _campaign(game) -> void:
 	var before := _state(c)
 	_check(before["zone"].size() > 0, "campaign: there is a state to protect")
 	var viewport := Rect2(Vector2.ZERO, scene.get_viewport_rect().size)
-	for node_name in ["LanguageButton", "OrientationButton", "MascotButton", "VolumeRow", "VolumeSlider", "SoundButton", "SettingsClose", "SettingsCornerClose"]:
+	for node_name in ["LanguageButton", "OrientationButton", "VolumeRow", "VolumeSlider", "SoundButton", "SettingsClose", "SettingsCornerClose"]:
 		_check(overlay.find_child(node_name, true, false) != null, "campaign: the overlay has %s" % node_name)
+	_check(overlay.find_child("MascotButton", true, false) == null, "campaign: settings have no Mascot row")
+	_check(scene.mascot != null and scene.mascot.visible, "campaign: legacy mascot=false save keeps the hero visible")
 	var panel := overlay.find_child("SettingsPanel", true, false) as Control
 	_check(panel != null and viewport.encloses(panel.get_global_rect()), "campaign: the panel fits the viewport (%s in %s)" % [str(panel.get_global_rect()) if panel != null else "-", str(viewport)])
 	await _wait_ms(300)
@@ -151,7 +161,9 @@ func _campaign(game) -> void:
 		_check(scene.get_node_or_null("SettingsOverlay") != null and c.status == GameController.Status.PAUSED, "campaign: the overlay stays open and the clock paused")
 		_check(_same_state(before, _state(c)), "campaign: zone, board and clock are unchanged by the language")
 		_check(scene.board_container.get_child_count() == before["board"].size(), "campaign: the board is redrawn (%d cards)" % scene.board_container.get_child_count())
-		_check(SaveManager.load(THROWAWAY_SAVE).get("settings", {}).get("locale", "") == "pt", "campaign: the language is saved")
+		var saved_settings: Dictionary = SaveManager.load(THROWAWAY_SAVE).get("settings", {})
+		_check(saved_settings.get("locale", "") == "pt", "campaign: the language is saved")
+		_check(not saved_settings.has("mascot"), "campaign: saved settings no longer contain the legacy mascot key")
 	# ...and back to English.
 	if _press(scene, "LanguageButton", "campaign"):
 		await _frames(4)
@@ -182,17 +194,6 @@ func _campaign(game) -> void:
 			var vp := Rect2(Vector2.ZERO, scene.get_viewport_rect().size)
 			_check(pp != null and vp.encloses(pp.get_global_rect()), "campaign: the panel fits the portrait viewport")
 		_check(scene.board_container.get_child_count() == before["board"].size(), "campaign: the board is redrawn in portrait")
-
-	# Mascot off hides Ace; on brings it back.
-	_check(scene.mascot != null, "campaign: Ace is there before")
-	if _press(scene, "MascotButton", "campaign"):
-		await _frames(4)
-		_check(scene.mascot == null and not game.mascot_enabled(), "campaign: mascot off removes Ace")
-		_check(scene.find_child("Mascot", true, false) == null, "campaign: no Mascot node is left")
-		_check(_same_state(before, _state(c)), "campaign: the state is unchanged by the mascot toggle")
-	if _press(scene, "MascotButton", "campaign"):
-		await _wait_ms(300)
-		_check(scene.mascot != null and game.mascot_enabled(), "campaign: mascot on brings Ace back")
 
 	# Volume: the painted bar sets the volume, the glyph follows, the HUD icon too.
 	var volume_before: float = game.volume()
@@ -280,7 +281,6 @@ func _heading_matches_locale(scene) -> bool:
 func _endless(game) -> void:
 	game.progress = ProgressManager.new()
 	game.settings["orientation"] = "landscape"
-	game.settings["mascot"] = true
 	game.apply_orientation()
 	root.size = Vector2i(640, 360)
 	await _frames(3)

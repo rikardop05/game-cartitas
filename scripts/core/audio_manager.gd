@@ -6,8 +6,8 @@ extends Node
 # not the current Level scene, so finishing, retrying or changing Levels never restarts it.
 #
 # The volume/mute the player already controls (Game.volume / Game.sound_enabled) is applied to
-# the Music bus on Game.volume_changed (with a slow fallback poll), so the Options slider and
-# the in-game sound button act on the music immediately without the UI knowing about this node.
+# the Music and the SFX bus on Game.volume_changed (with a slow fallback poll), so the Options slider and
+# the in-game sound button act on music and effects immediately without the UI knowing about this node.
 #
 # The node is an autoload ("Audio"). Scenes only declare intent:
 #   Audio.play_menu(self)     # crossfade to the menu track
@@ -45,7 +45,12 @@ const LEVEL_COMPLETE_SFX := "res://assets/audio/sfx/level_complete.wav"
 const LEVEL_FAILED_SFX := "res://assets/audio/sfx/level_failed.wav"
 const POWER_HOLD_SFX := "res://assets/audio/sfx/power_hold.wav"
 const POWER_UNDO_SFX := "res://assets/audio/sfx/power_undo.wav"
+# Kept on disk (and in the asset checks) but unused since Phase S1: Refresh has its own pair.
 const POWER_REFRESH_SFX := "res://assets/audio/sfx/power_refresh.wav"
+# Phase S1 Refresh: a one-shot "activation" plus a longer "pouring dominoes" shuffle that runs
+# under the animation and is faded out by end_refresh_sound() when the cards have landed.
+const POWER_ACTIVATE_SFX := "res://assets/audio/sfx/power_activate.wav"
+const REFRESH_SHUFFLE_SFX := "res://assets/audio/sfx/refresh_shuffle.wav"
 const LEVEL_START_SFX := "res://assets/audio/sfx/level_start.wav"
 const TRIPLE_MATCH_SFX := "res://assets/audio/sfx/triple_match.wav"
 const UI_CLICK_SFX := "res://assets/audio/sfx/ui_click.wav"
@@ -57,6 +62,12 @@ const LEVEL_FAILED_DB := 2.0
 const POWER_HOLD_DB := -4.0
 const POWER_UNDO_DB := 7.0
 const POWER_REFRESH_DB := 20.0
+# Phase S1: the activation leads, the shuffle sits ~10 dB under it (it lasts ~4 s under the
+# cards). The shuffle file is recorded 23 dB quieter than the other effects (-24.5 dBFS peak vs
+# -1.4), so its gain is a boost to bring it into the mix, not a cut; both stay below the -3 dB
+# headroom the other one-shots keep.
+const POWER_ACTIVATE_DB := -2.0
+const REFRESH_SHUFFLE_DB := 11.0
 const LEVEL_START_DB := 14.0
 const TRIPLE_MATCH_DB := -6.0
 const UI_CLICK_DB := 2.0
@@ -76,7 +87,7 @@ const VOLUME_POLL_SECONDS := 0.25
 const MUSIC_BUS := "Music"
 const SFX_BUS := "SFX"
 # Round-robin voices, so quick successive taps overlap instead of cutting each other off.
-const SFX_VOICES := 3
+const SFX_VOICES := 4
 # Uniform 20% reduction on the one-shot output; music levels are unaffected.
 const SFX_VOLUME_SCALE := 0.8
 # Music players never peak at 0 dB: two tracks overlap while crossfading, so this headroom
@@ -88,6 +99,10 @@ const SILENT_DB := -80.0
 var _players: Array[AudioStreamPlayer] = []
 var _sfx_players: Array[AudioStreamPlayer] = []
 var _sfx_next := 0
+# Phase S1: the Refresh shuffle owns a dedicated voice, so the round-robin never steals it and
+# end_refresh_sound() can fade it out while other effects keep playing.
+var _refresh_player: AudioStreamPlayer
+var _refresh_fade: Tween
 var _streams: Dictionary = {}
 var _active := -1
 var _fade: Tween
@@ -126,6 +141,11 @@ func _ready() -> void:
 		sfx.process_mode = Node.PROCESS_MODE_ALWAYS
 		add_child(sfx)
 		_sfx_players.append(sfx)
+	_refresh_player = AudioStreamPlayer.new()
+	_refresh_player.name = "RefreshShuffle"
+	_refresh_player.bus = SFX_BUS
+	_refresh_player.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(_refresh_player)
 	_sync_volume()
 	_bind_volume()
 	_bind_track_watch()
@@ -221,10 +241,15 @@ func _exit_tree() -> void:
 	if _track_timer != null and is_instance_valid(_track_timer):
 		_track_timer.stop()
 	_kill_fade()
+	_kill_refresh_fade()
 	for player in _players + _sfx_players:
 		if is_instance_valid(player):
 			player.stop()
 			player.stream = null
+	if _refresh_player != null and is_instance_valid(_refresh_player):
+		_refresh_player.stop()
+		_refresh_player.stream = null
+	_refresh_player = null
 	_players.clear()
 	_sfx_players.clear()
 	_streams.clear()
@@ -359,15 +384,49 @@ func play_level_complete() -> void:
 func play_level_failed() -> void:
 	_play_sfx(LEVEL_FAILED_SFX, LEVEL_FAILED_DB)
 
-# A Power button: Hold and Undo have their own activation sound, Refresh the shuffle one.
+# A Power button: Hold and Undo have their own activation sound; Refresh plays the activation
+# and starts the longer shuffle underneath the redistribution animation (Phase S1).
 func play_power(power: String) -> void:
 	match power:
 		"refresh":
-			_play_sfx(POWER_REFRESH_SFX, POWER_REFRESH_DB)
+			_play_sfx(POWER_ACTIVATE_SFX, POWER_ACTIVATE_DB)
+			_play_refresh_shuffle()
 		"undo":
 			_play_sfx(POWER_UNDO_SFX, POWER_UNDO_DB)
 		_:
 			_play_sfx(POWER_HOLD_SFX, POWER_HOLD_DB)
+
+# Starts the "pouring dominoes" shuffle on its own voice (it is longer than the animation).
+func _play_refresh_shuffle() -> void:
+	if _refresh_player == null or not is_instance_valid(_refresh_player):
+		return
+	var stream := _load_stream(REFRESH_SHUFFLE_SFX)
+	if stream == null:
+		return
+	_kill_refresh_fade()
+	_refresh_player.stream = stream
+	_refresh_player.volume_db = sfx_output_gain_db(REFRESH_SHUFFLE_DB)
+	_refresh_player.play()
+
+# Fades the shuffle out and stops it (the cards have landed) - the level screen calls this.
+# Safe to call twice or when nothing is playing.
+func end_refresh_sound(fade_s: float = 0.25) -> void:
+	if _refresh_player == null or not is_instance_valid(_refresh_player):
+		return
+	if not _refresh_player.playing:
+		return
+	_kill_refresh_fade()
+	if fade_s <= 0.0:
+		_refresh_player.stop()
+		return
+	_refresh_fade = create_tween()
+	_refresh_fade.tween_property(_refresh_player, "volume_db", SILENT_DB, fade_s)
+	_refresh_fade.tween_callback(_refresh_player.stop)
+
+func _kill_refresh_fade() -> void:
+	if _refresh_fade != null and _refresh_fade.is_valid():
+		_refresh_fade.kill()
+	_refresh_fade = null
 
 # Any button of the menu screens (main menu, Level selector, Options).
 func play_ui_click() -> void:
@@ -548,8 +607,9 @@ func _load_stream(path: String) -> AudioStream:
 	_streams[path] = stream
 	return stream
 
-# Applies the player's volume/mute to the Music bus. Driven by Game.volume_changed and by a
-# slow fallback timer (see _bind_volume), never by a per-frame poll.
+# Applies the player's volume/mute to both the Music and the SFX bus (one slider, one mute for
+# everything; the per-effect *_DB gains only balance the effects against each other). Driven by
+# Game.volume_changed and by a slow fallback timer (see _bind_volume), never by a per-frame poll.
 func _sync_volume() -> void:
 	if _game == null or not is_instance_valid(_game):
 		_game = get_node_or_null("/root/Game")
@@ -562,9 +622,10 @@ func _sync_volume() -> void:
 	if is_equal_approx(db, _last_bus_db):
 		return
 	_last_bus_db = db
-	var bus := AudioServer.get_bus_index(MUSIC_BUS)
-	if bus >= 0:
-		AudioServer.set_bus_volume_db(bus, db)
+	for bus_name in [MUSIC_BUS, SFX_BUS]:
+		var bus := AudioServer.get_bus_index(bus_name)
+		if bus >= 0:
+			AudioServer.set_bus_volume_db(bus, db)
 
 func _ensure_bus(bus_name: String) -> int:
 	var index := AudioServer.get_bus_index(bus_name)

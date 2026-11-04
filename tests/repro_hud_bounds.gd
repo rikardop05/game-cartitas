@@ -29,18 +29,15 @@ const DISJOINT_REGIONS := ["Hud", "BoardFrame", "DeckA", "DeckB", "ClearingZone"
 const BUBBLE_WAIT_MS := 3500
 const THROWAWAY_SAVE := "user://repro_hud_bounds_save.json"
 const VIEWS := [
-	{"name": "landscape-640x360", "orientation": "landscape", "window": Vector2i(640, 360), "extra": LANDSCAPE_EXTRA, "endless": false, "mascot": true},
-	{"name": "portrait-360x640", "orientation": "portrait", "window": Vector2i(360, 640), "extra": PORTRAIT_EXTRA, "endless": false, "mascot": true},
-	{"name": "portrait-360x780", "orientation": "portrait", "window": Vector2i(360, 780), "extra": PORTRAIT_EXTRA, "endless": false, "mascot": true},
-	{"name": "portrait-360x800", "orientation": "portrait", "window": Vector2i(360, 800), "extra": PORTRAIT_EXTRA, "endless": false, "mascot": true},
-	{"name": "portrait-480x640", "orientation": "portrait", "window": Vector2i(480, 640), "extra": PORTRAIT_EXTRA, "endless": false, "mascot": true},
-	{"name": "landscape-780x360", "orientation": "landscape", "window": Vector2i(780, 360), "extra": LANDSCAPE_EXTRA, "endless": false, "mascot": true},
-	{"name": "landscape-640x480", "orientation": "landscape", "window": Vector2i(640, 480), "extra": LANDSCAPE_EXTRA, "endless": false, "mascot": true},
-	{"name": "endless-landscape-640x360", "orientation": "landscape", "window": Vector2i(640, 360), "extra": LANDSCAPE_EXTRA, "endless": true, "mascot": true},
-	{"name": "endless-portrait-360x640", "orientation": "portrait", "window": Vector2i(360, 640), "extra": PORTRAIT_EXTRA, "endless": true, "mascot": true},
-	# Mascot off in Options: a standalone bubble takes Ace's place.
-	{"name": "nomascot-landscape-640x360", "orientation": "landscape", "window": Vector2i(640, 360), "extra": LANDSCAPE_EXTRA, "endless": false, "mascot": false},
-	{"name": "nomascot-portrait-360x640", "orientation": "portrait", "window": Vector2i(360, 640), "extra": PORTRAIT_EXTRA, "endless": false, "mascot": false},
+	{"name": "landscape-640x360", "orientation": "landscape", "window": Vector2i(640, 360), "extra": LANDSCAPE_EXTRA, "endless": false},
+	{"name": "portrait-360x640", "orientation": "portrait", "window": Vector2i(360, 640), "extra": PORTRAIT_EXTRA, "endless": false},
+	{"name": "portrait-360x780", "orientation": "portrait", "window": Vector2i(360, 780), "extra": PORTRAIT_EXTRA, "endless": false},
+	{"name": "portrait-360x800", "orientation": "portrait", "window": Vector2i(360, 800), "extra": PORTRAIT_EXTRA, "endless": false},
+	{"name": "portrait-480x640", "orientation": "portrait", "window": Vector2i(480, 640), "extra": PORTRAIT_EXTRA, "endless": false},
+	{"name": "landscape-780x360", "orientation": "landscape", "window": Vector2i(780, 360), "extra": LANDSCAPE_EXTRA, "endless": false},
+	{"name": "landscape-640x480", "orientation": "landscape", "window": Vector2i(640, 480), "extra": LANDSCAPE_EXTRA, "endless": false},
+	{"name": "endless-landscape-640x360", "orientation": "landscape", "window": Vector2i(640, 360), "extra": LANDSCAPE_EXTRA, "endless": true},
+	{"name": "endless-portrait-360x640", "orientation": "portrait", "window": Vector2i(360, 640), "extra": PORTRAIT_EXTRA, "endless": true},
 ]
 
 var _failures: Array[String] = []
@@ -59,7 +56,6 @@ func _run() -> void:
 		_fail("infrastructure", "Game autoload missing")
 		_finish()
 		return
-	var mascot_before: bool = bool(game.settings.get("mascot", true))
 	var sound_before: bool = bool(game.settings.get("sound", true))
 	var save_path_before: String = game.save_path
 	# The HUD contract includes enabled power buttons. The player's real inventory may have
@@ -70,8 +66,6 @@ func _run() -> void:
 	game.save_path = THROWAWAY_SAVE
 	for view in VIEWS:
 		await _run_view(game, view)
-	# In-memory only (never set_mascot(), which would persist to the user save).
-	game.settings["mascot"] = mascot_before
 	game.settings["sound"] = sound_before
 	game.progress.inventory = inventory_before
 	game.save_path = save_path_before
@@ -85,7 +79,6 @@ func _run_view(game, view: Dictionary) -> void:
 	var landscape: bool = view["orientation"] == "landscape"
 	# Do not call Game.set_orientation(): it persists settings to the user save.
 	game.settings["orientation"] = view["orientation"]
-	game.settings["mascot"] = bool(view["mascot"])
 	game.apply_orientation()
 	root.size = view["window"]
 	for i in 3:
@@ -179,7 +172,7 @@ func _run_view(game, view: Dictionary) -> void:
 	var power_buttons: Dictionary = scene.get("power_buttons")
 	for power_name in PowerManager.POWERS:
 		_assert_action_button(power_buttons.get(power_name) as Button, "power:%s" % power_name, viewport_bounds, nodes["Layout"], scene)
-	await _assert_instruction_bubble(scene, nodes, bool(view["mascot"]), viewport_bounds, landscape)
+	await _assert_instruction_bubble(scene, nodes, viewport_bounds, landscape)
 
 # Header controls and timer must remain visible at the expanded viewport size; the portrait
 # brand/plaque stack and the landscape top row are checked without hard-coded design positions.
@@ -314,13 +307,13 @@ func _assert_blocked_cards_dimmed(scene, controller) -> void:
 		previous = brightness
 	print("  dim check: %d blocked card(s), brightness by depth %s" % [blocked, str(brightness_by_depth)])
 
-# Instruction line at level/round start: Ace's bubble (or the standalone one with the mascot
-# off) must show up, stay inside the viewport and keep clear of the cards, header elements,
+# Instruction line at level/round start: the Hero's bubble must show up, stay inside the
+# viewport and keep clear of the cards, header elements,
 # powers, decks, Reserve and Clearing Zone.
-func _assert_instruction_bubble(scene, nodes: Dictionary, mascot_on: bool, viewport_bounds: Rect2, landscape: bool) -> void:
+func _assert_instruction_bubble(scene, nodes: Dictionary, viewport_bounds: Rect2, landscape: bool) -> void:
 	var mascot = scene.get("mascot")
-	if mascot_on != (mascot != null):
-		_fail("mascot", "mascot presence %s does not follow the Options toggle (%s)" % [str(mascot != null), str(mascot_on)])
+	if mascot == null:
+		_fail("mascot", "the Hero is missing")
 		return
 	var bubble := Rect2()
 	var start := Time.get_ticks_msec()
@@ -329,10 +322,6 @@ func _assert_instruction_bubble(scene, nodes: Dictionary, mascot_on: bool, viewp
 		var rect := Rect2()
 		if mascot != null:
 			rect = mascot.bubble_global_rect()
-		else:
-			var standalone := scene.find_child("InstructionBubble", true, false) as Control
-			if standalone != null and standalone.modulate.a >= 0.99:
-				rect = standalone.get_global_rect()
 		if rect.has_area() and rect.size.y > 14.0:
 			bubble = rect
 			await process_frame

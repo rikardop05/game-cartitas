@@ -34,7 +34,6 @@ func _check_case(case: Dictionary) -> void:
 	_game.endless_run = null
 	_game.current_level_id = "1"
 	_game.settings["orientation"] = case["orientation"]
-	_game.settings["mascot"] = true
 	_game.apply_orientation()
 	root.size = case["window"]
 	_game.set_locale(case["locale"])
@@ -60,8 +59,9 @@ func _check_case(case: Dictionary) -> void:
 	var rows := [
 		["LanguageButton", "config_row_1.png"],
 		["OrientationButton", "config_row_2.png"],
-		["MascotButton", "config_row_3.png"],
 	]
+	_check(panel.find_child("MascotButton", true, false) == null,
+		"%s: settings panel has no Mascot row" % tag)
 	for row in rows:
 		var btn := panel.find_child(str(row[0]), true, false) as Button
 		_check(btn != null, "%s: %s exists" % [tag, row[0]])
@@ -106,7 +106,7 @@ func _check_case(case: Dictionary) -> void:
 	var screen := Rect2(Vector2.ZERO, scene.get_viewport_rect().size)
 	var panel_rect := panel.get_global_rect()
 	_check(screen.grow(-2.0).encloses(panel_rect), "%s: panel %s fits %s" % [tag, str(panel_rect), str(screen)])
-	for node_name in ["LanguageButton", "OrientationButton", "MascotButton", "VolumeRow", "SettingsClose"]:
+	for node_name in ["LanguageButton", "OrientationButton", "VolumeRow", "SettingsClose"]:
 		var node := panel.find_child(node_name, true, false) as Control
 		_check(node != null and panel_rect.encloses(node.get_global_rect()),
 			"%s: %s stays inside the painted panel" % [tag, node_name])

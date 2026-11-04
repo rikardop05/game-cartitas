@@ -317,18 +317,25 @@ func test_refresh_keeps_cards_and_leaves_zone_and_reserve() -> void:
 	g.select_card("c5")
 	var zone_ids := g.zone.cards.map(func(c): return c.id)
 	var reserve_ids := g.reserve.map(func(c): return c.id)
-	var board_types := []
-	for c in g.board.active_cards():
-		board_types.append(c.type)
-	board_types.sort()
+	# Phase S1: Refresh redistributes types between the board and the decks, so the invariant is
+	# the multiset over board + deck_a + deck_b (this fixture has no decks, hence board only).
+	var pool_before := _pool_types(g)
 	Assert.is_true(g.use_refresh()["ok"], "refresh accepted")
-	var after_types := []
-	for c in g.board.active_cards():
-		after_types.append(c.type)
-	after_types.sort()
-	Assert.equals(after_types, board_types, "same cards stay on the board")
+	Assert.equals(_pool_types(g), pool_before, "the same cards stay in play (board + decks)")
 	Assert.equals(g.zone.cards.map(func(c): return c.id), zone_ids, "zone untouched")
 	Assert.equals(g.reserve.map(func(c): return c.id), reserve_ids, "reserve untouched")
+
+# Types of every card still in play across the board and both decks, sorted (Phase S1 invariant).
+func _pool_types(g: GameController) -> Array:
+	var types: Array = []
+	for c in g.board.active_cards():
+		types.append(c.type)
+	for t in g.deck_a.card_types.slice(g.deck_a.current_index):
+		types.append(str(t))
+	for t in g.deck_b.card_types.slice(g.deck_b.current_index):
+		types.append(str(t))
+	types.sort()
+	return types
 
 func test_hold_and_refresh_rejected_without_stock() -> void:
 	var g := GameController.new()

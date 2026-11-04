@@ -192,8 +192,7 @@ func test_crossfade_gains_are_equal_power_and_never_dip() -> void:
 	Assert.is_true(absf(AudioManager.crossfade_gains(2.0).x - 1.0) < 0.001, "t is clamped above 1")
 	Assert.is_true(AudioManager.crossfade_gains(-1.0).x < 0.001, "t is clamped below 0")
 
-func test_every_shipped_track_keeps_a_third_audible_before_the_overlap() -> void:
-	for path in AudioManager.GAMEPLAY_TRACKS:
+func test_every_shipped_track_keeps_a_third_audible_before_the_overlap() -> void:	for path in AudioManager.GAMEPLAY_TRACKS:
 		var stream := load(path) as AudioStream
 		if stream == null:
 			continue
@@ -204,3 +203,38 @@ func test_every_shipped_track_keeps_a_third_audible_before_the_overlap() -> void
 			"%s is never overlapped for more than a third (%.2f of %.2f s)" % [path, window, length])
 		Assert.is_true(length - window > window,
 			"%s plays more than half of itself alone (%.2f s)" % [path, length - window])
+
+# --- Phase S1: Refresh sounds --------------------------------------------------------------
+
+# The refresh plays a one-shot "activation" and a longer "pouring dominoes" shuffle underneath
+# the animation; end_refresh_sound() fades the shuffle out when the cards have landed.
+func test_refresh_sounds_exist_and_are_one_shots() -> void:
+	for path in [AudioManager.POWER_ACTIVATE_SFX, AudioManager.REFRESH_SHUFFLE_SFX]:
+		Assert.is_true(FileAccess.file_exists(path), "%s exists" % path)
+		var stream := load(path) as AudioStreamWAV
+		Assert.is_true(stream != null, "%s loads as a plain WAV effect" % path)
+		if stream == null:
+			continue
+		Assert.equals(stream.loop_mode, AudioStreamWAV.LOOP_DISABLED, "%s does not loop" % path)
+		var length := stream.get_length()
+		if path == AudioManager.POWER_ACTIVATE_SFX:
+			Assert.is_true(length > 0.5 and length < 2.5, "the activation is a short one-shot (%.2f s)" % length)
+		else:
+			Assert.is_true(length > 3.0, "the shuffle is long enough to run under the animation (%.2f s)" % length)
+
+func test_refresh_sound_gains_are_balanced_and_never_clip() -> void:
+	# Both are plain 16-bit one-shots like the rest of the mix, so their peaks are measurable.
+	var activate := load(AudioManager.POWER_ACTIVATE_SFX) as AudioStreamWAV
+	var shuffle := load(AudioManager.REFRESH_SHUFFLE_SFX) as AudioStreamWAV
+	Assert.is_true(activate != null and activate.format == AudioStreamWAV.FORMAT_16_BITS,
+		"the activation imports as 16-bit PCM (measurable peak, same as the other effects)")
+	Assert.is_true(shuffle != null and shuffle.format == AudioStreamWAV.FORMAT_16_BITS,
+		"the shuffle imports as 16-bit PCM (measurable peak, same as the other effects)")
+	if activate == null or shuffle == null:
+		return
+	var activate_peak := _peak_db(activate) + AudioManager.sfx_output_gain_db(AudioManager.POWER_ACTIVATE_DB)
+	var shuffle_peak := _peak_db(shuffle) + AudioManager.sfx_output_gain_db(AudioManager.REFRESH_SHUFFLE_DB)
+	Assert.is_true(activate_peak < -3.0, "the activation peaks at %.1f dB with its gain (never clips)" % activate_peak)
+	Assert.is_true(shuffle_peak < -3.0, "the shuffle peaks at %.1f dB with its gain (never clips)" % shuffle_peak)
+	Assert.is_true(shuffle_peak < activate_peak - 6.0,
+		"the shuffle stays a bed under the activation (%.1f vs %.1f dB)" % [shuffle_peak, activate_peak])

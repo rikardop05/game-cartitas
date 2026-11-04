@@ -6,6 +6,8 @@ const SUITE_PATHS := [
 	"res://tests/test_board.gd",
 	"res://tests/test_deck.gd",
 	"res://tests/test_game_controller.gd",
+	"res://tests/test_refresh.gd",
+	"res://tests/test_timer_manager.gd",
 	"res://tests/test_move_result.gd",
 	"res://tests/test_level_snapshot.gd",
 	"res://tests/test_progress.gd",
@@ -36,7 +38,16 @@ const SUITE_PATHS := [
 	"res://tests/test_volume_row.gd",
 ]
 
+const THROWAWAY_SAVE := "user://run_tests_throwaway_save.json"
+
 func _init() -> void:
+	# Suites that drive the Game autoload (powers, settings) persist through Game.save_path:
+	# keep every write off the player's real save, then put the path back.
+	var game = root.get_node_or_null("Game")
+	var real_save_path := ""
+	if game != null:
+		real_save_path = game.save_path
+		game.save_path = THROWAWAY_SAVE
 	var total := 0
 	var failed := 0
 	var load_failures := 0
@@ -78,4 +89,8 @@ func _init() -> void:
 	if load_failures > 0:
 		print("ERROR: %d suite(s) failed to load" % load_failures)
 	print("RESULTS: %d tests, %d failed" % [total, failed])
+	if game != null and is_instance_valid(game):
+		game.save_path = real_save_path
+	if FileAccess.file_exists(THROWAWAY_SAVE):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(THROWAWAY_SAVE))
 	quit(1 if failed > 0 else 0)

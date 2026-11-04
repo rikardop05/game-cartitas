@@ -184,6 +184,17 @@ func use_undo_typed() -> MoveResultType:
 func use_refresh() -> Dictionary:
 	return use_refresh_typed().to_dict()
 
+# How use_refresh() rearranges the board. The level screen uses REFRESH_REDISTRIBUTE (Phase S1:
+# cards really leave their place, change layer and type, and the Support Decks are refilled from
+# the same pool). REFRESH_POSITION_SHUFFLE is the pre-S1 behaviour, kept ONLY for
+# SolvabilityChecker: the level generator was validated against that simulation, so switching it
+# would rewrite every generated board (all probe_determinism hashes). It is also the more
+# conservative model - a redistribution can bring new types/layers, which the old simulation
+# never assumes - so keeping it there never lets an unsolvable board through by optimism.
+const REFRESH_REDISTRIBUTE := "redistribute"
+const REFRESH_POSITION_SHUFFLE := "position_shuffle"
+var refresh_rule := REFRESH_REDISTRIBUTE
+
 func use_refresh_typed() -> MoveResultType:
 	if status != Status.PLAYING:
 		return _make_result(false, MoveResult.Reason.NOT_PLAYING)
@@ -191,11 +202,60 @@ func use_refresh_typed() -> MoveResultType:
 		return _make_result(false, MoveResult.Reason.NO_POWER)
 	powers.consume("refresh")
 	_record_action({"type": "USE_REFRESH"})
-	board.shuffle_positions(rng)
-	deck_a.shuffle_remaining(rng)
-	deck_b.shuffle_remaining(rng)
+	if refresh_rule == REFRESH_POSITION_SHUFFLE:
+		board.shuffle_positions(rng)
+		deck_a.shuffle_remaining(rng)
+		deck_b.shuffle_remaining(rng)
+		board.recalculate_availability()
+		return _make_result(true)
+	var before := _refresh_payload()
+	board.redistribute(rng, deck_a, deck_b, _refresh_is_playable)
 	board.recalculate_availability()
-	return _make_result(true)
+	var result := _make_result(true)
+	result.refresh = before
+	return result
+
+# State BEFORE the redistribution, for the animation: every active board card with its old slot
+# and type, plus the two deck counts.
+func _refresh_payload() -> Dictionary:
+	var board_before := {}
+	for c in board.cards:
+		if c.location != Card.Location.BOARD or c.is_removed():
+			continue
+		board_before[c.id] = {"position": c.position, "layer": c.layer, "type": c.type}
+	return {
+		"board_before": board_before,
+		"deck_a_before": deck_a.remaining_count(),
+		"deck_b_before": deck_b.remaining_count(),
+	}
+
+# Cheap "the player is not stuck" test used to pick between redistribution candidates: at least
+# one card must be playable and some type must have three copies among the cards the player can
+# still reach (available board cards, both deck remainders, the Reserve and the zone).
+func _refresh_is_playable() -> bool:
+	var reachable := {}
+	var available := 0
+	for c in board.cards:
+		if c.location != Card.Location.BOARD or c.is_removed():
+			continue
+		if c.state != Card.State.AVAILABLE:
+			continue
+		available += 1
+		reachable[c.type] = int(reachable.get(c.type, 0)) + 1
+	if available == 0:
+		return false
+	for t in deck_a.card_types.slice(deck_a.current_index):
+		reachable[str(t)] = int(reachable.get(str(t), 0)) + 1
+	for t in deck_b.card_types.slice(deck_b.current_index):
+		reachable[str(t)] = int(reachable.get(str(t), 0)) + 1
+	for c in reserve:
+		reachable[c.type] = int(reachable.get(c.type, 0)) + 1
+	for c in zone.cards:
+		reachable[c.type] = int(reachable.get(c.type, 0)) + 1
+	for t in reachable:
+		if int(reachable[t]) >= 3:
+			return true
+	return false
 
 func check_victory() -> bool:
 	return board.remaining_count() == 0 \

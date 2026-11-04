@@ -140,6 +140,15 @@ const DEAL_DROP_RATIO := 1.4
 const DEAL_FULL_FX_MAX := 12
 # Deal: only this many cards get the green halo/ring/flash (spread over the cascade).
 const DEAL_HERO_FX_MAX := 4
+# Refresh moves many cards at once: keep full particle bursts to the most exposed landings.
+const REFRESH_FULL_FX_MAX := 10
+const REFRESH_LIFT_SECONDS := 0.18
+const REFRESH_FLIGHT_SECONDS := 0.42
+const REFRESH_LAND_SECONDS := 0.18
+const REFRESH_LAND_STAGGER := 0.003
+const POWER_LIFT_SECONDS := 0.13
+const POWER_FLIGHT_SECONDS := 0.26
+const POWER_LAND_SECONDS := 0.16
 # After the squash the zone ghost holds this long (glow behind it) before the real card shows.
 const IMPACT_HOLD_SECONDS := 0.2
 const FLIGHT_TILT := 0.07
@@ -278,6 +287,10 @@ var _shifts: Array = []
 # Board cards still falling in the deal, by card id -> {node, tween, final}.
 var _deal_nodes: Dictionary = {}
 var _dealing := false
+var _power_animation_active := false
+var _refresh_animation_active := false
+var _refresh_end_sound_called := false
+var _power_landing_count := 0
 # True once the initial deal is over (or there was nothing to deal): the board is then at its
 # final geometry. Tests await it (is_dealing() / deal_finished) before measuring the board.
 var deal_complete := false
@@ -360,7 +373,9 @@ func _notification(what: int) -> void:
 		NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_APPLICATION_PAUSED:
 			controller.pause()
 		NOTIFICATION_APPLICATION_FOCUS_IN, NOTIFICATION_APPLICATION_RESUMED:
-			if not _help_shown and not _settings_open:
+			# Phase R: never start the clock before the deal is over — regaining focus while the
+			# level is still being dealt must not charge that time to the player.
+			if not _help_shown and not _settings_open and deal_complete:
 				controller.resume()
 
 func _process(_delta: float) -> void:
@@ -405,6 +420,11 @@ func _on_resized() -> void:
 	if not is_inside_tree() or controller == null:
 		return
 	render()
+	# A rebuild in the middle of the deal drops the deal tweens (their nodes are gone). The board
+	# is already at its final geometry, so close the deal — otherwise the held clock (Phase R)
+	# would never start.
+	if not deal_complete:
+		_end_deal()
 
 func _build_ui() -> void:
 	_is_landscape = _viewport_is_landscape()
@@ -538,11 +558,14 @@ func _build_mascot() -> void:
 		add_child(mascot)
 
 func _place_mascot() -> void:
-	if mascot == null or _mascot_area == null:
+	if mascot == null:
 		return
-	var area := _mascot_area.get_global_rect()
-	if area.size.x <= 0.0 or area.size.y <= 0.0:
-		return
+	if not _is_landscape:
+		if _mascot_area == null:
+			return
+		var area := _mascot_area.get_global_rect()
+		if area.size.x <= 0.0 or area.size.y <= 0.0:
+			return
 	if _is_landscape:
 		# Editor-tuned landscape box is local to BoardFrame. Mascot draws every base
 		# portrait, expression and the bunny rig into this same box, preserving the
@@ -1223,6 +1246,8 @@ func render() -> void:
 			_hook_juice(node)
 			_board_nodes[card.id] = node
 			board_container.add_child(node)
+		elif str(node.get_meta("card_type", "")) != card.type:
+			_set_card_button_type(node, card.type, card_size, false)
 		var visual_position: Vector2 = grid_positions.get(card.id, Vector2(
 			(card.position.x - origin.x) * position_scale.x,
 			(card.position.y - origin.y) * position_scale.y
@@ -1504,6 +1529,14 @@ func _update_board_card_node(button: Button, depth: int, card_size: Vector2, at:
 				var use_parent := depth > 0
 				if child_control.use_parent_material != use_parent:
 					child_control.use_parent_material = use_parent
+
+func _set_card_button_type(button: Button, card_type: String, card_size: Vector2, shadow: bool) -> void:
+	button.set_meta("card_type", card_type)
+	if button.get_child_count() > 0:
+		var old_face := button.get_child(0)
+		button.remove_child(old_face)
+		old_face.queue_free()
+	button.add_child(_make_card_rect(card_type, 0, card_size, shadow))
 
 # Depth of every board card under the cards that cover it: 0 = reachable, 1 = covered only
 # by reachable cards, 2 = covered by a depth-1 card, and so on. Cards are visited from the
@@ -2065,9 +2098,9 @@ func _close_help() -> void:
 		controller.resume()
 
 # --- In-game settings ---------------------------------------------------------------------
-# The gear opens the same four settings as the Options screen. Everything applies at once
-# through the Game API (and so persists); the level itself is never restarted: language and
-# mascot rebuild the screen UI around the live controller, orientation goes through the
+# The gear opens the same settings as the Options screen. Everything applies at once
+# through the Game API (and so persists); the level itself is never restarted: language
+# rebuilds the screen UI around the live controller, orientation goes through the
 # existing resize path, and the overlay is re-created on top of either rebuild.
 
 func _on_settings() -> void:
@@ -2177,7 +2210,6 @@ func _build_settings_overlay() -> void:
 		rows = col
 	rows.add_child(_make_settings_row("LanguageButton", Localizer.t("language"), _on_settings_language, row_height, V2_CONFIG_ROW_ART[0]))
 	rows.add_child(_make_settings_row("OrientationButton", _settings_orientation_text(), _on_settings_orientation, row_height, V2_CONFIG_ROW_ART[1]))
-	rows.add_child(_make_settings_row("MascotButton", _settings_mascot_text(), _on_settings_mascot, row_height, V2_CONFIG_ROW_ART[2]))
 	var volume := VolumeRow.new(row_height)
 	volume.changed.connect(_refresh_sound_icon)
 	volume.custom_minimum_size.x = 0
@@ -2351,15 +2383,8 @@ func _settings_orientation_text() -> String:
 	var current := "landscape" if str(Game.settings.get("orientation", "portrait")) == "landscape" else "portrait"
 	return "%s: %s" % [Localizer.t("orientation_label"), Localizer.t(current)]
 
-func _settings_mascot_text() -> String:
-	return "%s: %s" % [Localizer.t("mascot_label"), Localizer.t("option_on" if Game.mascot_enabled() else "option_off")]
-
 func _on_settings_language() -> void:
 	Game.set_locale("en" if Localizer.current == "pt" else "pt")
-	_rebuild_for_settings()
-
-func _on_settings_mascot() -> void:
-	Game.set_mascot(not Game.mascot_enabled())
 	_rebuild_for_settings()
 
 # The window changes shape: the existing resize path (_on_resized) rebuilds the screen, and
@@ -2403,7 +2428,7 @@ func _flash_zone_full() -> void:
 	t.tween_property(panel, "modulate", Color.WHITE, 0.3)
 
 func _accepts_taps() -> bool:
-	return controller != null and controller.status == GameController.Status.PLAYING
+	return controller != null and controller.status == GameController.Status.PLAYING and not _refresh_animation_active
 
 func _on_card(card_id: String) -> void:
 	if not _accepts_taps():
@@ -2513,12 +2538,17 @@ func _drawn_card_id(snap_ids: Array, matched: Array, target_index: int) -> Strin
 	return ""
 
 func _on_power(power: String) -> void:
-	if not _accepts_taps():
+	if not _accepts_taps() or _power_animation_active:
 		return
 	_play_effect("play_power", power)
 	# Hold, Undo and Refresh move or remove zone cards: land the cards still flying in first,
 	# so no ghost or hidden slot outlives the zone it was heading for.
 	_cancel_zone_flights()
+	var zone_before: Array = _snapshot_power_zone()
+	var refresh_before: Dictionary = _snapshot_refresh_cards() if power == "refresh" else {}
+	_power_animation_active = true
+	_refresh_animation_active = power == "refresh"
+	_refresh_end_sound_called = false
 	var result: Dictionary = {}
 	match power:
 		"hold":
@@ -2527,14 +2557,333 @@ func _on_power(power: String) -> void:
 			result = controller.use_undo()
 		"refresh":
 			result = controller.use_refresh()
-	if bool(result.get("ok", false)):
-		# Campaign power stock is permanent: persist it now, not only on the end screen.
-		# An Endless run's stock lives in memory and dies with the run.
-		if _endless == null:
-			Game.save_progress()
-		_say("power_used")
+	if not bool(result.get("ok", false)):
+		_power_animation_active = false
+		_refresh_animation_active = false
+		render()
+		_check_end()
+		return
+	# Campaign power stock is permanent: persist it now, not only on the end screen.
+	# An Endless run's stock lives in memory and dies with the run.
+	if _endless == null:
+		Game.save_progress()
+	_say("power_used")
 	render()
+	var flights: Array = []
+	var hidden_nodes: Array = []
+	match power:
+		"refresh":
+			flights = _build_refresh_flights(refresh_before)
+			var refresh_targets: Array = []
+			for node in _board_nodes.values():
+				refresh_targets.append(node)
+			refresh_targets.append(deck_a_btn)
+			refresh_targets.append(deck_b_btn)
+			hidden_nodes = _hide_power_nodes(refresh_targets)
+			await _animate_power_flights(flights, true)
+			_restore_power_nodes(hidden_nodes)
+		"undo":
+			flights = _build_undo_flights(zone_before)
+			hidden_nodes = _hide_power_nodes(_power_flight_targets(flights))
+			await _animate_power_flights(flights, false)
+			_restore_power_nodes(hidden_nodes)
+		"hold":
+			flights = _build_hold_flights(zone_before)
+			hidden_nodes = _hide_power_nodes(_power_flight_targets(flights))
+			await _animate_power_flights(flights, false)
+			_restore_power_nodes(hidden_nodes)
+	_power_animation_active = false
+	_refresh_animation_active = false
 	_check_end()
+
+func _snapshot_power_zone() -> Array:
+	var snapshot: Array = []
+	for i in controller.zone.cards.size():
+		var card: Card = controller.zone.cards[i]
+		snapshot.append({
+			"id": str(card.id),
+			"type": str(card.type),
+			"card": card,
+			"rect": _zone_child_rect(i),
+		})
+	return snapshot
+
+func _snapshot_refresh_cards() -> Dictionary:
+	var depths := _blocked_depths()
+	var board: Array = []
+	for card in controller.board.cards:
+		if card.is_removed() or card.location != Card.Location.BOARD:
+			continue
+		board.append({
+			"id": str(card.id), "type": str(card.type), "layer": int(card.layer),
+			"depth": int(depths.get(card.id, 0)), "rect": _board_card_rect(card),
+		})
+	var decks: Dictionary = {}
+	for deck_id in ["a", "b"]:
+		var deck: DeckManager = controller.deck_a if deck_id == "a" else controller.deck_b
+		var button: Button = deck_a_btn if deck_id == "a" else deck_b_btn
+		if deck.remaining_count() > 0 and is_instance_valid(button):
+			decks[deck_id] = {"type": str(deck.current_type()), "rect": _deck_face_rect(button)}
+	return {"board": board, "decks": decks}
+
+func _build_refresh_flights(before: Dictionary) -> Array:
+	var flights: Array = []
+	var new_depths := _blocked_depths()
+	for old in before.get("board", []):
+		var card: Card = controller.board.get_card(str(old["id"]))
+		if card == null or card.is_removed() or card.location != Card.Location.BOARD:
+			continue
+		var depth := int(new_depths.get(card.id, 0))
+		var target_node := _board_nodes.get(card.id) as Button
+		var flight := {
+			"id": str(card.id),
+			"from": old["rect"], "to": _board_card_rect(card),
+			"old_type": str(old["type"]), "new_type": str(card.type),
+			"old_depth": int(old["depth"]), "new_depth": depth,
+			"layer": int(card.layer), "target_node": target_node,
+		}
+		flights.append(flight)
+
+	# The visible tops flip in place; four additional exchange ghosts (two per non-empty deck)
+	# travel between a deck and the board so unchanged pile counts still read as a real exchange.
+	var board_flows: Array = flights.duplicate()
+	board_flows.shuffle()
+	var flow_index := 0
+	for deck_id in ["a", "b"]:
+		if not before.get("decks", {}).has(deck_id) or board_flows.is_empty():
+			continue
+		var old_deck: Dictionary = before["decks"][deck_id]
+		var deck: DeckManager = controller.deck_a if deck_id == "a" else controller.deck_b
+		var deck_button: Button = deck_a_btn if deck_id == "a" else deck_b_btn
+		if deck.remaining_count() <= 0 or not is_instance_valid(deck_button):
+			continue
+		var deck_rect := _deck_face_rect(deck_button)
+		var board_flow: Dictionary = board_flows[flow_index % board_flows.size()]
+		flow_index += 1
+		flights.append({
+			"from": old_deck["rect"], "to": board_flow["to"],
+			"old_type": str(old_deck["type"]), "new_type": str(board_flow["new_type"]),
+			"old_depth": 0, "new_depth": int(board_flow["new_depth"]),
+			"layer": int(board_flow["layer"]), "target_node": board_flow["target_node"],
+			"exchange": true,
+		})
+		flights.append({
+			"from": board_flow["from"], "to": deck_rect,
+			"old_type": str(board_flow["old_type"]), "new_type": str(deck.current_type()),
+			"old_depth": int(board_flow["old_depth"]), "new_depth": 0,
+			"layer": 2147483647, "target_node": deck_button,
+			"exchange": true,
+		})
+	return flights
+
+func _build_undo_flights(zone_before: Array) -> Array:
+	var current_ids: Dictionary = {}
+	for card in controller.zone.cards:
+		current_ids[str(card.id)] = true
+	var flights: Array = []
+	for old in zone_before:
+		if current_ids.has(str(old["id"])):
+			continue
+		var card: Card = old["card"]
+		var board_card: Card = controller.board.get_card(str(card.id))
+		var target_rect: Rect2
+		var target_node: Control
+		var target_layer := 0
+		var target_type := str(card.type)
+		if board_card != null and not board_card.is_removed() and board_card.location == Card.Location.BOARD:
+			target_rect = _board_card_rect(board_card)
+			target_node = _board_nodes.get(str(card.id)) as Control
+			target_layer = int(board_card.layer)
+		else:
+			var deck_id := "b" if card.source == Card.Source.DECK_B else "a"
+			var deck: DeckManager = controller.deck_b if deck_id == "b" else controller.deck_a
+			var button: Button = deck_b_btn if deck_id == "b" else deck_a_btn
+			if deck.remaining_count() <= 0:
+				continue
+			target_rect = _deck_face_rect(button)
+			target_node = button
+			target_type = str(deck.current_type())
+		flights.append({
+			"from": old["rect"], "to": target_rect,
+			"old_type": str(old["type"]), "new_type": target_type,
+			"old_depth": 0, "new_depth": 0, "layer": target_layer,
+			"target_node": target_node,
+		})
+	return flights
+
+func _build_hold_flights(zone_before: Array) -> Array:
+	var flights: Array = []
+	for old in zone_before:
+		var card_id := str(old["id"])
+		var card: Card = _reserve_card(card_id)
+		if card == null:
+			continue
+		var index := controller.reserve.find(card)
+		var node := _reserve_nodes.get(card_id) as Control
+		flights.append({
+			"from": old["rect"], "to": _reserve_card_rect(card_id),
+			"old_type": str(old["type"]), "new_type": str(card.type),
+			"old_depth": 0, "new_depth": 0, "layer": index,
+			"target_node": node,
+		})
+	return flights
+
+func _power_flight_targets(flights: Array) -> Array:
+	var targets: Array = []
+	for flight in flights:
+		if flight.get("target_node") != null:
+			targets.append(flight["target_node"])
+	return targets
+
+func _hide_power_nodes(nodes: Array) -> Array:
+	var hidden: Array = []
+	var seen: Dictionary = {}
+	for node in nodes:
+		if node == null or not is_instance_valid(node) or seen.has(node.get_instance_id()):
+			continue
+		seen[node.get_instance_id()] = true
+		hidden.append({"node": node, "modulate": node.modulate})
+		node.modulate.a = 0.0
+	return hidden
+
+func _restore_power_nodes(hidden: Array) -> void:
+	for item in hidden:
+		var node: Variant = item["node"]
+		if is_instance_valid(node):
+			node.modulate = item["modulate"]
+
+func _make_power_ghost(flight: Dictionary) -> Dictionary:
+	var source: Rect2 = flight["from"]
+	var ghost := Node2D.new()
+	ghost.name = "PowerCardGhost"
+	ghost.set_meta("power_card_id", str(flight.get("id", "")))
+	ghost.z_index = randi_range(0, 1000)
+	ghost.global_position = source.get_center()
+	ghost.scale = Vector2.ONE
+	var face := _make_card_rect(str(flight["old_type"]), int(flight["old_depth"]), source.size, true)
+	face.position = -source.size * 0.5
+	ghost.add_child(face)
+	_fx().add_child(ghost)
+	return {"node": ghost, "face": face, "flight": flight}
+
+func _random_board_point() -> Vector2:
+	var rect := board_container.get_global_rect()
+	var pad := minf(24.0, minf(rect.size.x, rect.size.y) * 0.12)
+	return Vector2(
+		randf_range(rect.position.x + pad, maxf(rect.position.x + pad, rect.end.x - pad)),
+		randf_range(rect.position.y + pad, maxf(rect.position.y + pad, rect.end.y - pad)))
+
+func _set_power_flight_progress(progress: float, state: Dictionary) -> void:
+	var flight: Dictionary = state["flight"]
+	var from_rect: Rect2 = flight["from"]
+	var to_rect: Rect2 = flight["to"]
+	var start := from_rect.get_center() - Vector2(0.0, 8.0)
+	var end := to_rect.get_center() - Vector2(0.0, 8.0)
+	var bend: Vector2 = state["bend"]
+	var inverse := 1.0 - progress
+	var center := inverse * inverse * start + 2.0 * inverse * progress * bend + progress * progress * end
+	var ghost: Node2D = state["node"]
+	ghost.global_position = center
+	ghost.rotation = lerpf(float(state["start_rotation"]), float(state["end_rotation"]), progress)
+
+func _flip_power_ghost(state: Dictionary) -> void:
+	var flight: Dictionary = state["flight"]
+	var ghost: Node2D = state["node"]
+	var old_face: Control = state["face"]
+	if is_instance_valid(old_face):
+		ghost.remove_child(old_face)
+		old_face.queue_free()
+	var destination: Rect2 = flight["to"]
+	var size := destination.size
+	var face := _make_card_rect(str(flight["new_type"]), int(flight["new_depth"]), size, true)
+	face.position = -size * 0.5
+	ghost.add_child(face)
+	state["face"] = face
+
+func _animate_power_flights(flights: Array, refresh: bool) -> void:
+	if flights.is_empty():
+		if refresh:
+			_end_refresh_sound()
+		return
+	var lift_seconds := REFRESH_LIFT_SECONDS if refresh else POWER_LIFT_SECONDS
+	var flight_seconds := REFRESH_FLIGHT_SECONDS if refresh else POWER_FLIGHT_SECONDS
+	var land_seconds := REFRESH_LAND_SECONDS if refresh else POWER_LAND_SECONDS
+	var stagger_seconds := REFRESH_LAND_STAGGER if refresh else 0.025
+	var states: Array = []
+	for flight in flights:
+		var state := _make_power_ghost(flight)
+		state["bend"] = _random_board_point()
+		state["start_rotation"] = randf_range(-0.09, 0.09)
+		state["end_rotation"] = randf_range(-0.06, 0.06)
+		states.append(state)
+		var ghost: Node2D = state["node"]
+		var lift := ghost.create_tween().set_parallel(true)
+		lift.tween_property(ghost, "scale", Vector2.ONE * 1.28, lift_seconds).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		lift.tween_property(ghost, "global_position", ghost.global_position + Vector2(0.0, -10.0), lift_seconds)
+		lift.tween_property(ghost, "rotation", float(state["start_rotation"]), lift_seconds)
+	await get_tree().create_timer(lift_seconds).timeout
+	for state in states:
+		var ghost: Node2D = state["node"]
+		ghost.z_index = randi_range(0, 1000)
+		var route := ghost.create_tween()
+		route.tween_method(_set_power_flight_progress.bind(state), 0.0, 1.0, flight_seconds).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+		var flip := ghost.create_tween()
+		flip.tween_interval(flight_seconds * 0.43)
+		flip.tween_property(ghost, "scale:x", 0.18, 0.045).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+		flip.tween_callback(_flip_power_ghost.bind(state))
+		flip.tween_property(ghost, "scale:x", 1.28, 0.045).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	await get_tree().create_timer(flight_seconds).timeout
+	var landing_order := states.duplicate()
+	landing_order.sort_custom(func(a, b): return int(a["flight"]["layer"]) < int(b["flight"]["layer"]))
+	var full_candidates: Array = []
+	for state in states:
+		var flight: Dictionary = state["flight"]
+		state["full_impact"] = false
+		if int(flight["new_depth"]) == 0 and not bool(flight.get("exchange", false)):
+			full_candidates.append(state)
+	full_candidates.sort_custom(func(a, b): return int(a["flight"]["layer"]) > int(b["flight"]["layer"]))
+	for i in mini(REFRESH_FULL_FX_MAX, full_candidates.size()):
+		full_candidates[i]["full_impact"] = true
+	_power_landing_count = 0
+	for rank in landing_order.size():
+		var state: Dictionary = landing_order[rank]
+		var flight: Dictionary = state["flight"]
+		var full := not refresh or bool(state["full_impact"])
+		var ghost: Node2D = state["node"]
+		var land := ghost.create_tween()
+		land.tween_interval(float(rank) * stagger_seconds)
+		land.chain().set_parallel(true)
+		var destination: Rect2 = flight["to"]
+		land.tween_property(ghost, "global_position", destination.get_center(), land_seconds).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		land.tween_property(ghost, "scale", Vector2.ONE, land_seconds).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		land.tween_property(ghost, "rotation", 0.0, land_seconds).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		land.chain().tween_callback(_finish_power_landing.bind(state, "red", full))
+	while _power_landing_count < states.size():
+		await get_tree().process_frame
+	if refresh:
+		_end_refresh_sound()
+	await get_tree().process_frame
+
+func _finish_power_landing(state: Dictionary, palette: String, full: bool) -> void:
+	var target_node: Control = state["flight"].get("target_node")
+	if is_instance_valid(target_node):
+		target_node.modulate.a = 1.0
+	var face: Control = state["face"]
+	if is_instance_valid(face):
+		CardImpactFx.play(_fx(), face, {
+			"palette": palette, "full": full, "light_dust": not full, "squash": false,
+			"intensity": 0.88 if full else 0.55,
+		})
+	var ghost: Node2D = state["node"]
+	if is_instance_valid(ghost):
+		ghost.queue_free()
+	_power_landing_count += 1
+
+func _end_refresh_sound() -> void:
+	var audio := get_node_or_null("/root/Audio")
+	if audio != null and audio.has_method("end_refresh_sound"):
+		_refresh_end_sound_called = true
+		audio.call("end_refresh_sound", 0.25)
 
 func _board_card_rect(card: Card) -> Rect2:
 	# render() caches the layout of the board it drew; reuse it while the board has not resized.
@@ -2575,6 +2924,8 @@ func _reserve_card_rect(card_id: String) -> Rect2:
 
 # True when no ghost, flash or burst is left on screen.
 func visuals_settled() -> bool:
+	if _power_animation_active:
+		return false
 	if _fx_layer == null or not is_instance_valid(_fx_layer):
 		return true
 	for child in _fx_layer.get_children():
@@ -2962,6 +3313,9 @@ func _spawn_match_fx(path: String, center: Vector2, side: float, start_scale: fl
 # Every board card starts above its place, invisible and inert, and falls in a fast cascade
 # (bottom layer first). Landing = the same impact as the zone, in full for a capped subset.
 func _play_deal() -> void:
+	# Phase R: the level clock only starts when the player can actually play, and from zero. The
+	# time spent building, prewarming and dealing this level is not the player's time.
+	controller.timer.reset()
 	var cards: Array = []
 	for card in controller.board.cards:
 		if card.is_removed() or card.location != Card.Location.BOARD:
@@ -2970,6 +3324,7 @@ func _play_deal() -> void:
 			cards.append(card)
 	if cards.is_empty():
 		_finish_deal_state()
+		controller.timer.resume()   # nothing to deal: the player can play right away
 		return
 	cards.sort_custom(func(a, b): return a.layer < b.layer)
 	var depths := _blocked_depths()
@@ -3071,6 +3426,9 @@ func _end_deal() -> void:
 	for card_id in _deal_nodes.keys().duplicate():
 		_settle_deal_card(card_id)
 	if controller != null and controller.status == GameController.Status.PLAYING and not _help_shown and not _settings_open:
+		# Phase R: play starts now, so the clock starts now — from zero, whatever any earlier
+		# resume (focus, overlay) may have banked while the level was still setting up.
+		controller.timer.reset()
 		controller.timer.resume()
 
 # Plays one of the real effects owned by the Audio autoload (Board, Deck, win, lose).

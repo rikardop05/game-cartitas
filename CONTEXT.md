@@ -64,7 +64,7 @@ _Avoid_: Level (inside Endless Mode), stage
 Endless Mode points: per matched card plus a bonus per cleared Round. The campaign has no Score, only stars.
 
 **Hero**:
-The character drawn beside the board who says the instruction, tips and reactions (it replaced the single mascot "Ace"). One Hero is fixed per Level or Endless Round; every Hero speaks with the same neutral "hero" line family.
+The character drawn beside the board who says the instruction, tips and reactions (it replaced the single mascot "Ace"). One Hero is always visible per Level or Endless Round; every Hero speaks with the same neutral "hero" line family.
 _Avoid_: Mascot (the old single host), NPC
 
 **Hero Portrait**:

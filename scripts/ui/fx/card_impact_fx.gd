@@ -40,7 +40,9 @@ const SQUASH_UP_SECONDS := 0.16
 
 ## Defaults; every key can be overridden per card type through `config`.
 const DEFAULT_CONFIG := {
+	"palette": "green",
 	"full": true,                                   # false = light dust puff only
+	"light_dust": false,                            # one small puff per side for a large multi-card landing
 	"intensity": 1.0,                               # scales sizes, speeds and alpha
 	"squash": true,                                 # squash/bounce the card itself
 	"squash_depth": 0.09,                           # small, like the reference: ~1.06 x / 0.91 y at the deepest point
@@ -62,6 +64,15 @@ const DEFAULT_CONFIG := {
 	"on_done": Callable(),                          # called when the card finished its squash
 }
 
+## Refresh/Undo/Hold landings use the same effect shape with a warm crimson energy palette.
+## Beige dust and the existing green default remain unchanged for all existing callers.
+const RED_PALETTE := {
+	"energy_colors": [Color("#ff5548"), Color("#ffb3a1"), Color("#9d1838")],
+	"spark_colors": [Color("#ff4038"), Color("#fff0e9"), Color("#ff7968")],
+	"ring_color": Color("#ff5961"),
+	"glow_color": Color("#e9344b"),
+}
+
 static var _additive: CanvasItemMaterial
 ## Landings alive right now (the smoke asserts it returns to 0).
 static var live_count := 0
@@ -73,11 +84,15 @@ static func play(parent: Node, card: Control, config: Dictionary = {}) -> CardIm
 	if parent == null or not is_instance_valid(parent) or card == null or not is_instance_valid(card):
 		return null
 	var cfg := DEFAULT_CONFIG.duplicate()
+	if str(config.get("palette", "green")) == "red":
+		cfg.merge(RED_PALETTE, true)
 	cfg.merge(config, true)
 	var xf := card.get_global_transform()
 	var scale_xy := xf.get_scale()
 	var size_px := Vector2(card.size.x * absf(scale_xy.x), card.size.y * absf(scale_xy.y))
 	var fx := _instance()
+	fx.set_meta("palette", str(cfg.get("palette", "green")))
+	fx.set_meta("full", bool(cfg["full"]))
 	live_count += 1
 	fx.tree_exited.connect(_on_gone)
 	if parent is CanvasItem:
@@ -119,7 +134,7 @@ func _build(size_px: Vector2, cfg: Dictionary) -> void:
 	picks.shuffle()
 	var half_w := size_px.x * 0.5
 	# Dust: mostly sideways from the base, behind the card; a little in front of the bottom edge.
-	var behind: int = 4 if full else 3
+	var behind: int = 1 if bool(cfg["light_dust"]) else (4 if full else 3)
 	_dust(back, DUST[picks[0]], Vector2(-1, -0.18), behind, k, dust_tint, half_w, 1.0)
 	_dust(back, DUST[picks[1]], Vector2(1, -0.18), behind, k, dust_tint, half_w, 1.0)
 	if full:

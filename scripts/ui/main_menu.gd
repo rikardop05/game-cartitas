@@ -85,12 +85,12 @@ const LOGO_HEIGHT_LANDSCAPE := 84.0
 const LOGO_HEIGHT_PORTRAIT := 92.0
 const MENU_BACKGROUNDS: Array[Dictionary] = [
 	# Every supplied scene has at least one painted character, so separate character sprites stay off.
-	{"path": "res://assets/ui/menu_backgrounds/menu_bg_harbor.png", "show_heroes": false},
-	{"path": "res://assets/ui/menu_backgrounds/menu_bg_training.png", "show_heroes": false},
+	{"path": "res://assets/ui/menu_backgrounds/menu_bg_harbor.png", "show_heroes": false, "mirror": true},
+	{"path": "res://assets/ui/menu_backgrounds/menu_bg_training.png", "show_heroes": false, "mirror": true},
 	{"path": "res://assets/ui/menu_backgrounds/menu_bg_cathedral.png", "show_heroes": false},
-	{"path": "res://assets/ui/menu_backgrounds/menu_bg_library.png", "show_heroes": false},
+	{"path": "res://assets/ui/menu_backgrounds/menu_bg_library.png", "show_heroes": false, "mirror": true},
 	{"path": "res://assets/ui/menu_backgrounds/menu_bg_castle.png", "show_heroes": false},
-	{"path": "res://assets/ui/menu_backgrounds/menu_bg_forest.png", "show_heroes": false},
+	{"path": "res://assets/ui/menu_backgrounds/menu_bg_forest.png", "show_heroes": false, "mirror": true},
 ]
 static var _session_menu_background := ""
 static var _back_icon_texture_cache: Texture2D = null
@@ -208,6 +208,7 @@ func _build() -> void:
 	else:
 		var background_path := _menu_background_path if _screen == Screen.OPTIONS else ""
 		var background := UiHelpers.make_background(_landscape(), 0, background_path)
+		_apply_menu_background_mirror(background)
 		if _screen == Screen.OPTIONS:
 			# Options is an overlay on the menu's already-picked painting, not a new scene.
 			background.material = null
@@ -264,6 +265,12 @@ func _menu_background_spec(path: String) -> Dictionary:
 			return spec
 	return {}
 
+func _apply_menu_background_mirror(background: Control) -> void:
+	var texture_rect := background as TextureRect
+	if texture_rect != null:
+		texture_rect.flip_h = _landscape() and bool(
+			_menu_background_spec(_menu_background_path).get("mirror", false))
+
 func _on_viewport_resized() -> void:
 	if _resize_queued or not is_inside_tree():
 		return
@@ -290,6 +297,7 @@ func _build_menu() -> void:
 	_bg_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_bg_layer)
 	var background := UiHelpers.make_background(landscape, 0, _menu_background_path)
+	_apply_menu_background_mirror(background)
 	# The painted menu scenes already have their own legibility; avoid the gameplay
 	# background filter's fullscreen samples while moving the parallax layers.
 	background.material = null
@@ -710,7 +718,6 @@ func _build_options() -> void:
 		vbox.add_child(_make_options_title(20.0))
 	vbox.add_child(_make_option_row("LanguageButton", Localizer.t("language"), Localizer.t("language"), _on_toggle_language, row_height, CONFIG_ROW_ART[0]))
 	vbox.add_child(_make_option_row("OrientationButton", _orientation_label(), Localizer.t("orientation_label"), _on_toggle_orientation, row_height, CONFIG_ROW_ART[1]))
-	vbox.add_child(_make_option_row("MascotButton", _mascot_label(), Localizer.t("mascot_label"), _on_toggle_mascot, row_height, CONFIG_ROW_ART[2]))
 	var volume := VolumeRow.new(row_height)
 	_style_v2_volume_row(volume, CONFIG_ROW_ART[0], row_height, landscape)
 	vbox.add_child(volume)
@@ -1147,11 +1154,4 @@ func _orientation_label() -> String:
 func _on_toggle_orientation() -> void:
 	var landscape := str(Game.settings.get("orientation", "portrait")) != "landscape"
 	Game.set_orientation(landscape)
-	_build()
-
-func _mascot_label() -> String:
-	return "%s: %s" % [Localizer.t("mascot_label"), Localizer.t("option_on" if Game.mascot_enabled() else "option_off")]
-
-func _on_toggle_mascot() -> void:
-	Game.set_mascot(not Game.mascot_enabled())
 	_build()

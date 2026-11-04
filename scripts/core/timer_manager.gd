@@ -10,6 +10,14 @@ func start() -> void:
 	_running = true
 	_last_tick = Time.get_ticks_msec()
 
+# Puts the clock back to 0 and leaves it stopped. The Level screen resets it while it builds and
+# deals the level, then resumes() it on the first playable frame, so the build/prewarm/deal time is
+# never charged to the player and every level really opens at 00:00.
+func reset() -> void:
+	_elapsed_msec = 0
+	_running = false
+	_last_tick = Time.get_ticks_msec()
+
 func _update() -> void:
 	if _running:
 		var now := Time.get_ticks_msec()

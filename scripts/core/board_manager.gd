@@ -136,3 +136,90 @@ func shuffle_positions(rng: RandomNumberGenerator) -> void:
 			group[k].position = positions[k]
 	# Positions changed: the cached blocker lists are no longer valid.
 	_rebuild_index()
+
+# --- Phase S1: Refresh redistributes the board and both Support Decks ----------------------
+#
+# The board keeps its shape (the same set of position+layer slots) but not who sits where: the
+# active cards keep their ids and get another slot - so a card can change LAYER - and another
+# type drawn from the pool of every card still in play (the board plus the remaining cards of
+# deck_a and deck_b). The decks are refilled with exactly their previous counts, the zone and the
+# Reserve are never touched, so the counts and the overall type multiset are invariant.
+#
+# Everything is driven by the controller's rng, so the same state + seed redistributes the same
+# way. Up to REDISTRIBUTE_ATTEMPTS candidates are tried: one that actually changes the
+# arrangement and that `accept` (the controller: at least one available card and a reachable
+# triple) likes. When none is accepted the first changed candidate is used, so the refresh never
+# silently does nothing.
+const REDISTRIBUTE_ATTEMPTS := 16
+
+func redistribute(rng: RandomNumberGenerator, deck_a: DeckManager, deck_b: DeckManager, accept: Callable = Callable()) -> void:
+	var active := active_cards()
+	var slots: Array = []
+	for c in active:
+		slots.append({"position": c.position, "layer": c.layer})
+	var pool: Array = []
+	for c in active:
+		pool.append(c.type)
+	for t in deck_a.card_types.slice(deck_a.current_index):
+		pool.append(str(t))
+	for t in deck_b.card_types.slice(deck_b.current_index):
+		pool.append(str(t))
+	var deck_a_count := deck_a.remaining_count()
+	var deck_b_count := deck_b.remaining_count()
+	var signature := _arrangement_signature(active, deck_a, deck_b)
+	var have_fallback := false
+	var fallback_pool: Array = []
+	var fallback_slots: Array = []
+	for attempt in REDISTRIBUTE_ATTEMPTS:
+		_shuffle_in_place(pool, rng)
+		_shuffle_in_place(slots, rng)
+		_apply_arrangement(active, slots, pool, deck_a, deck_b, deck_a_count, deck_b_count)
+		_rebuild_index()
+		recalculate_availability()
+		if _arrangement_signature(active, deck_a, deck_b) == signature:
+			continue   # an identical layout is not a refresh: try again
+		if not have_fallback:
+			have_fallback = true
+			fallback_pool = pool.duplicate()
+			fallback_slots = slots.duplicate(true)
+		if not accept.is_valid() or bool(accept.call()):
+			return
+	if have_fallback:
+		# Nobody satisfied the playability preference: keep the first arrangement that at least
+		# changed something (deterministic, because the rng draws above are deterministic too).
+		_apply_arrangement(active, fallback_slots, fallback_pool, deck_a, deck_b, deck_a_count, deck_b_count)
+		_rebuild_index()
+		recalculate_availability()
+
+func _apply_arrangement(active: Array, slots: Array, pool: Array, deck_a: DeckManager, deck_b: DeckManager, deck_a_count: int, deck_b_count: int) -> void:
+	for i in active.size():
+		var card: Card = active[i]
+		card.position = slots[i]["position"]
+		card.layer = int(slots[i]["layer"])
+		card.type = str(pool[i])
+	var cursor := active.size()
+	_fill_remaining(deck_a, pool, cursor, deck_a_count)
+	cursor += deck_a_count
+	_fill_remaining(deck_b, pool, cursor, deck_b_count)
+
+# Overwrites only the cards still to be drawn, so the drawn history (needed by return_type) and
+# the deck length stay exactly as they were.
+func _fill_remaining(deck: DeckManager, pool: Array, start: int, count: int) -> void:
+	for i in count:
+		deck.card_types[deck.current_index + i] = str(pool[start + i])
+
+# Identifies who sits where: any candidate that reproduces it did not move anything.
+func _arrangement_signature(active: Array, deck_a: DeckManager, deck_b: DeckManager) -> String:
+	var parts := PackedStringArray()
+	for c in active:
+		parts.append("%s|%.3f|%.3f|%d|%s" % [c.id, c.position.x, c.position.y, c.layer, c.type])
+	parts.append(",".join(deck_a.card_types.slice(deck_a.current_index)))
+	parts.append(",".join(deck_b.card_types.slice(deck_b.current_index)))
+	return "\n".join(parts)
+
+func _shuffle_in_place(items: Array, rng: RandomNumberGenerator) -> void:
+	for i in range(items.size() - 1, 0, -1):
+		var j := rng.randi_range(0, i)
+		var tmp = items[i]
+		items[i] = items[j]
+		items[j] = tmp

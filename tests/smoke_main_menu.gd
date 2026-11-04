@@ -3,7 +3,7 @@ extends SceneTree
 # Main menu smoke test, driven through the real scene: the three v2 banner buttons exist and are
 # clickable in both locales (both use the delivered Portuguese art, with the localized wording
 # kept as tooltip/accessible label), Play opens the painted map, Options shows the
-# panel_options overlay with the config_row_1/2/3 row plates, the Sound toggle (which flips
+# panel_options overlay with the Language/Orientation rows, the Sound toggle (which flips
 # Game.sound_enabled()), the Regulagem handle, the Accept/Close reset badges and the
 # "Continuar" plate back to the menu, and the "?" badge opens the help overlay.
 # The scene saves through Game.save_path, which is pointed at a throwaway user:// file before
@@ -61,7 +61,6 @@ func _scenario(game) -> void:
 	game.progress = ProgressManager.new()
 	game.settings["sound"] = true
 	game.settings["volume"] = 1.0
-	game.settings["mascot"] = true
 	change_scene_to_file("res://scenes/main.tscn")
 	var menu = await _wait_scene("MainMenu")
 	if menu == null:
@@ -224,19 +223,19 @@ func _scenario(game) -> void:
 	var panel_art := menu.find_child("PanelArt", true, false) as TextureRect
 	_check(panel_art != null and str(panel_art.get_meta("source_path", "")).ends_with("panel_options.png"),
 		"options overlay background uses panel_options.png")
-	var options_nodes := ["LanguageButton", "OrientationButton", "MascotButton", "VolumeRow", "VolumeSlider", "SoundButton", "ResetButton"]
+	var options_nodes := ["LanguageButton", "OrientationButton", "VolumeRow", "VolumeSlider", "SoundButton", "ResetButton"]
 	if bool(menu.call("_landscape")):
 		options_nodes.append_array(["OptionsClose", "OptionsConfirm"])
 	else:
 		options_nodes.append("BackButton")
 	for node_name in options_nodes:
 		_check(menu.find_child(node_name, true, false) != null, "options has %s" % node_name)
-	# The three config_row plates are the real skins of the language/orientation/mascot rows
+	_check(menu.find_child("MascotButton", true, false) == null, "options has no Mascot row")
+	# The config_row plates are the real skins of the language/orientation rows
 	# The volume row intentionally has no backing plate.
 	var row_arts := {
 		"LanguageButton": "config_row_1.png",
 		"OrientationButton": "config_row_2.png",
-		"MascotButton": "config_row_3.png",
 		"ResetButton": "config_row_2.png",
 	}
 	for node_name in row_arts:
