@@ -2822,7 +2822,11 @@ func _animate_power_flights(flights: Array, refresh: bool) -> void:
 		lift.tween_property(ghost, "global_position", ghost.global_position + Vector2(0.0, -10.0), lift_seconds)
 		lift.tween_property(ghost, "rotation", float(state["start_rotation"]), lift_seconds)
 	await get_tree().create_timer(lift_seconds).timeout
+	if not is_inside_tree():
+		return
 	for state in states:
+		if not is_instance_valid(state["node"]):
+			continue
 		var ghost: Node2D = state["node"]
 		ghost.z_index = randi_range(0, 1000)
 		var route := ghost.create_tween()
@@ -2833,6 +2837,8 @@ func _animate_power_flights(flights: Array, refresh: bool) -> void:
 		flip.tween_callback(_flip_power_ghost.bind(state))
 		flip.tween_property(ghost, "scale:x", 1.28, 0.045).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	await get_tree().create_timer(flight_seconds).timeout
+	if not is_inside_tree():
+		return
 	var landing_order := states.duplicate()
 	landing_order.sort_custom(func(a, b): return int(a["flight"]["layer"]) < int(b["flight"]["layer"]))
 	var full_candidates: Array = []
@@ -2849,6 +2855,9 @@ func _animate_power_flights(flights: Array, refresh: bool) -> void:
 		var state: Dictionary = landing_order[rank]
 		var flight: Dictionary = state["flight"]
 		var full := not refresh or bool(state["full_impact"])
+		if not is_instance_valid(state["node"]):
+			_power_landing_count += 1
+			continue
 		var ghost: Node2D = state["node"]
 		var land := ghost.create_tween()
 		land.tween_interval(float(rank) * stagger_seconds)
@@ -2859,22 +2868,28 @@ func _animate_power_flights(flights: Array, refresh: bool) -> void:
 		land.tween_property(ghost, "rotation", 0.0, land_seconds).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 		land.chain().tween_callback(_finish_power_landing.bind(state, "red", full))
 	while _power_landing_count < states.size():
+		# The level can be left mid-animation (retry, menu): stop waiting once off the tree.
+		if not is_inside_tree():
+			return
 		await get_tree().process_frame
 	if refresh:
 		_end_refresh_sound()
-	await get_tree().process_frame
+	if is_inside_tree():
+		await get_tree().process_frame
 
 func _finish_power_landing(state: Dictionary, palette: String, full: bool) -> void:
-	var target_node: Control = state["flight"].get("target_node")
+	# Untyped on purpose: these nodes may already be freed (scene rebuilt or left mid-flight),
+	# and assigning a freed instance to a typed variable is itself a script error.
+	var target_node = state["flight"].get("target_node")
 	if is_instance_valid(target_node):
 		target_node.modulate.a = 1.0
-	var face: Control = state["face"]
+	var face = state["face"]
 	if is_instance_valid(face):
 		CardImpactFx.play(_fx(), face, {
 			"palette": palette, "full": full, "light_dust": not full, "squash": false,
 			"intensity": 0.88 if full else 0.55,
 		})
-	var ghost: Node2D = state["node"]
+	var ghost = state["node"]
 	if is_instance_valid(ghost):
 		ghost.queue_free()
 	_power_landing_count += 1
